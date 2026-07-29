@@ -1,0 +1,114 @@
+string standalone.ensureSupplierAccountingAccount(String supplierId)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("accounting_account_id","");
+	res.put("created",false);
+
+	try
+	{
+		supplierId = ifnull(supplierId,"").toString().trim();
+
+		if(supplierId == "")
+		{
+			res.put("error",true);
+			res.put("message","supplierId is empty.");
+		}
+		else
+		{
+			supplier = zoho.crm.getRecordById("Vendors",supplierId);
+
+			if(supplier == null || !supplier.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Supplier not found.");
+			}
+			else
+			{
+				accountCode = ifnull(supplier.get("Cuenta_Contable"),"").toString().trim();
+				supplierName = ifnull(supplier.get("Vendor_Name"),"").toString().trim();
+				accountingAccountId = "";
+
+				if(accountCode == "")
+				{
+					res.put("message","Supplier has no Cuenta_Contable.");
+				}
+				else
+				{
+					existingAccounts = zoho.crm.searchRecords("Accounting_Accounts","(Name:equals:" + accountCode + ")");
+
+					if(existingAccounts != null)
+					{
+						for each  existingAccount in existingAccounts
+						{
+							if(existingAccount != null && existingAccount.containKey("id"))
+							{
+								existingCode = ifnull(existingAccount.get("Name"),"").toString().trim();
+								if(existingCode == accountCode)
+								{
+									accountingAccountId = existingAccount.get("id").toString();
+									break;
+								}
+							}
+						}
+					}
+
+					if(accountingAccountId == "")
+					{
+						createAccountMap = Map();
+						createAccountMap.put("Name",accountCode);
+						createAccountMap.put("Account_Name",if(supplierName != "",supplierName,accountCode));
+						createAccountMap.put("Account_Type","Payable");
+						createAccountMap.put("Account_Subtype","Supplier Payable");
+						createAccountMap.put("Status","Active");
+
+						createAccountResp = zoho.crm.createRecord("Accounting_Accounts",createAccountMap);
+
+						if(createAccountResp != null && createAccountResp.containKey("id"))
+						{
+							accountingAccountId = createAccountResp.get("id").toString();
+							res.put("created",true);
+						}
+						else
+						{
+							res.put("error",true);
+							res.put("message","Accounting account could not be created.");
+						}
+					}
+
+					if(accountingAccountId != "" && res.get("error") != true)
+					{
+						defaultAccountingLookup = supplier.get("Default_Accounting_Account");
+						defaultAccountingId = "";
+
+						if(defaultAccountingLookup != null)
+						{
+							defaultAccountingId = ifnull(defaultAccountingLookup.get("id"),"").toString();
+						}
+
+						if(defaultAccountingId != accountingAccountId)
+						{
+							updateSupplierMap = Map();
+							updateSupplierMap.put("Default_Accounting_Account",accountingAccountId);
+							zoho.crm.updateRecord("Vendors",supplierId,updateSupplierMap);
+						}
+
+						res.put("accounting_account_id",accountingAccountId);
+						if(res.get("message") == "")
+						{
+							res.put("message","Accounting account ready.");
+						}
+					}
+				}
+			}
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}

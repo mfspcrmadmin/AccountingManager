@@ -1,0 +1,13 @@
+# Installed dependencies
+node_modules/
+
+# Local keys and certificates
+*.pem
+*.key
+*.crt
+
+# Runtime and editor files
+*.log
+ZET-debug.log
+.DS_Store
+Thumbs.db

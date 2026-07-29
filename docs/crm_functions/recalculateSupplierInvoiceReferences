@@ -1,0 +1,186 @@
+string standalone.recalculateSupplierInvoiceReferences()
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("processed_count",0);
+	res.put("updated_count",0);
+	res.put("skipped_count",0);
+	res.put("error_count",0);
+	res.put("updated_ids",List());
+	res.put("errors",List());
+
+	try
+	{
+		pageTokens = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25".toList(",");
+		processedCount = 0;
+		updatedCount = 0;
+		skippedCount = 0;
+		errorCount = 0;
+		updatedIds = List();
+		errors = List();
+		supplierCodeCache = Map();
+		bookingMfspCache = Map();
+		settlementMfspCache = Map();
+
+		for each  pageToken in pageTokens
+		{
+			pageIndex = pageToken.toLong();
+			invoiceBatch = zoho.crm.getRecords("Supplier_Invoices",pageIndex,200);
+
+			if(invoiceBatch == null || invoiceBatch.isEmpty())
+			{
+				break;
+			}
+
+			for each  invoiceRecord in invoiceBatch
+			{
+				try
+				{
+					if(invoiceRecord == null || !invoiceRecord.containKey("id"))
+					{
+						skippedCount = skippedCount + 1;
+						continue;
+					}
+
+					invoiceId = invoiceRecord.get("id").toString();
+					processedCount = processedCount + 1;
+					currentSupplierCode = ifnull(invoiceRecord.get("Supplier_Code"),"").toString().trim();
+					currentMfspReference = ifnull(invoiceRecord.get("MFSP_Reference"),"").toString().trim();
+					resolvedSupplierCode = "";
+					resolvedMfspReference = "";
+					updateMap = Map();
+					supplierLookup = invoiceRecord.get("Supplier");
+					bookingLookup = invoiceRecord.get("Booking");
+					settlementLookup = invoiceRecord.get("Supplier_Settlement");
+					supplierId = "";
+					bookingId = "";
+					settlementId = "";
+
+					if(supplierLookup != null)
+					{
+						supplierId = ifnull(supplierLookup.get("id"),"").toString().trim();
+					}
+					if(bookingLookup != null)
+					{
+						bookingId = ifnull(bookingLookup.get("id"),"").toString().trim();
+					}
+					if(settlementLookup != null)
+					{
+						settlementId = ifnull(settlementLookup.get("id"),"").toString().trim();
+					}
+
+					if(supplierId != "")
+					{
+						if(supplierCodeCache.containKey(supplierId))
+						{
+							resolvedSupplierCode = ifnull(supplierCodeCache.get(supplierId),"").toString().trim();
+						}
+						else
+						{
+							supplierRecord = zoho.crm.getRecordById("Vendors",supplierId);
+
+							if(supplierRecord != null && supplierRecord.containKey("id"))
+							{
+								resolvedSupplierCode = ifnull(supplierRecord.get("TP_Reference"),ifnull(supplierRecord.get("Connection_Reference"),"")).toString().trim();
+							}
+
+							supplierCodeCache.put(supplierId,resolvedSupplierCode);
+						}
+					}
+
+					if(bookingId != "")
+					{
+						if(bookingMfspCache.containKey(bookingId))
+						{
+							resolvedMfspReference = ifnull(bookingMfspCache.get(bookingId),"").toString().trim();
+						}
+						else
+						{
+							bookingRecord = zoho.crm.getRecordById("Deals",bookingId);
+
+							if(bookingRecord != null && bookingRecord.containKey("id"))
+							{
+								resolvedMfspReference = ifnull(bookingRecord.get("MFSP_Reference"),"").toString().trim();
+							}
+
+							bookingMfspCache.put(bookingId,resolvedMfspReference);
+						}
+					}
+
+					if(resolvedMfspReference == "" && settlementId != "")
+					{
+						if(settlementMfspCache.containKey(settlementId))
+						{
+							resolvedMfspReference = ifnull(settlementMfspCache.get(settlementId),"").toString().trim();
+						}
+						else
+						{
+							settlementRecord = zoho.crm.getRecordById("Supplier_Settlements",settlementId);
+
+							if(settlementRecord != null && settlementRecord.containKey("id"))
+							{
+								resolvedMfspReference = ifnull(settlementRecord.get("MFSP_Reference"),"").toString().trim();
+							}
+
+							settlementMfspCache.put(settlementId,resolvedMfspReference);
+						}
+					}
+
+					if(currentSupplierCode != resolvedSupplierCode)
+					{
+						updateMap.put("Supplier_Code",resolvedSupplierCode);
+					}
+					if(currentMfspReference != resolvedMfspReference)
+					{
+						updateMap.put("MFSP_Reference",resolvedMfspReference);
+					}
+
+					if(updateMap.isEmpty())
+					{
+						skippedCount = skippedCount + 1;
+						continue;
+					}
+
+					updateResp = zoho.crm.updateRecord("Supplier_Invoices",invoiceId,updateMap);
+
+					if(updateResp != null && (updateResp.containKey("id") || updateResp.containKey("Modified_Time") || ifnull(updateResp.get("code"),"").toString().trim().toLowerCase() == "success"))
+					{
+						updatedCount = updatedCount + 1;
+						updatedIds.add(invoiceId);
+					}
+					else
+					{
+						errorCount = errorCount + 1;
+						errors.add(invoiceId + ": update failed.");
+					}
+				}
+				catch (invoiceError)
+				{
+					errorCount = errorCount + 1;
+					errors.add(ifnull(invoiceRecord.get("id"),"unknown").toString() + ": " + invoiceError);
+				}
+			}
+
+			if(invoiceBatch.size() < 200)
+			{
+				break;
+			}
+		}
+
+		res.put("processed_count",processedCount);
+		res.put("updated_count",updatedCount);
+		res.put("skipped_count",skippedCount);
+		res.put("error_count",errorCount);
+		res.put("updated_ids",updatedIds);
+		res.put("errors",errors);
+		res.put("message","Supplier invoice MFSP and Supplier Code references recalculated.");
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}

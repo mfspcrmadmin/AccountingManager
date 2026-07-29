@@ -1,0 +1,35 @@
+string standalone.helpers_getSupplierContactByTitle(String contactsListStr,String title)
+{
+res = Map();
+contactsList = contactsListStr.toList();
+if(isnull(contactsList) || contactsList.isEmpty())
+{
+	res.put("error",true);
+	res.put("message","ERROR: Contacts list provided is null or empty.");
+	return res;
+}
+contactResult = Map();
+// ✅ init
+for each  contact in contactsList
+{
+	if(!isnull(contact) && !contact.isEmpty())
+	{
+		ct = ifnull(contact.get("title"),"");
+		if(ct != "" && !isnull(title) && ct.equalsIgnoreCase(title))
+		{
+			contactResult = contact;
+			break;
+		}
+	}
+}
+// fallback: first contact
+if(isnull(contactResult) || contactResult.isEmpty())
+{
+	contactResult = contactsList.get(0);
+}
+res.put("error",false);
+res.put("message","Contact retrieved successfully!");
+res.put("result",contactResult);
+// ✅ devuelve MAP, no string
+return res;
+}

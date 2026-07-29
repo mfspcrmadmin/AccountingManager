@@ -1,0 +1,369 @@
+string standalone.email_sendSupplierPaymentLetter(String paymentId,String supplierIds,String recipientEmail,String supplierEmailMapStr)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("sent_count",0);
+	debug = Map();
+	supplierResults = List();
+	debug.put("payment_id","");
+	debug.put("supplier_ids_raw","");
+	debug.put("recipient_email_fallback","");
+	debug.put("supplier_email_map_raw","");
+	debug.put("has_explicit_supplier_emails",false);
+	debug.put("supplier_email_map",Map());
+	debug.put("supplier_results",supplierResults);
+	res.put("debug",debug);
+
+	try
+	{
+		paymentId = ifnull(paymentId,"").toString().trim();
+		supplierIds = ifnull(supplierIds,"").toString().trim();
+		recipientEmail = ifnull(recipientEmail,"").toString().trim();
+		supplierEmailMapStr = ifnull(supplierEmailMapStr,"").toString().trim();
+		supplierEmailMap = Map();
+		hasExplicitSupplierEmails = false;
+		debug.put("payment_id",paymentId);
+		debug.put("supplier_ids_raw",supplierIds);
+		debug.put("recipient_email_fallback",recipientEmail);
+		debug.put("supplier_email_map_raw",supplierEmailMapStr);
+
+		if(supplierEmailMapStr != "")
+		{
+			try
+			{
+				supplierEmailMap = supplierEmailMapStr.toMap();
+				hasExplicitSupplierEmails = !supplierEmailMap.isEmpty();
+			}
+			catch (supplierEmailMapError)
+			{
+				supplierEmailMap = Map();
+				hasExplicitSupplierEmails = false;
+			}
+		}
+		debug.put("has_explicit_supplier_emails",hasExplicitSupplierEmails);
+		debug.put("supplier_email_map",supplierEmailMap);
+
+		if(paymentId == "")
+		{
+			res.put("error",true);
+			res.put("message","paymentId is empty.");
+			return res;
+		}
+
+		if(supplierIds == "")
+		{
+			res.put("error",true);
+			res.put("message","supplierIds is empty.");
+			return res;
+		}
+
+		payment = zoho.crm.getRecordById("Supplier_Payments",paymentId);
+
+		if(payment == null || !payment.containKey("id"))
+		{
+			res.put("error",true);
+			res.put("message","Supplier payment not found.");
+			return res;
+		}
+
+		paymentReference = ifnull(payment.get("Name"),"").toString().trim();
+		paymentDate = ifnull(payment.get("Payment_Date"),"").toString().trim();
+		formattedPaymentDate = paymentDate;
+		if(paymentDate != "")
+		{
+			try
+			{
+				formattedPaymentDate = paymentDate.toDate().toString("dd-MM-yyyy");
+			}
+			catch (paymentDateFormatError)
+			{
+				try
+				{
+					formattedPaymentDate = paymentDate.toDate("yyyy-MM-dd").toString("dd-MM-yyyy");
+				}
+				catch (paymentDateFormatErrorAlt)
+				{
+					formattedPaymentDate = paymentDate;
+				}
+			}
+		}
+		paymentAmount = ifnull(payment.get("Payment_Amount"),0).toDecimal();
+		selectedSupplierIds = supplierIds.toList("|||");
+		sentCount = 0;
+		sentSupplierNames = List();
+
+		for each  rawSupplierId in selectedSupplierIds
+		{
+			supplierId = ifnull(rawSupplierId,"").toString().trim();
+			supplierDebug = Map();
+			supplierDebug.put("supplier_id",supplierId);
+			supplierDebug.put("allocation_count",0);
+			supplierDebug.put("supplier_name","");
+			supplierDebug.put("target_email_from_map",ifnull(supplierEmailMap.get(supplierId),"").toString().trim());
+			supplierDebug.put("fallback_recipient_email",recipientEmail);
+			supplierDebug.put("resolved_target_email","");
+			supplierDebug.put("status","pending");
+			supplierDebug.put("message","");
+			supplierDebug.put("sendmail_error","");
+			supplierDebug.put("sendmail_attempted",false);
+			supplierResults.add(supplierDebug);
+
+			if(supplierId == "")
+			{
+				supplierDebug.put("status","skipped");
+				supplierDebug.put("message","Supplier id is empty.");
+				continue;
+			}
+
+			criteria = "((Supplier_Payment:equals:" + paymentId + ")and(Supplier:equals:" + supplierId + "))";
+			allocationRecords = zoho.crm.searchRecords("Supplier_Pay_Allocations",criteria);
+
+			if(allocationRecords == null || allocationRecords.isEmpty())
+			{
+				supplierDebug.put("status","skipped");
+				supplierDebug.put("message","No allocation records found for supplier.");
+				continue;
+			}
+			supplierDebug.put("allocation_count",allocationRecords.size());
+
+			targetEmail = ifnull(supplierEmailMap.get(supplierId),"").toString().trim();
+			if(targetEmail == "" && !hasExplicitSupplierEmails)
+			{
+				targetEmail = recipientEmail;
+			}
+			supplierDebug.put("resolved_target_email",targetEmail);
+
+			if(targetEmail == "" || !targetEmail.contains("@"))
+			{
+				supplierDebug.put("status","error");
+				supplierDebug.put("message","No valid recipient email was resolved.");
+				res.put("error",true);
+				res.put("message","No valid recipient email was provided for supplier " + supplierId + ".");
+				return res;
+			}
+
+			supplierName = "";
+			totalAllocated = 0.0;
+			invoiceCount = 0;
+			rowsHtml = "";
+
+			for each  allocation in allocationRecords
+			{
+				if(allocation == null || !allocation.containKey("id"))
+				{
+					continue;
+				}
+
+				invoiceLookup = allocation.get("Supplier_Invoice");
+				allocationAmount = ifnull(allocation.get("Allocated_Amount"),0).toDecimal();
+				invoiceReference = ifnull(allocation.get("Name"),"").toString().trim();
+				mfspReference = ifnull(allocation.get("MFSP_Reference"),"").toString().trim();
+				invoiceDate = ifnull(allocation.get("Invoice_Date"),"").toString().trim();
+				formattedInvoiceDate = invoiceDate;
+				if(invoiceDate != "")
+				{
+					try
+					{
+						formattedInvoiceDate = invoiceDate.toDate().toString("dd-MM-yyyy");
+					}
+					catch (invoiceDateFormatError)
+					{
+						try
+						{
+							formattedInvoiceDate = invoiceDate.toDate("yyyy-MM-dd").toString("dd-MM-yyyy");
+						}
+						catch (invoiceDateFormatErrorAlt)
+						{
+							formattedInvoiceDate = invoiceDate;
+						}
+					}
+				}
+
+				if(invoiceLookup != null)
+				{
+					invoiceReference = ifnull(invoiceLookup.get("name"),invoiceReference).toString().trim();
+				}
+				if(supplierName == "")
+				{
+					supplierName = ifnull(allocation.get("Supplier_Name"),"").toString().trim();
+
+					if(supplierName == "")
+					{
+						supplierLookup = allocation.get("Supplier");
+						if(supplierLookup != null)
+						{
+							supplierName = ifnull(supplierLookup.get("name"),"").toString().trim();
+						}
+					}
+				}
+
+				totalAllocated = totalAllocated + allocationAmount;
+				invoiceCount = invoiceCount + 1;
+				rowsHtml = rowsHtml +
+				"<tr>" +
+				"<td style='padding:8px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;font-size:11px;line-height:1.3;color:#0f172a;white-space:nowrap;'>" + invoiceReference + "</td>" +
+				"<td style='padding:8px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;font-size:11px;line-height:1.3;color:#334155;white-space:nowrap;'>" + formattedInvoiceDate + "</td>" +
+				"<td style='padding:8px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;font-size:11px;line-height:1.3;color:#334155;white-space:nowrap;'>" + mfspReference + "</td>" +
+				"<td style='padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:right;vertical-align:top;font-size:11px;line-height:1.3;color:#0f172a;white-space:nowrap;'>" + allocationAmount.toString() + " EUR</td>" +
+				"</tr>";
+			}
+
+			if(invoiceCount == 0)
+			{
+				continue;
+			}
+
+			if(supplierName == "")
+			{
+				supplierRecord = zoho.crm.getRecordById("Vendors",supplierId);
+				if(supplierRecord != null)
+				{
+					supplierName = ifnull(supplierRecord.get("Vendor_Name"),"").toString().trim();
+				}
+			}
+
+			if(supplierName == "")
+			{
+				supplierName = supplierId;
+			}
+			supplierDebug.put("supplier_name",supplierName);
+
+			emailSubject = "Payment letter | " + paymentReference + " | " + supplierName;
+			emailBody = "";
+			emailBody = emailBody + "<div style='margin:0;padding:0;background:#f4f7fb;'>";
+			emailBody = emailBody + "  <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#1f2937;'>";
+			emailBody = emailBody + "    <tr>";
+			emailBody = emailBody + "      <td align='center' style='padding:28px 14px;'>";
+			emailBody = emailBody + "        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;max-width:840px;border-collapse:collapse;'>";
+			emailBody = emailBody + "          <tr>";
+			emailBody = emailBody + "            <td style='padding:0 0 18px 0;font-size:13px;line-height:1.6;color:#334155;'>";
+			emailBody = emailBody + "              <p style='margin:0 0 8px 0;'>Dear " + supplierName + ",</p>";
+			emailBody = emailBody + "              <p style='margin:0;'>Here we are sharing the payment letter for the latest payment that has been made in your favor.</p>";
+			emailBody = emailBody + "            </td>";
+			emailBody = emailBody + "          </tr>";
+			emailBody = emailBody + "          <tr>";
+			emailBody = emailBody + "            <td style='border:1px solid #dbe3ef;background:#ffffff;'>";
+			emailBody = emailBody + "              <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;'>";
+			emailBody = emailBody + "                <tr>";
+			emailBody = emailBody + "                  <td style='padding:18px 20px;background:#eaf2ff;border-bottom:1px solid #d6e4ff;color:#163b73;'>";
+			emailBody = emailBody + "                    <div style='font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:700;color:#285ea8;margin-bottom:6px;'>Payment letter</div>";
+			emailBody = emailBody + "                    <div style='font-size:22px;font-weight:700;line-height:1.2;color:#0f172a;margin-bottom:4px;'>" + supplierName + "</div>";
+			emailBody = emailBody + "                    <div style='font-size:12px;line-height:1.5;color:#334155;'>Summary of the invoices included in payment <strong style='color:#163b73;'>" + paymentReference + "</strong>.</div>";
+			emailBody = emailBody + "                  </td>";
+			emailBody = emailBody + "                </tr>";
+			emailBody = emailBody + "                <tr>";
+			emailBody = emailBody + "                  <td style='padding:18px 18px 8px 18px;'>";
+			emailBody = emailBody + "                    <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:separate;'>";
+			emailBody = emailBody + "                      <tr>";
+			emailBody = emailBody + "                        <td width='50%' valign='top' style='padding:0 7px 10px 0;'>";
+			emailBody = emailBody + "                          <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;border:1px solid #dbe3ef;background:#f8fbff;'>";
+			emailBody = emailBody + "                            <tr><td style='padding:9px 10px;'><div style='font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;'>Payment reference</div><div style='font-size:12px;font-weight:700;line-height:1.3;color:#0f172a;'>" + paymentReference + "</div></td></tr>";
+			emailBody = emailBody + "                          </table>";
+			emailBody = emailBody + "                        </td>";
+			emailBody = emailBody + "                        <td width='50%' valign='top' style='padding:0 0 10px 7px;'>";
+			emailBody = emailBody + "                          <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;border:1px solid #dbe3ef;background:#f8fbff;'>";
+			emailBody = emailBody + "                            <tr><td style='padding:9px 10px;'><div style='font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;'>Payment date</div><div style='font-size:12px;font-weight:700;line-height:1.3;color:#0f172a;'>" + formattedPaymentDate + "</div></td></tr>";
+			emailBody = emailBody + "                          </table>";
+			emailBody = emailBody + "                        </td>";
+			emailBody = emailBody + "                      </tr>";
+			emailBody = emailBody + "                      <tr>";
+			emailBody = emailBody + "                        <td width='50%' valign='top' style='padding:0 7px 10px 0;'>";
+			emailBody = emailBody + "                          <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;border:1px solid #dbe3ef;background:#f8fbff;'>";
+			emailBody = emailBody + "                            <tr><td style='padding:9px 10px;'><div style='font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;'>Invoices paid</div><div style='font-size:12px;font-weight:700;line-height:1.3;color:#0f172a;'>" + invoiceCount.toString() + "</div></td></tr>";
+			emailBody = emailBody + "                          </table>";
+			emailBody = emailBody + "                        </td>";
+			emailBody = emailBody + "                        <td width='50%' valign='top' style='padding:0 0 10px 7px;'>";
+			emailBody = emailBody + "                          <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;border:1px solid #dbe3ef;background:#f8fbff;'>";
+			emailBody = emailBody + "                            <tr><td style='padding:9px 10px;'><div style='font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;'>Allocated amount</div><div style='font-size:12px;font-weight:700;line-height:1.3;color:#0f172a;'>" + totalAllocated.toString() + " EUR</div></td></tr>";
+			emailBody = emailBody + "                          </table>";
+			emailBody = emailBody + "                        </td>";
+			emailBody = emailBody + "                      </tr>";
+			emailBody = emailBody + "                    </table>";
+			emailBody = emailBody + "                  </td>";
+			emailBody = emailBody + "                </tr>";
+			emailBody = emailBody + "                <tr>";
+			emailBody = emailBody + "                  <td style='padding:0 18px 18px 18px;'>";
+			emailBody = emailBody + "                    <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;border:1px solid #e5e7eb;background:#ffffff;margin-bottom:18px;'>";
+			emailBody = emailBody + "                      <thead>";
+			emailBody = emailBody + "                        <tr style='background:#f8fafc;color:#475569;'>";
+			emailBody = emailBody + "                          <th style='padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:9px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;'>Invoice</th>";
+			emailBody = emailBody + "                          <th style='padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:9px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;'>Invoice date</th>";
+			emailBody = emailBody + "                          <th style='padding:8px 10px;text-align:left;border-bottom:1px solid #e5e7eb;font-size:9px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;'>MFSP</th>";
+			emailBody = emailBody + "                          <th style='padding:8px 10px;text-align:right;border-bottom:1px solid #e5e7eb;font-size:9px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;'>Paid amount</th>";
+			emailBody = emailBody + "                        </tr>";
+			emailBody = emailBody + "                      </thead>";
+			emailBody = emailBody + "                      <tbody>";
+			emailBody = emailBody + rowsHtml;
+			emailBody = emailBody + "                      </tbody>";
+			emailBody = emailBody + "                    </table>";
+			emailBody = emailBody + "                    <div style='font-size:12px;line-height:1.55;color:#334155;margin-bottom:14px;'>";
+			emailBody = emailBody + "                      <p style='margin:0 0 8px 0;'>Kind regards,</p>";
+			emailBody = emailBody + "                      <p style='margin:0;'>Made for Spain & Portugal Finance Team</p>";
+			emailBody = emailBody + "                    </div>";
+			emailBody = emailBody + "                    <table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='width:100%;border-collapse:collapse;border:1px solid #fed7aa;background:#fff7ed;'>";
+			emailBody = emailBody + "                      <tr>";
+			emailBody = emailBody + "                        <td style='padding:10px 12px;font-size:11px;line-height:1.55;color:#9a3412;font-weight:700;'>";
+			emailBody = emailBody + "                          Automatic email. This message has been generated automatically. Please do not reply to this email.";
+			emailBody = emailBody + "                        </td>";
+			emailBody = emailBody + "                      </tr>";
+			emailBody = emailBody + "                    </table>";
+			emailBody = emailBody + "                  </td>";
+			emailBody = emailBody + "                </tr>";
+			emailBody = emailBody + "              </table>";
+			emailBody = emailBody + "            </td>";
+			emailBody = emailBody + "          </tr>";
+			emailBody = emailBody + "        </table>";
+			emailBody = emailBody + "      </td>";
+			emailBody = emailBody + "    </tr>";
+			emailBody = emailBody + "  </table>";
+			emailBody = emailBody + "</div>";
+
+			try
+			{
+				supplierDebug.put("sendmail_attempted",true);
+				sendmail
+				[
+					from : "crmadmin@madeforspainandportugal.com"
+					to : targetEmail
+					subject : emailSubject
+					message : emailBody
+				];
+				supplierDebug.put("status","sent");
+				supplierDebug.put("message","Payment letter sent.");
+			}
+			catch (sendmailError)
+			{
+				supplierDebug.put("status","error");
+				supplierDebug.put("message","sendmail failed.");
+				supplierDebug.put("sendmail_error",ifnull(sendmailError,"").toString());
+				res.put("error",true);
+				res.put("message","Could not send payment letter to supplier " + supplierName + " at " + targetEmail + ".");
+				return res;
+			}
+
+			sentCount = sentCount + 1;
+			sentSupplierNames.add(supplierName);
+		}
+
+		if(sentCount == 0)
+		{
+			res.put("error",true);
+			res.put("message","No supplier payment letters could be generated for the selected suppliers.");
+		}
+		else
+		{
+			res.put("sent_count",sentCount);
+			res.put("message","Payment letter sent for " + sentCount.toString() + " supplier(s).");
+			debug.put("sent_supplier_names",sentSupplierNames);
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+		debug.put("unexpected_error",ifnull(e,"").toString());
+	}
+
+	return res;
+}

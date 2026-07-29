@@ -1,0 +1,30 @@
+{
+    "select_query": "select id, Deal_Name, MFSP_Reference, Arrival_Date, Departure_Date, Account_Name, Consortia, IATA_Code, Stage, Travellers_Number, Accounting_Rep from Deals where Deal_Name like '%angela%' and (Stage = 'Request Qualified' or Stage = 'Quotation' or Stage = 'Proposal Sent' or Stage = 'Pending Res Assignment' or Stage = 'Reservation In Progress' or Stage = 'Changes Requested' or Stage = 'All Services Confirmed' or Stage = 'FID Sent' or Stage = 'Pending Review' or Stage = 'FID In Review' or Stage = 'Review Done' or Stage = 'On Tour' or Stage = 'Trip Accounting Closure' or Stage = 'Cancelled' or Stage = 'Cancelled W/Charges' or Stage = 'Dead' or Stage = 'Booking Completed') order by Arrival_Date desc limit 0, 26",
+    "errorMessage": "error occured while parsing the query",
+    "errorName": "",
+    "errorStack": "",
+    "errorKeys": [
+        "code",
+        "details",
+        "message",
+        "status",
+        "$responseHeaders"
+    ],
+    "errorObject": {
+        "code": "SYNTAX_ERROR",
+        "details": {
+            "near": "where"
+        },
+        "message": "error occured while parsing the query",
+        "status": "error",
+        "$responseHeaders": {
+            "x-ratelimit-remaining": null,
+            "x-ratelimit-limit": null,
+            "x-ratelimit-reset": null
+        },
+        "coqlQuery": "select id, Deal_Name, MFSP_Reference, Arrival_Date, Departure_Date, Account_Name, Consortia, IATA_Code, Stage, Travellers_Number, Accounting_Rep from Deals where Deal_Name like '%angela%' and (Stage = 'Request Qualified' or Stage = 'Quotation' or Stage = 'Proposal Sent' or Stage = 'Pending Res Assignment' or Stage = 'Reservation In Progress' or Stage = 'Changes Requested' or Stage = 'All Services Confirmed' or Stage = 'FID Sent' or Stage = 'Pending Review' or Stage = 'FID In Review' or Stage = 'Review Done' or Stage = 'On Tour' or Stage = 'Trip Accounting Closure' or Stage = 'Cancelled' or Stage = 'Cancelled W/Charges' or Stage = 'Dead' or Stage = 'Booking Completed') order by Arrival_Date desc limit 0, 26",
+        "coqlWhereClause": "Deal_Name like '%angela%' and (Stage = 'Request Qualified' or Stage = 'Quotation' or Stage = 'Proposal Sent' or Stage = 'Pending Res Assignment' or Stage = 'Reservation In Progress' or Stage = 'Changes Requested' or Stage = 'All Services Confirmed' or Stage = 'FID Sent' or Stage = 'Pending Review' or Stage = 'FID In Review' or Stage = 'Review Done' or Stage = 'On Tour' or Stage = 'Trip Accounting Closure' or Stage = 'Cancelled' or Stage = 'Cancelled W/Charges' or Stage = 'Dead' or Stage = 'Booking Completed')",
+        "coqlOrderByClause": "Arrival_Date desc",
+        "coqlModuleName": "Deals"
+    }
+}

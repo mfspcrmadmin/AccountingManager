@@ -1,0 +1,17 @@
+{
+  "service": "CRM",
+  "zohoAuthorisation": {
+    "type": "connectors",
+    "connectionLinkName": "crm_oauth_connection",
+    "connectionName": "Crm_oauth_connection",
+    "userAccess": true,
+    "scope": [
+      "ZohoCRM.modules.ALL",
+      "ZohoCRM.modules.attachments.ALL",
+      "ZohoCRM.settings.ALL",
+      "ZohoCRM.coql.READ",
+      "ZohoCRM.files.CREATE",
+      "ZohoCRM.files.READ"
+    ]
+  }
+}

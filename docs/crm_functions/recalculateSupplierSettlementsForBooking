@@ -1,0 +1,1117 @@
+string standalone.recalculateSupplierSettlementsForBooking(String bookingId)
+{
+result = Map();
+result.put("error",false);
+result.put("message","");
+result.put("booking_id",bookingId);
+debugInfo = Map();
+debugCreatePayloadSamples = List();
+debugCreateResponseSamples = List();
+debugReloadedSettlementIds = List();
+debugTechnicalKeyFallbackHits = List();
+debugIncludedServiceSamples = List();
+debugSkippedCancelledServices = List();
+debugGroupSummaries = List();
+debugExistingSettlementSummaries = List();
+debugServiceRelinkActions = List();
+debugMarkedNoServices = List();
+debugMarkNoServicesPayloads = List();
+debugMarkNoServicesResponses = List();
+settlementTypeBackfillUpdates = List();
+// =========================
+// CONFIG
+// =========================
+servicesModule = "Booking_Services";
+settlementModule = "Supplier_Settlements";
+serviceSettlementLookupField = "Supplier_Settlement";
+settlementTechnicalKeyField = "Technical_Key";
+settlementBookingField = "Booking";
+settlementSupplierField = "Supplier";
+settlementSupplierNameField = "Supplier_Name";
+settlementEzusSupplierRefField = "Ezus_Supplier_Reference";
+settlementDisplayCodeField = "Name";
+settlementTotalCostField = "Total_Service_Cost";
+settlementServiceCountField = "Service_Count";
+settlementFirstServiceDateField = "First_Service_Date";
+settlementLastServiceDateField = "Last_Service_Date";
+settlementStatusField = "Admin_Status";
+settlementBookingStatusField = "Booking_Status";
+settlementLastRecalculatedAtField = "Last_Recalculated_At";
+settlementSupplierKeySourceField = "Supplier_Key_Source";
+serviceBookingField = "Booking";
+serviceSupplierField = "Supplier";
+serviceSupplierNameField = "Supplier_Name";
+serviceEzusSupplierRefField = "Ezus_Supplier_Reference";
+serviceStatusEzusField = "Status_EZUS";
+servicePurchasePriceField = "Total_Purchase_Price";
+serviceDateField = "Service_Date";
+pendingInvoiceStatus = "Pending Invoice";
+cancelledSettlementStatus = "Cancelled";
+noServicesStatus = "No Services";
+defaultStatus = pendingInvoiceStatus;
+noSupplierLabel = "No Supplier";
+noSupplierKeyPart = "NO_SUPPLIER";
+pageNumbers = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15".toList(",");
+recalculatedAt = zoho.currenttime;
+recalculatedAtIso = "";
+try 
+{
+	recalculatedAtRaw = recalculatedAt.toString("yyyy-MM-dd'T'HH:mm:ssZ");
+	if(!isnull(recalculatedAtRaw) && recalculatedAtRaw != "" && recalculatedAtRaw.length() == 24)
+	{
+		recalculatedAtIso = recalculatedAtRaw.subString(0,22) + ":" + recalculatedAtRaw.subString(22,24);
+	}
+	else
+	{
+		recalculatedAtIso = recalculatedAtRaw;
+	}
+}
+catch (eRecalculatedAtFormat)
+{
+	recalculatedAtIso = "";
+}
+// =========================
+// VALIDATE
+// =========================
+if(bookingId == null || bookingId.trim() == "")
+{
+	result.put("error",true);
+	result.put("message","bookingId is empty");
+	return result;
+}
+// =========================
+// 1) LOAD BOOKING SERVICES
+// =========================
+allServices = List();
+stopLoadingServices = false;
+for each  pageNumText in pageNumbers
+{
+	if(stopLoadingServices == false)
+	{
+		try 
+		{
+			pageNum = pageNumText.toLong();
+			servicePage = zoho.crm.searchRecords(servicesModule,"(" + serviceBookingField + ":equals:" + bookingId + ")",pageNum,200);
+			if(!isnull(servicePage) && !servicePage.isEmpty())
+			{
+				for each  srv in servicePage
+				{
+					allServices.add(srv);
+				}
+				if(servicePage.size() < 200)
+				{
+					stopLoadingServices = true;
+				}
+			}
+			else
+			{
+				stopLoadingServices = true;
+			}
+		}
+		catch (eLoadServices)
+		{
+			result.put("error",true);
+			result.put("message","Error loading Booking Services: " + eLoadServices.toString());
+			return result;
+		}
+	}
+}
+// =========================
+// 2) LOAD EXISTING SETTLEMENTS FOR BOOKING
+// =========================
+existingSettlementByTechnicalKey = Map();
+duplicateSettlementKeys = Map();
+stopLoadingSettlements = false;
+for each  pageNumText in pageNumbers
+{
+	if(stopLoadingSettlements == false)
+	{
+		try 
+		{
+			pageNum = pageNumText.toLong();
+			settlementPage = zoho.crm.searchRecords(settlementModule,"(" + settlementBookingField + ":equals:" + bookingId + ")",pageNum,200);
+			if(!isnull(settlementPage) && !settlementPage.isEmpty())
+			{
+				for each  st in settlementPage
+				{
+					stSettlementType = ifnull(st.get("Settlement_Type"),"").toString().trim();
+					// Legacy supplier settlements predate Settlement_Type.  Preserve
+					// Agent Commission records and classify every other blank/type as
+					// Supplier Services during a normal recalculation.
+					if(stSettlementType != "Agent Commission")
+					{
+						settlementTypeBackfill = Map();
+						settlementTypeBackfill.put("id",st.get("id"));
+						settlementTypeBackfill.put("Settlement_Type","Supplier Services");
+						settlementTypeBackfillUpdates.add(settlementTypeBackfill);
+					}
+					stTechnicalKey = ifnull(st.get(settlementTechnicalKeyField),"").toString();
+					if(stTechnicalKey != "")
+					{
+						if(isnull(existingSettlementByTechnicalKey.get(stTechnicalKey)))
+						{
+							existingSettlementByTechnicalKey.put(stTechnicalKey,st);
+						}
+						else
+						{
+							duplicateSettlementKeys.put(stTechnicalKey,true);
+						}
+						if(debugExistingSettlementSummaries.size() < 20)
+						{
+							existingSettlementSummary = Map();
+							existingSettlementSummary.put("technical_key",stTechnicalKey);
+							existingSettlementSummary.put("settlement_id",ifnull(st.get("id"),"").toString());
+							existingSettlementSummary.put("admin_status",ifnull(st.get(settlementStatusField),"").toString());
+							existingSettlementSummary.put("booking_status",ifnull(st.get(settlementBookingStatusField),"").toString());
+							existingSettlementSummary.put("service_count",ifnull(st.get(settlementServiceCountField),""));
+							existingSettlementSummary.put("total_cost",ifnull(st.get(settlementTotalCostField),""));
+							debugExistingSettlementSummaries.add(existingSettlementSummary);
+						}
+					}
+				}
+				if(settlementPage.size() < 200)
+				{
+					stopLoadingSettlements = true;
+				}
+			}
+			else
+			{
+				stopLoadingSettlements = true;
+			}
+		}
+		catch (eLoadSettlements)
+		{
+			result.put("error",true);
+			result.put("message","Error loading Supplier Settlements: " + eLoadSettlements.toString());
+			return result;
+		}
+	}
+}
+// Apply the legacy type normalization in batches.  New and active service
+// settlements also receive this value in their normal create/update payload.
+supplierServicesTypeBackfilledCount = 0;
+supplierServicesTypeBackfillErrorCount = 0;
+if(settlementTypeBackfillUpdates.size() > 0)
+{
+	batchSettlementTypeBackfills = List();
+	for each settlementTypeBackfillRec in settlementTypeBackfillUpdates
+	{
+		batchSettlementTypeBackfills.add(settlementTypeBackfillRec);
+		if(batchSettlementTypeBackfills.size() == 100)
+		{
+			typeBackfillResponse = zoho.crm.bulkUpdate(settlementModule,batchSettlementTypeBackfills);
+			if(!isnull(typeBackfillResponse))
+			{
+				for each typeBackfillItem in typeBackfillResponse
+				{
+					typeBackfillCode = ifnull(typeBackfillItem.get("code"),"").toString();
+					typeBackfillStatus = ifnull(typeBackfillItem.get("status"),"").toString();
+					if(typeBackfillCode.equalsIgnoreCase("error") || typeBackfillStatus.equalsIgnoreCase("error") || typeBackfillCode.equalsIgnoreCase("INVALID_DATA"))
+					{
+						supplierServicesTypeBackfillErrorCount = supplierServicesTypeBackfillErrorCount + 1;
+					}
+					else
+					{
+						supplierServicesTypeBackfilledCount = supplierServicesTypeBackfilledCount + 1;
+					}
+				}
+			}
+			batchSettlementTypeBackfills = List();
+		}
+	}
+	if(batchSettlementTypeBackfills.size() > 0)
+	{
+		typeBackfillResponse = zoho.crm.bulkUpdate(settlementModule,batchSettlementTypeBackfills);
+		if(!isnull(typeBackfillResponse))
+		{
+			for each typeBackfillItem in typeBackfillResponse
+			{
+				typeBackfillCode = ifnull(typeBackfillItem.get("code"),"").toString();
+				typeBackfillStatus = ifnull(typeBackfillItem.get("status"),"").toString();
+				if(typeBackfillCode.equalsIgnoreCase("error") || typeBackfillStatus.equalsIgnoreCase("error") || typeBackfillCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					supplierServicesTypeBackfillErrorCount = supplierServicesTypeBackfillErrorCount + 1;
+				}
+				else
+				{
+					supplierServicesTypeBackfilledCount = supplierServicesTypeBackfilledCount + 1;
+				}
+			}
+		}
+	}
+}
+// =========================
+// 3) GROUP SERVICES BY SUPPLIER KEY
+// =========================
+groupDataByKey = Map();
+serviceIdToSettlementKey = Map();
+cancelledServicesSkippedCount = 0;
+for each  srv in allServices
+{
+	serviceStatusEzus = ifnull(srv.get(serviceStatusEzusField),"").toString().trim();
+	if(serviceStatusEzus.equalsIgnoreCase("Cancelled") || serviceStatusEzus.equalsIgnoreCase("Canceled"))
+	{
+		cancelledServicesSkippedCount = cancelledServicesSkippedCount + 1;
+		cancelledSupplierId = "";
+		cancelledSupplierLookup = srv.get(serviceSupplierField);
+		if(!isnull(cancelledSupplierLookup))
+		{
+			try 
+			{
+				cancelledSupplierId = ifnull(cancelledSupplierLookup.get("id"),"").toString();
+			}
+			catch (eCancelledSupplierLookup)
+			{
+				cancelledSupplierId = ifnull(cancelledSupplierLookup,"").toString();
+			}
+		}
+		if(debugSkippedCancelledServices.size() < 25)
+		{
+			cancelledServiceSample = Map();
+			cancelledServiceSample.put("service_id",ifnull(srv.get("id"),"").toString());
+			cancelledServiceSample.put("service_name",ifnull(srv.get("Name"),"").toString());
+			cancelledServiceSample.put("status_ezus",serviceStatusEzus);
+			cancelledServiceSample.put("supplier_id",cancelledSupplierId);
+			cancelledServiceSample.put("supplier_name",ifnull(srv.get(serviceSupplierNameField),"").toString());
+			cancelledServiceSample.put("ezus_supplier_reference",ifnull(srv.get(serviceEzusSupplierRefField),"").toString());
+			cancelledServiceSample.put("purchase_price",ifnull(srv.get(servicePurchasePriceField),"").toString());
+			cancelledServiceSample.put("current_settlement",ifnull(srv.get(serviceSettlementLookupField),""));
+			if(cancelledSupplierId != "")
+			{
+				cancelledServiceSample.put("expected_settlement_technical_key",bookingId + ":" + cancelledSupplierId);
+			}
+			debugSkippedCancelledServices.add(cancelledServiceSample);
+		}
+		continue;
+	}
+	serviceId = ifnull(srv.get("id"),"").toString();
+	supplierId = "";
+	supplierLookup = srv.get(serviceSupplierField);
+	if(!isnull(supplierLookup))
+	{
+		try 
+		{
+			supplierId = ifnull(supplierLookup.get("id"),"").toString();
+		}
+		catch (eSupplierLookup)
+		{
+			supplierId = ifnull(supplierLookup,"").toString();
+		}
+	}
+	supplierName = ifnull(srv.get(serviceSupplierNameField),"").toString().trim();
+	ezusSupplierRef = ifnull(srv.get(serviceEzusSupplierRefField),"").toString().trim();
+	keyPart = "";
+	supplierKeySource = "";
+	if(supplierId != "")
+	{
+		keyPart = supplierId;
+		supplierKeySource = "CRM Supplier";
+	}
+	else if(ezusSupplierRef != "")
+	{
+		keyPart = ezusSupplierRef;
+		supplierKeySource = "Ezus Supplier Ref";
+	}
+	else
+	{
+		keyPart = noSupplierKeyPart;
+		supplierName = noSupplierLabel;
+		supplierKeySource = "No Supplier";
+	}
+	settlementTechnicalKey = bookingId + ":" + keyPart;
+	if(serviceId != "")
+	{
+		serviceIdToSettlementKey.put(serviceId,settlementTechnicalKey);
+	}
+	if(debugIncludedServiceSamples.size() < 40)
+	{
+		includedServiceSample = Map();
+		includedServiceSample.put("service_id",serviceId);
+		includedServiceSample.put("service_name",ifnull(srv.get("Name"),"").toString());
+		includedServiceSample.put("status_ezus",serviceStatusEzus);
+		includedServiceSample.put("supplier_id",supplierId);
+		includedServiceSample.put("supplier_name",supplierName);
+		includedServiceSample.put("ezus_supplier_reference",ezusSupplierRef);
+		includedServiceSample.put("settlement_technical_key",settlementTechnicalKey);
+		includedServiceSample.put("purchase_price_raw",ifnull(srv.get(servicePurchasePriceField),"").toString());
+		includedServiceSample.put("service_date",ifnull(srv.get(serviceDateField),""));
+		debugIncludedServiceSamples.add(includedServiceSample);
+	}
+	groupData = groupDataByKey.get(settlementTechnicalKey);
+	if(isnull(groupData))
+	{
+		groupData = Map();
+		groupData.put("technical_key",settlementTechnicalKey);
+		groupData.put("supplier_id",supplierId);
+		groupData.put("supplier_name",supplierName);
+		groupData.put("ezus_supplier_reference",ezusSupplierRef);
+		groupData.put("supplier_key_source",supplierKeySource);
+		groupData.put("total_cost",0.0);
+		groupData.put("service_count",0);
+		groupData.put("first_service_date",null);
+		groupData.put("last_service_date",null);
+	}
+	purchasePriceVal = ifnull(srv.get(servicePurchasePriceField),"").toString();
+	purchasePrice = 0.0;
+	if(purchasePriceVal != "")
+	{
+		try 
+		{
+			purchasePrice = purchasePriceVal.toDecimal();
+		}
+		catch (ePrice)
+		{
+			purchasePrice = 0.0;
+		}
+	}
+	currentTotal = groupData.get("total_cost");
+	groupData.put("total_cost",currentTotal + purchasePrice);
+	currentCount = groupData.get("service_count");
+	groupData.put("service_count",currentCount + 1);
+	serviceDateVal = "";
+	if(!isnull(srv.get(serviceDateField)))
+	{
+		serviceDateVal = srv.get(serviceDateField).toString();
+	}
+	if(serviceDateVal != "")
+	{
+		serviceDateObj = null;
+		try 
+		{
+			serviceDateObj = serviceDateVal.toDate("yyyy-MM-dd");
+		}
+		catch (eServiceDateParse)
+		{
+			serviceDateObj = null;
+		}
+		if(!isnull(serviceDateObj))
+		{
+			firstDateObj = groupData.get("first_service_date");
+			lastDateObj = groupData.get("last_service_date");
+			if(isnull(firstDateObj) || serviceDateObj.daysBetween(firstDateObj) > 0)
+			{
+				groupData.put("first_service_date",serviceDateObj);
+			}
+			if(isnull(lastDateObj) || lastDateObj.daysBetween(serviceDateObj) > 0)
+			{
+				groupData.put("last_service_date",serviceDateObj);
+			}
+		}
+	}
+	groupDataByKey.put(settlementTechnicalKey,groupData);
+}
+for each  groupSummaryKey in groupDataByKey.keys()
+{
+	if(debugGroupSummaries.size() < 20)
+	{
+		groupSummaryData = groupDataByKey.get(groupSummaryKey);
+		groupSummary = Map();
+		groupSummary.put("technical_key",groupSummaryKey);
+		groupSummary.put("supplier_id",ifnull(groupSummaryData.get("supplier_id"),"").toString());
+		groupSummary.put("supplier_name",ifnull(groupSummaryData.get("supplier_name"),"").toString());
+		groupSummary.put("ezus_supplier_reference",ifnull(groupSummaryData.get("ezus_supplier_reference"),"").toString());
+		groupSummary.put("service_count",groupSummaryData.get("service_count"));
+		groupSummary.put("total_cost",groupSummaryData.get("total_cost"));
+		groupSummary.put("first_service_date",groupSummaryData.get("first_service_date"));
+		groupSummary.put("last_service_date",groupSummaryData.get("last_service_date"));
+		debugGroupSummaries.add(groupSummary);
+	}
+}
+// =========================
+// 4) CREATE OR UPDATE SETTLEMENTS
+// =========================
+toCreateSettlements = List();
+toUpdateSettlements = List();
+activeSettlementKeys = Map();
+bookingRecord = Map();
+mfspReference = "";
+bookingStatus = "";
+bookingIsCancelled = false;
+try 
+{
+	bookingRecord = zoho.crm.getRecordById("Deals",bookingId);
+	mfspReference = ifnull(bookingRecord.get("MFSP_Reference"),"").toString().trim();
+	bookingStatus = ifnull(bookingRecord.get("Stage"),"").toString().trim();
+	if(bookingStatus.equalsIgnoreCase("Cancelled") || bookingStatus.equalsIgnoreCase("Canceled"))
+	{
+		bookingIsCancelled = true;
+		defaultStatus = cancelledSettlementStatus;
+	}
+}
+catch (eBooking)
+{
+	mfspReference = "";
+	bookingStatus = "";
+	bookingIsCancelled = false;
+}
+for each  settlementTechnicalKey in groupDataByKey.keys()
+{
+	activeSettlementKeys.put(settlementTechnicalKey,true);
+	groupData = groupDataByKey.get(settlementTechnicalKey);
+	existingSettlement = existingSettlementByTechnicalKey.get(settlementTechnicalKey);
+	settlementMap = Map();
+	supplierShortCode = "";
+	groupEzusSupplierRef = ifnull(groupData.get("ezus_supplier_reference"),"").toString().trim();
+	if(groupEzusSupplierRef != "" && groupEzusSupplierRef.contains("-supnew-"))
+	{
+		supplierShortCode = groupEzusSupplierRef.replaceAll("^.*-supnew-","");
+	}
+	if(supplierShortCode == "")
+	{
+		supplierNameForDisplay = ifnull(groupData.get("supplier_name"),"").toString().trim();
+		if(supplierNameForDisplay != "")
+		{
+			supplierShortCode = supplierNameForDisplay;
+		}
+	}
+	supplierShortCode = supplierShortCode.replaceAll("[^A-Za-z0-9]","").toUpperCase();
+	if(supplierShortCode == "")
+	{
+		supplierShortCode = "NOSUPPLIER";
+	}
+	displayCode = supplierShortCode;
+	if(mfspReference != "")
+	{
+		displayCode = mfspReference + "-" + supplierShortCode;
+	}
+	settlementMap.put(settlementDisplayCodeField,displayCode);
+	settlementMap.put(settlementTechnicalKeyField,settlementTechnicalKey);
+	bookingLookupMap = Map();
+	bookingLookupMap.put("id",bookingId);
+	settlementMap.put(settlementBookingField,bookingLookupMap);
+	settlementMap.put(settlementSupplierNameField,groupData.get("supplier_name"));
+	settlementMap.put(settlementEzusSupplierRefField,groupData.get("ezus_supplier_reference"));
+	settlementMap.put(settlementSupplierKeySourceField,groupData.get("supplier_key_source"));
+	settlementMap.put("Settlement_Type","Supplier Services");
+	settlementMap.put(settlementTotalCostField,groupData.get("total_cost"));
+	settlementMap.put(settlementServiceCountField,groupData.get("service_count"));
+	settlementMap.put(settlementBookingStatusField,bookingStatus);
+	if(recalculatedAtIso != "")
+	{
+		settlementMap.put(settlementLastRecalculatedAtField,recalculatedAtIso);
+	}
+	if(!isnull(groupData.get("first_service_date")))
+	{
+		settlementMap.put(settlementFirstServiceDateField,groupData.get("first_service_date"));
+	}
+	if(!isnull(groupData.get("last_service_date")))
+	{
+		settlementMap.put(settlementLastServiceDateField,groupData.get("last_service_date"));
+	}
+	supplierIdForSettlement = ifnull(groupData.get("supplier_id"),"").toString();
+	if(supplierIdForSettlement != "")
+	{
+		supplierLookupMap = Map();
+		supplierLookupMap.put("id",supplierIdForSettlement);
+		settlementMap.put(settlementSupplierField,supplierLookupMap);
+	}
+	else
+	{
+		settlementMap.put(settlementSupplierField,null);
+	}
+	if(isnull(existingSettlement))
+	{
+		settlementMap.put(settlementStatusField,defaultStatus);
+		toCreateSettlements.add(settlementMap);
+		if(debugCreatePayloadSamples.size() < 5)
+		{
+			debugPayloadSample = Map();
+			debugPayloadSample.put("technical_key",settlementTechnicalKey);
+			debugPayloadSample.put("display_code",displayCode);
+			debugPayloadSample.put("supplier_id",supplierIdForSettlement);
+			debugPayloadSample.put("supplier_name",groupData.get("supplier_name"));
+			debugPayloadSample.put("ezus_supplier_reference",groupData.get("ezus_supplier_reference"));
+			debugPayloadSample.put("payload",settlementMap);
+			debugCreatePayloadSamples.add(debugPayloadSample);
+		}
+	}
+	else
+	{
+		settlementMap.put("id",existingSettlement.get("id"));
+		currentStatus = ifnull(existingSettlement.get(settlementStatusField),"").toString();
+		if(bookingIsCancelled == true)
+		{
+			if(currentStatus != "Paid" && currentStatus != cancelledSettlementStatus)
+			{
+				settlementMap.put(settlementStatusField,cancelledSettlementStatus);
+			}
+		}
+		else if(currentStatus == "" || currentStatus == noServicesStatus)
+		{
+			settlementMap.put(settlementStatusField,pendingInvoiceStatus);
+		}
+		toUpdateSettlements.add(settlementMap);
+	}
+}
+createCount = 0;
+createErrorCount = 0;
+createdSettlementIdByTechnicalKey = Map();
+if(toCreateSettlements.size() > 0)
+{
+	batchCreateSettlements = List();
+	batchCreateSettlementKeys = List();
+	for each  recCreate in toCreateSettlements
+	{
+		batchCreateSettlements.add(recCreate);
+		batchCreateSettlementKeys.add(ifnull(recCreate.get(settlementTechnicalKeyField),"").toString());
+		if(batchCreateSettlements.size() == 100)
+		{
+			createRes = zoho.crm.bulkCreate(settlementModule,batchCreateSettlements);
+			if(!isnull(createRes))
+			{
+				createResIndex = 0;
+				for each  createItem in createRes
+				{
+					if(debugCreateResponseSamples.size() < 10)
+					{
+						debugCreateResponseSamples.add(createItem);
+					}
+					createCode = ifnull(createItem.get("code"),"").toString();
+					createStatus = ifnull(createItem.get("status"),"").toString();
+					createId = "";
+					createDetails = createItem.get("details");
+					if(!isnull(createDetails))
+					{
+						try 
+						{
+							createId = ifnull(createDetails.get("id"),"").toString();
+						}
+						catch (eCreateDetails)
+						{
+							createId = "";
+						}
+					}
+					createTechnicalKey = "";
+					if(createResIndex < batchCreateSettlementKeys.size())
+					{
+						createTechnicalKey = ifnull(batchCreateSettlementKeys.get(createResIndex),"").toString();
+					}
+					if(createCode.equalsIgnoreCase("error") || createStatus.equalsIgnoreCase("error") || createCode.equalsIgnoreCase("INVALID_DATA") || createCode == "" && createStatus != "success" && createId == "")
+					{
+						createErrorCount = createErrorCount + 1;
+					}
+					else
+					{
+						createCount = createCount + 1;
+						if(createTechnicalKey != "" && createId != "")
+						{
+							createdSettlementIdByTechnicalKey.put(createTechnicalKey,createId);
+						}
+					}
+					createResIndex = createResIndex + 1;
+				}
+			}
+			batchCreateSettlements = List();
+			batchCreateSettlementKeys = List();
+		}
+	}
+	if(batchCreateSettlements.size() > 0)
+	{
+		createRes = zoho.crm.bulkCreate(settlementModule,batchCreateSettlements);
+		if(!isnull(createRes))
+		{
+			createResIndex = 0;
+			for each  createItem in createRes
+			{
+				if(debugCreateResponseSamples.size() < 10)
+				{
+					debugCreateResponseSamples.add(createItem);
+				}
+				createCode = ifnull(createItem.get("code"),"").toString();
+				createStatus = ifnull(createItem.get("status"),"").toString();
+				createId = "";
+				createDetails = createItem.get("details");
+				if(!isnull(createDetails))
+				{
+					try 
+					{
+						createId = ifnull(createDetails.get("id"),"").toString();
+					}
+					catch (eCreateDetailsFinal)
+					{
+						createId = "";
+					}
+				}
+				createTechnicalKey = "";
+				if(createResIndex < batchCreateSettlementKeys.size())
+				{
+					createTechnicalKey = ifnull(batchCreateSettlementKeys.get(createResIndex),"").toString();
+				}
+				if(createCode.equalsIgnoreCase("error") || createStatus.equalsIgnoreCase("error") || createCode.equalsIgnoreCase("INVALID_DATA") || createCode == "" && createStatus != "success" && createId == "")
+				{
+					createErrorCount = createErrorCount + 1;
+				}
+				else
+				{
+					createCount = createCount + 1;
+					if(createTechnicalKey != "" && createId != "")
+					{
+						createdSettlementIdByTechnicalKey.put(createTechnicalKey,createId);
+					}
+				}
+				createResIndex = createResIndex + 1;
+			}
+		}
+	}
+}
+updateCount = 0;
+updateErrorCount = 0;
+if(toUpdateSettlements.size() > 0)
+{
+	batchUpdateSettlements = List();
+	for each  recUpdate in toUpdateSettlements
+	{
+		batchUpdateSettlements.add(recUpdate);
+		if(batchUpdateSettlements.size() == 100)
+		{
+			updateRes = zoho.crm.bulkUpdate(settlementModule,batchUpdateSettlements);
+			if(!isnull(updateRes))
+			{
+				for each  updateItem in updateRes
+				{
+					updateCode = ifnull(updateItem.get("code"),"").toString();
+					updateStatus = ifnull(updateItem.get("status"),"").toString();
+					if(updateCode.equalsIgnoreCase("error") || updateStatus.equalsIgnoreCase("error") || updateCode.equalsIgnoreCase("INVALID_DATA"))
+					{
+						updateErrorCount = updateErrorCount + 1;
+					}
+					else
+					{
+						updateCount = updateCount + 1;
+					}
+				}
+			}
+			batchUpdateSettlements = List();
+		}
+	}
+	if(batchUpdateSettlements.size() > 0)
+	{
+		updateRes = zoho.crm.bulkUpdate(settlementModule,batchUpdateSettlements);
+		if(!isnull(updateRes))
+		{
+			for each  updateItem in updateRes
+			{
+				updateCode = ifnull(updateItem.get("code"),"").toString();
+				updateStatus = ifnull(updateItem.get("status"),"").toString();
+				if(updateCode.equalsIgnoreCase("error") || updateStatus.equalsIgnoreCase("error") || updateCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					updateErrorCount = updateErrorCount + 1;
+				}
+				else
+				{
+					updateCount = updateCount + 1;
+				}
+			}
+		}
+	}
+}
+// =========================
+// 5) RELOAD SETTLEMENTS TO GET IDS
+// =========================
+settlementIdByTechnicalKey = Map();
+for each  existingKeyForId in existingSettlementByTechnicalKey.keys()
+{
+	existingSettlementForId = existingSettlementByTechnicalKey.get(existingKeyForId);
+	existingSettlementId = ifnull(existingSettlementForId.get("id"),"").toString();
+	if(existingSettlementId != "")
+	{
+		settlementIdByTechnicalKey.put(existingKeyForId,existingSettlementId);
+	}
+}
+for each  createdKeyForId in createdSettlementIdByTechnicalKey.keys()
+{
+	createdSettlementId = ifnull(createdSettlementIdByTechnicalKey.get(createdKeyForId),"").toString();
+	if(createdSettlementId != "")
+	{
+		settlementIdByTechnicalKey.put(createdKeyForId,createdSettlementId);
+	}
+}
+stopReloadSettlements = false;
+for each  pageNumText in pageNumbers
+{
+	if(stopReloadSettlements == false)
+	{
+		try 
+		{
+			pageNum = pageNumText.toLong();
+			reloadedSettlements = zoho.crm.searchRecords(settlementModule,"(" + settlementBookingField + ":equals:" + bookingId + ")",pageNum,200);
+			if(!isnull(reloadedSettlements) && !reloadedSettlements.isEmpty())
+			{
+				for each  stReloaded in reloadedSettlements
+				{
+					stReloadedTechnicalKey = ifnull(stReloaded.get(settlementTechnicalKeyField),"").toString();
+					stReloadedId = ifnull(stReloaded.get("id"),"").toString();
+					if(stReloadedTechnicalKey != "" && stReloadedId != "")
+					{
+						settlementIdByTechnicalKey.put(stReloadedTechnicalKey,stReloadedId);
+						if(debugReloadedSettlementIds.size() < 20)
+						{
+							debugReloadedSettlementIds.add(stReloadedTechnicalKey + "=" + stReloadedId);
+						}
+					}
+				}
+				if(reloadedSettlements.size() < 200)
+				{
+					stopReloadSettlements = true;
+				}
+			}
+			else
+			{
+				stopReloadSettlements = true;
+			}
+		}
+		catch (eReloadSettlements)
+		{
+			result.put("error",true);
+			result.put("message","Error reloading Supplier Settlements: " + eReloadSettlements.toString());
+			return result;
+		}
+	}
+}
+// Fallback: search individual technical keys if CRM created records but booking lookup was not stored as expected.
+for each  createdKeyForFallback in createdSettlementIdByTechnicalKey.keys()
+{
+	createdIdForFallback = ifnull(createdSettlementIdByTechnicalKey.get(createdKeyForFallback),"").toString();
+	if(createdIdForFallback != "")
+	{
+		settlementIdByTechnicalKey.put(createdKeyForFallback,createdIdForFallback);
+	}
+}
+for each  createdTechnicalKeyForFallback in groupDataByKey.keys()
+{
+	if(isnull(settlementIdByTechnicalKey.get(createdTechnicalKeyForFallback)))
+	{
+		try 
+		{
+			fallbackRes = zoho.crm.searchRecords(settlementModule,"(" + settlementTechnicalKeyField + ":equals:" + createdTechnicalKeyForFallback + ")",1,10);
+			if(!isnull(fallbackRes) && !fallbackRes.isEmpty())
+			{
+				fallbackSettlement = fallbackRes.get(0);
+				fallbackSettlementId = ifnull(fallbackSettlement.get("id"),"").toString();
+				if(fallbackSettlementId != "")
+				{
+					settlementIdByTechnicalKey.put(createdTechnicalKeyForFallback,fallbackSettlementId);
+					if(debugTechnicalKeyFallbackHits.size() < 20)
+					{
+						debugTechnicalKeyFallbackHits.add(createdTechnicalKeyForFallback + "=" + fallbackSettlementId);
+					}
+				}
+			}
+		}
+		catch (eTechnicalKeyFallback)
+		{
+		}
+	}
+}
+// =========================
+// 6) LINK SERVICES TO SETTLEMENTS
+// =========================
+toUpdateServices = List();
+for each  srv in allServices
+{
+	serviceId = ifnull(srv.get("id"),"").toString();
+	if(serviceId != "")
+	{
+		serviceStatusEzus = ifnull(srv.get(serviceStatusEzusField),"").toString().trim();
+		serviceIsCancelled = serviceStatusEzus.equalsIgnoreCase("Cancelled") || serviceStatusEzus.equalsIgnoreCase("Canceled");
+		settlementTechnicalKeyForService = ifnull(serviceIdToSettlementKey.get(serviceId),"").toString();
+		settlementIdForService = ifnull(settlementIdByTechnicalKey.get(settlementTechnicalKeyForService),"").toString();
+		currentSettlementId = "";
+		currentSettlementLookup = srv.get(serviceSettlementLookupField);
+		if(!isnull(currentSettlementLookup))
+		{
+			try 
+			{
+				currentSettlementId = ifnull(currentSettlementLookup.get("id"),"").toString();
+			}
+			catch (eCurrentSettlement)
+			{
+				currentSettlementId = ifnull(currentSettlementLookup,"").toString();
+			}
+		}
+		if(settlementIdForService != "")
+		{
+			if(currentSettlementId != settlementIdForService)
+			{
+				serviceUpdate = Map();
+				serviceSettlementLookupMap = Map();
+				serviceSettlementLookupMap.put("id",settlementIdForService);
+				serviceUpdate.put("id",serviceId);
+				serviceUpdate.put(serviceSettlementLookupField,serviceSettlementLookupMap);
+				toUpdateServices.add(serviceUpdate);
+				if(debugServiceRelinkActions.size() < 25)
+				{
+					serviceRelinkAction = Map();
+					serviceRelinkAction.put("service_id",serviceId);
+					serviceRelinkAction.put("action","link_or_relink_service");
+					serviceRelinkAction.put("previous_settlement_id",currentSettlementId);
+					serviceRelinkAction.put("new_settlement_id",settlementIdForService);
+					serviceRelinkAction.put("status_ezus",serviceStatusEzus);
+					serviceRelinkAction.put("technical_key",settlementTechnicalKeyForService);
+					debugServiceRelinkActions.add(serviceRelinkAction);
+				}
+			}
+		}
+		else if(serviceIsCancelled == true && currentSettlementId != "")
+		{
+			serviceUpdate = Map();
+			serviceUpdate.put("id",serviceId);
+			serviceUpdate.put(serviceSettlementLookupField,null);
+			toUpdateServices.add(serviceUpdate);
+			if(debugServiceRelinkActions.size() < 25)
+			{
+				serviceRelinkAction = Map();
+				serviceRelinkAction.put("service_id",serviceId);
+				serviceRelinkAction.put("action","unlink_cancelled_service");
+				serviceRelinkAction.put("previous_settlement_id",currentSettlementId);
+				serviceRelinkAction.put("status_ezus",serviceStatusEzus);
+				debugServiceRelinkActions.add(serviceRelinkAction);
+			}
+		}
+	}
+}
+serviceUpdateCount = 0;
+serviceUpdateErrorCount = 0;
+if(toUpdateServices.size() > 0)
+{
+	batchUpdateServices = List();
+	for each  serviceUpdateRec in toUpdateServices
+	{
+		batchUpdateServices.add(serviceUpdateRec);
+		if(batchUpdateServices.size() == 100)
+		{
+			serviceUpdateRes = zoho.crm.bulkUpdate(servicesModule,batchUpdateServices);
+			if(!isnull(serviceUpdateRes))
+			{
+				for each  serviceUpdateItem in serviceUpdateRes
+				{
+					serviceUpdateCode = ifnull(serviceUpdateItem.get("code"),"").toString();
+					serviceUpdateStatus = ifnull(serviceUpdateItem.get("status"),"").toString();
+					if(serviceUpdateCode.equalsIgnoreCase("error") || serviceUpdateStatus.equalsIgnoreCase("error") || serviceUpdateCode.equalsIgnoreCase("INVALID_DATA"))
+					{
+						serviceUpdateErrorCount = serviceUpdateErrorCount + 1;
+					}
+					else
+					{
+						serviceUpdateCount = serviceUpdateCount + 1;
+					}
+				}
+			}
+			batchUpdateServices = List();
+		}
+	}
+	if(batchUpdateServices.size() > 0)
+	{
+		serviceUpdateRes = zoho.crm.bulkUpdate(servicesModule,batchUpdateServices);
+		if(!isnull(serviceUpdateRes))
+		{
+			for each  serviceUpdateItem in serviceUpdateRes
+			{
+				serviceUpdateCode = ifnull(serviceUpdateItem.get("code"),"").toString();
+				serviceUpdateStatus = ifnull(serviceUpdateItem.get("status"),"").toString();
+				if(serviceUpdateCode.equalsIgnoreCase("error") || serviceUpdateStatus.equalsIgnoreCase("error") || serviceUpdateCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					serviceUpdateErrorCount = serviceUpdateErrorCount + 1;
+				}
+				else
+				{
+					serviceUpdateCount = serviceUpdateCount + 1;
+				}
+			}
+		}
+	}
+}
+// =========================
+// 7) RECALCULATE AGENT COMMISSION SETTLEMENT
+// =========================
+// This runs in the same Deluge execution as the service settlements.  Its
+// technical key is marked active so the no-services cleanup below never
+// overwrites an Agent Commission settlement.
+agentCommissionResult = Map();
+try
+{
+	agentCommissionResult = standalone.venSet_upsertAgentCommissionSettlement(bookingId);
+	agentCommissionError = ifnull(agentCommissionResult.get("error"),false);
+	agentCommissionTechnicalKey = ifnull(agentCommissionResult.get("technical_key"),"").toString().trim();
+	if(agentCommissionTechnicalKey != "")
+	{
+		activeSettlementKeys.put(agentCommissionTechnicalKey,true);
+	}
+	if(agentCommissionError == true)
+	{
+		result.put("agent_commission_warning",ifnull(agentCommissionResult.get("message"),"Agent commission settlement could not be recalculated.").toString());
+	}
+}
+catch (eAgentCommission)
+{
+	agentCommissionResult.put("error",true);
+	agentCommissionResult.put("message",eAgentCommission.toString());
+	result.put("agent_commission_warning",eAgentCommission.toString());
+}
+// =========================
+// 8) MARK OLD SETTLEMENTS WITHOUT SERVICES
+// =========================
+toMarkNoServices = List();
+for each  existingKey in existingSettlementByTechnicalKey.keys()
+{
+	if(isnull(activeSettlementKeys.get(existingKey)))
+	{
+		oldSettlement = existingSettlementByTechnicalKey.get(existingKey);
+		oldSettlementType = ifnull(oldSettlement.get("Settlement_Type"),"").toString().trim();
+		// Agent commissions have no Booking_Service rows. Their lifecycle is
+		// handled by upsertAgentCommissionSettlement, never by this cleanup.
+		if(oldSettlementType == "Agent Commission")
+		{
+			continue;
+		}
+		oldStatus = ifnull(oldSettlement.get(settlementStatusField),"").toString();
+		if(oldStatus != "Paid" && oldStatus != "Cancelled")
+		{
+			oldUpdate = Map();
+			oldUpdate.put("id",oldSettlement.get("id"));
+			oldUpdate.put(settlementServiceCountField,0);
+			oldUpdate.put("Settlement_Type","Supplier Services");
+			oldUpdate.put(settlementTotalCostField,0.0);
+			oldUpdate.put(settlementFirstServiceDateField,null);
+			oldUpdate.put(settlementLastServiceDateField,null);
+			oldUpdate.put(settlementBookingStatusField,bookingStatus);
+			if(recalculatedAtIso != "")
+			{
+				oldUpdate.put(settlementLastRecalculatedAtField,recalculatedAtIso);
+			}
+			if(bookingIsCancelled == true)
+			{
+				oldUpdate.put(settlementStatusField,cancelledSettlementStatus);
+			}
+			else
+			{
+				oldUpdate.put(settlementStatusField,noServicesStatus);
+			}
+			toMarkNoServices.add(oldUpdate);
+			if(debugMarkNoServicesPayloads.size() < 20)
+			{
+				debugMarkNoServicesPayloads.add(oldUpdate);
+			}
+			if(debugMarkedNoServices.size() < 20)
+			{
+				markedNoServicesSample = Map();
+				markedNoServicesSample.put("technical_key",existingKey);
+				markedNoServicesSample.put("settlement_id",ifnull(oldSettlement.get("id"),"").toString());
+				markedNoServicesSample.put("previous_status",oldStatus);
+				if(bookingIsCancelled == true)
+				{
+					markedNoServicesSample.put("new_status",cancelledSettlementStatus);
+				}
+				else
+				{
+					markedNoServicesSample.put("new_status",noServicesStatus);
+				}
+				markedNoServicesSample.put("previous_total_cost",ifnull(oldSettlement.get(settlementTotalCostField),""));
+				markedNoServicesSample.put("previous_service_count",ifnull(oldSettlement.get(settlementServiceCountField),""));
+				debugMarkedNoServices.add(markedNoServicesSample);
+			}
+		}
+	}
+}
+inactiveCount = 0;
+inactiveErrorCount = 0;
+if(toMarkNoServices.size() > 0)
+{
+	batchInactive = List();
+	for each  oldRec in toMarkNoServices
+	{
+		batchInactive.add(oldRec);
+		if(batchInactive.size() == 100)
+		{
+			inactiveRes = zoho.crm.bulkUpdate(settlementModule,batchInactive);
+			if(!isnull(inactiveRes))
+			{
+				for each  inactiveItem in inactiveRes
+				{
+					if(debugMarkNoServicesResponses.size() < 20)
+					{
+						debugMarkNoServicesResponses.add(inactiveItem);
+					}
+					inactiveCode = ifnull(inactiveItem.get("code"),"").toString();
+					inactiveStatus = ifnull(inactiveItem.get("status"),"").toString();
+					if(inactiveCode.equalsIgnoreCase("error") || inactiveStatus.equalsIgnoreCase("error") || inactiveCode.equalsIgnoreCase("INVALID_DATA"))
+					{
+						inactiveErrorCount = inactiveErrorCount + 1;
+					}
+					else
+					{
+						inactiveCount = inactiveCount + 1;
+					}
+				}
+			}
+			batchInactive = List();
+		}
+	}
+	if(batchInactive.size() > 0)
+	{
+		inactiveRes = zoho.crm.bulkUpdate(settlementModule,batchInactive);
+		if(!isnull(inactiveRes))
+		{
+			for each  inactiveItem in inactiveRes
+			{
+				if(debugMarkNoServicesResponses.size() < 20)
+				{
+					debugMarkNoServicesResponses.add(inactiveItem);
+				}
+				inactiveCode = ifnull(inactiveItem.get("code"),"").toString();
+				inactiveStatus = ifnull(inactiveItem.get("status"),"").toString();
+				if(inactiveCode.equalsIgnoreCase("error") || inactiveStatus.equalsIgnoreCase("error") || inactiveCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					inactiveErrorCount = inactiveErrorCount + 1;
+				}
+				else
+				{
+					inactiveCount = inactiveCount + 1;
+				}
+			}
+		}
+	}
+}
+// =========================
+// RESULT
+// =========================
+result.put("message","Supplier Settlements recalculated successfully.");
+result.put("services_count",allServices.size());
+result.put("services_skipped_cancelled",cancelledServicesSkippedCount);
+result.put("settlements_created",createCount);
+result.put("settlements_updated",updateCount);
+result.put("services_linked_or_relinked",serviceUpdateCount);
+result.put("settlements_marked_no_services",inactiveCount);
+result.put("duplicate_technical_keys_detected",duplicateSettlementKeys.size());
+result.put("settlement_create_errors",createErrorCount);
+result.put("settlement_update_errors",updateErrorCount);
+result.put("service_link_errors",serviceUpdateErrorCount);
+result.put("settlements_mark_no_services_errors",inactiveErrorCount);
+result.put("created_settlement_ids_captured",createdSettlementIdByTechnicalKey.size());
+result.put("agent_commission",agentCommissionResult);
+result.put("supplier_services_type_backfilled",supplierServicesTypeBackfilledCount);
+result.put("supplier_services_type_backfill_errors",supplierServicesTypeBackfillErrorCount);
+debugInfo.put("existing_settlement_count_loaded",existingSettlementByTechnicalKey.size());
+debugInfo.put("grouped_settlement_keys_count",groupDataByKey.size());
+debugInfo.put("booking_status",bookingStatus);
+debugInfo.put("booking_is_cancelled",bookingIsCancelled);
+debugInfo.put("recalculated_at_iso",recalculatedAtIso);
+debugInfo.put("to_create_count",toCreateSettlements.size());
+debugInfo.put("to_update_count",toUpdateSettlements.size());
+debugInfo.put("create_payload_samples",debugCreatePayloadSamples);
+debugInfo.put("create_response_samples",debugCreateResponseSamples);
+debugInfo.put("reloaded_settlement_ids",debugReloadedSettlementIds);
+debugInfo.put("technical_key_fallback_hits",debugTechnicalKeyFallbackHits);
+debugInfo.put("resolved_settlement_id_count",settlementIdByTechnicalKey.size());
+debugInfo.put("included_service_samples",debugIncludedServiceSamples);
+debugInfo.put("skipped_cancelled_services",debugSkippedCancelledServices);
+debugInfo.put("group_summaries",debugGroupSummaries);
+debugInfo.put("existing_settlement_summaries",debugExistingSettlementSummaries);
+debugInfo.put("service_relink_actions",debugServiceRelinkActions);
+debugInfo.put("marked_no_services",debugMarkedNoServices);
+debugInfo.put("mark_no_services_payloads",debugMarkNoServicesPayloads);
+debugInfo.put("mark_no_services_responses",debugMarkNoServicesResponses);
+result.put("debug",debugInfo);
+info "recalculateSupplierSettlementsForBooking debug: " + debugInfo.toString();
+return result;
+}

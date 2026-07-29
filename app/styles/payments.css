@@ -1,0 +1,484 @@
+.selected-payment-hero {
+  gap: 6px;
+}
+
+.selected-payment-hero .hero-card-title-row {
+  align-items: baseline;
+}
+
+.selected-payment-actions {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.selected-payment-secondary-actions {
+  margin-top: 14px;
+}
+
+.payment-letter-panel {
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(760px, calc(100vh - 32px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 11px 12px 12px;
+  border: 1px solid rgba(98, 112, 125, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(248, 251, 255, 0.98) 0%, rgba(242, 247, 252, 0.98) 100%);
+}
+
+.payment-allocation-editor {
+  width: min(980px, calc(100vw - 24px));
+  max-height: min(760px, calc(100vh - 32px));
+  padding: 16px;
+}
+
+.payment-allocation-editor .section-heading {
+  position: relative;
+  padding-right: 38px;
+}
+
+.payment-allocation-editor-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.payment-allocation-editor .table-wrap {
+  max-height: min(480px, calc(100vh - 290px));
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.payment-allocation-editor .results-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.payment-allocation-editor .results-table th,
+.payment-allocation-editor .results-table td {
+  overflow-wrap: anywhere;
+}
+
+.payment-allocation-editor .results-table th:nth-child(1),
+.payment-allocation-editor .results-table td:nth-child(1) {
+  width: 14%;
+}
+
+.payment-allocation-editor .results-table th:nth-child(2),
+.payment-allocation-editor .results-table td:nth-child(2) {
+  width: 19%;
+}
+
+.payment-allocation-editor .results-table th:nth-child(3),
+.payment-allocation-editor .results-table td:nth-child(3) {
+  width: 16%;
+}
+
+.payment-allocation-editor .results-table th:nth-child(4),
+.payment-allocation-editor .results-table td:nth-child(4) {
+  width: 19%;
+}
+
+.payment-allocation-editor .results-table th:nth-child(5),
+.payment-allocation-editor .results-table td:nth-child(5) {
+  width: 92px;
+  text-align: center;
+}
+
+.payment-allocation-editor .results-table td:nth-child(5) .payment-allocation-editor-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-allocation-editor-add {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.payment-allocation-editor-add .field {
+  flex: 1;
+}
+
+.payment-allocation-editor-search-results {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  margin: -4px 0 12px;
+  overflow-y: auto;
+}
+
+.payment-allocation-editor-search-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(98, 112, 125, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.payment-allocation-editor-search-result span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.payment-allocation-editor input[type="number"] {
+  width: 100%;
+  max-width: 100px;
+  text-align: right;
+}
+
+.payment-allocation-editor-invoice-column {
+  width: 14%;
+}
+
+.payment-allocation-editor-row-removing {
+  background: rgba(185, 28, 28, 0.08);
+}
+
+.payment-allocation-editor-row-removing td {
+  color: #991b1b;
+}
+
+.payment-allocation-editor-row-adding {
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.payment-allocation-editor-action {
+  min-width: 82px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.payment-allocation-editor-action.is-remove {
+  border-color: rgba(185, 28, 28, 0.4);
+  color: #b91c1c;
+}
+
+.payment-allocation-editor-action.is-remove.is-marked {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #fff;
+}
+
+.payment-allocation-editor-changes {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.payment-allocation-editor-changes.has-removals {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.payment-allocation-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.payment-allocation-editor-actions strong {
+  margin-right: auto;
+}
+
+.payment-letter-supplier-list {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  max-height: min(460px, calc(100vh - 290px));
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.payment-letter-bulk-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.payment-letter-supplier-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 10px;
+  border: 1px solid rgba(98, 112, 125, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.payment-letter-supplier-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin-top: 2px;
+}
+
+.payment-letter-supplier-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.payment-letter-supplier-meta strong {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.payment-letter-supplier-meta span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.payment-letter-supplier-side {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.payment-letter-email {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.payment-letter-email.is-manual {
+  color: #0f766e;
+}
+
+.payment-letter-email.is-missing {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.payment-letter-email.is-loading {
+  color: var(--muted);
+}
+
+.payment-letter-email-edit {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.payment-letter-side-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.payment-letter-email-input {
+  width: min(240px, 100%);
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid rgba(98, 112, 125, 0.32);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.payment-letter-contacts {
+  grid-column: 2 / -1;
+  overflow-x: auto;
+  padding-top: 2px;
+}
+
+.payment-letter-contacts-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.payment-letter-contacts-table th,
+.payment-letter-contacts-table td {
+  padding: 6px;
+  border-top: 1px solid rgba(98, 112, 125, 0.12);
+  text-align: left;
+  vertical-align: top;
+}
+
+.payment-letter-contacts-table th {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.payment-letter-warning {
+  padding: 8px 10px;
+  border: 1px solid rgba(180, 35, 24, 0.16);
+  border-radius: 10px;
+  background: rgba(254, 243, 242, 0.95);
+  color: #b42318;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.payment-letter-actions {
+  justify-content: flex-start;
+  margin-top: 0;
+}
+
+.selected-payment-summary-list .detail-row span,
+.selected-payment-summary-list .detail-row strong {
+  font-size: 12px;
+}
+
+.selected-payment-counts-panel {
+  padding-top: 12px;
+}
+
+.selected-payment-counts-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.selected-payment-meta-list {
+  display: grid;
+  gap: 0;
+  margin-top: -2px;
+  border-top: 1px solid rgba(184, 111, 65, 0.1);
+}
+
+.selected-payment-meta-row {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(184, 111, 65, 0.1);
+}
+
+.selected-payment-meta-row:last-child {
+  border-bottom: 0;
+}
+
+.selected-payment-meta-row span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.selected-payment-meta-row strong {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.selected-payment-allocations-wrap {
+  overflow-x: auto;
+}
+
+.selected-payment-allocations-table {
+  width: 100%;
+  min-width: 520px;
+  table-layout: fixed;
+}
+
+.selected-payment-allocations-table th:nth-child(1),
+.selected-payment-allocations-table td:nth-child(1) {
+  width: 30%;
+}
+
+.selected-payment-allocations-table th:nth-child(2),
+.selected-payment-allocations-table td:nth-child(2) {
+  width: 35%;
+}
+
+.selected-payment-allocations-table th:nth-child(3),
+.selected-payment-allocations-table td:nth-child(3) {
+  width: 18%;
+}
+
+.selected-payment-allocations-table th:nth-child(4),
+.selected-payment-allocations-table td:nth-child(4) {
+  width: 17%;
+}
+
+.selected-payment-allocations-table th,
+.selected-payment-allocations-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Payments workspace presentation. */
+.payment-letter-panel,
+.payment-allocation-editor {
+  border-color: rgba(15, 118, 110, 0.14);
+  background: linear-gradient(180deg, #f7fcfa 0%, #ffffff 100%);
+}
+
+.payment-allocation-editor .results-table th,
+.selected-payment-allocations-table th,
+.payment-letter-contacts-table th {
+  background: #fafbfc;
+  color: #667085;
+}
+
+.payment-allocation-editor .results-table td,
+.selected-payment-allocations-table td,
+.payment-letter-contacts-table td {
+  border-color: #edf0f2;
+}
+
+.payment-allocation-editor-search-result,
+.payment-letter-supplier-option {
+  border-color: rgba(19, 32, 25, 0.10);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.payment-allocation-editor-search-result:hover,
+.payment-letter-supplier-option:hover {
+  border-color: rgba(15, 118, 110, 0.20);
+  background: #f7fbfa;
+}
+
+.selected-payment-meta-list {
+  border-top-color: #edf0f2;
+}
+
+.payment-context-summary,
+.payment-context-column,
+.payment-details-grid {
+  border-color: rgba(19, 32, 25, 0.08);
+}
+
+/* Orange primary accents for payment surfaces. */
+.payment-letter-panel,
+.payment-allocation-editor {
+  border-color: rgba(209, 136, 87, 0.16);
+  background: linear-gradient(180deg, #fdf9f5 0%, #ffffff 100%);
+}
+
+.payment-allocation-editor-search-result:hover,
+.payment-letter-supplier-option:hover {
+  border-color: rgba(209, 136, 87, 0.22);
+  background: #fdf9f5;
+}

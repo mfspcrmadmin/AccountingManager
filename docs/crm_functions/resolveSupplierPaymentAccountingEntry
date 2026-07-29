@@ -1,0 +1,824 @@
+string standalone.accEnt_resolveSupplierPaymentAccountingEntry(String supplierPaymentId,String replaceExisting)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("accounting_entry_id","");
+	res.put("created",false);
+	res.put("updated",false);
+	res.put("line_ids",List());
+	res.put("line_count",0);
+	res.put("total_debit",0.0);
+	res.put("total_credit",0.0);
+	res.put("balanced",false);
+	res.put("movement_type","");
+
+	try
+	{
+		supplierPaymentId = ifnull(supplierPaymentId,"").toString().trim();
+		replaceExisting = ifnull(replaceExisting,"false").toString().trim().toLowerCase();
+		replaceExistingBool = (replaceExisting == "true" || replaceExisting == "1" || replaceExisting == "yes");
+
+		if(supplierPaymentId == "")
+		{
+			res.put("error",true);
+			res.put("message","supplierPaymentId is empty.");
+		}
+		else
+		{
+			ALLOWED_PAYMENT_STATUSES = "Approved,Pending Payment,Paid,Reconciled".toList(",");
+			ACCOUNTING_STATUS_READY = "Ready to Review";
+			BOOKS_POST_STATUS_NOT_READY = "Not Ready";
+			DOC_TYPE_JOURNAL = "Journal Entry";
+			LINE_TYPE_SUPPLIER = "Supplier";
+			LINE_TYPE_PAYMENT = "Payment";
+			ACCOUNT_ROLE_SUPPLIER = "Supplier Payable";
+			ACCOUNT_ROLE_ADJUSTMENT = "Adjustment";
+			PAYMENT_MOVEMENT_OUTBOUND = "Outbound Payment";
+			PAYMENT_MOVEMENT_REFUND = "Supplier Refund";
+			CRM_API_BASE_URL = "https://www.zohoapis.com/crm/v8";
+			pageTokens = "1,2,3,4,5,6,7,8,9,10".toList(",");
+
+			paymentRecord = zoho.crm.getRecordById("Supplier_Payments",supplierPaymentId);
+
+			if(paymentRecord == null || !paymentRecord.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Supplier Payment not found.");
+			}
+			else
+			{
+				paymentName = ifnull(paymentRecord.get("Name"),supplierPaymentId).toString().trim();
+				paymentStatus = ifnull(paymentRecord.get("Status"),"").toString().trim();
+				paymentDate = ifnull(paymentRecord.get("Payment_Date"),"").toString().trim();
+				movementType = ifnull(paymentRecord.get("Movement_Type"),"").toString().trim();
+
+				if(paymentStatus == "" || !ALLOWED_PAYMENT_STATUSES.contains(paymentStatus))
+				{
+					res.put("error",true);
+					res.put("message","Supplier Payment status is not eligible for accounting entry generation.");
+					return res;
+				}
+
+				if(movementType == "")
+				{
+					movementType = PAYMENT_MOVEMENT_OUTBOUND;
+				}
+
+				res.put("movement_type",movementType);
+
+				headerPaymentAccountLookup = paymentRecord.get("Payment_Account");
+				headerPaymentAccountId = "";
+
+				if(headerPaymentAccountLookup != null)
+				{
+					headerPaymentAccountId = ifnull(headerPaymentAccountLookup.get("id"),"").toString().trim();
+				}
+
+				if(headerPaymentAccountId == "")
+				{
+					res.put("error",true);
+					res.put("message","Supplier Payment has no Payment Account on the header.");
+					return res;
+				}
+
+				headerPaymentAccountRecord = zoho.crm.getRecordById("Payment_Accounts",headerPaymentAccountId);
+
+				if(headerPaymentAccountRecord == null || !headerPaymentAccountRecord.containKey("id"))
+				{
+					res.put("error",true);
+					res.put("message","The header Payment Account could not be loaded.");
+					return res;
+				}
+
+				headerAccountingLookup = headerPaymentAccountRecord.get("Accounting_Account");
+				headerAccountingAccountId = "";
+
+				if(headerAccountingLookup != null)
+				{
+					headerAccountingAccountId = ifnull(headerAccountingLookup.get("id"),"").toString().trim();
+				}
+
+				if(headerAccountingAccountId == "")
+				{
+					res.put("error",true);
+					res.put("message","The header Payment Account has no Accounting Account mapped.");
+					return res;
+				}
+
+				legacyEntryName = "Supplier_Payment_" + supplierPaymentId;
+
+				allocationRecords = List();
+
+				for each  pageToken in pageTokens
+				{
+					pageIndex = pageToken.toLong();
+					allocationBatch = zoho.crm.searchRecords("Supplier_Pay_Allocations","(Supplier_Payment:equals:" + supplierPaymentId + ")",pageIndex,200);
+
+					if(allocationBatch == null || allocationBatch.isEmpty())
+					{
+						break;
+					}
+
+					for each  allocationRecord in allocationBatch
+					{
+						allocationRecords.add(allocationRecord);
+					}
+
+					if(allocationBatch.size() < 200)
+					{
+						break;
+					}
+				}
+
+				if(allocationRecords.isEmpty())
+				{
+					res.put("error",true);
+					res.put("message","The Supplier Payment has no allocations.");
+					return res;
+				}
+
+				lineDefinitions = List();
+				allocationIdsToUpdate = List();
+				distinctSupplierIds = List();
+				distinctBookingIds = List();
+				distinctSettlementIds = List();
+				distinctMfspReferences = List();
+				distinctInvoiceIds = List();
+				distinctInvoiceNames = List();
+				distinctSupplierCodes = List();
+				supplierCodeCache = Map();
+				totalPaymentAmount = 0.0;
+				allocationSequence = 0;
+
+				for each  allocationRecord in allocationRecords
+				{
+					if(allocationRecord == null || !allocationRecord.containKey("id"))
+					{
+						continue;
+					}
+
+					allocationId = allocationRecord.get("id").toString();
+					allocationAmount = ifnull(allocationRecord.get("Allocated_Amount"),0).toDecimal();
+
+					if(allocationAmount <= 0)
+					{
+						continue;
+					}
+
+					allocationSequence = allocationSequence + 1;
+					allocationLineNo = 1;
+
+					invoiceLookup = allocationRecord.get("Supplier_Invoice");
+					invoiceId = "";
+					if(invoiceLookup != null)
+					{
+						invoiceId = ifnull(invoiceLookup.get("id"),"").toString().trim();
+					}
+
+					supplierLookup = allocationRecord.get("Supplier");
+					supplierId = "";
+					supplierName = ifnull(allocationRecord.get("Supplier_Name"),"").toString().trim();
+					if(supplierLookup != null)
+					{
+						supplierId = ifnull(supplierLookup.get("id"),"").toString().trim();
+						if(supplierName == "")
+						{
+							supplierName = ifnull(supplierLookup.get("name"),"").toString().trim();
+						}
+					}
+
+					bookingLookup = allocationRecord.get("Booking");
+					bookingId = "";
+					if(bookingLookup != null)
+					{
+						bookingId = ifnull(bookingLookup.get("id"),"").toString().trim();
+					}
+
+					settlementLookup = allocationRecord.get("Supplier_Settlement");
+					settlementId = "";
+					if(settlementLookup != null)
+					{
+						settlementId = ifnull(settlementLookup.get("id"),"").toString().trim();
+					}
+
+					mfspReference = ifnull(allocationRecord.get("MFSP_Reference"),"").toString().trim();
+					invoiceRecord = Map();
+					invoiceNameForEntry = "";
+					supplierCodeForEntry = "";
+
+					if(invoiceId != "")
+					{
+						invoiceRecord = zoho.crm.getRecordById("Supplier_Invoices",invoiceId);
+					}
+
+					if(invoiceRecord != null && invoiceRecord.containKey("id"))
+					{
+						invoiceNameForEntry = ifnull(invoiceRecord.get("Name"),"").toString().trim();
+						supplierCodeForEntry = ifnull(invoiceRecord.get("Supplier_Code"),"").toString().trim();
+					}
+
+					// The header indicates the net bank direction. Each allocation carries
+					// its own direction so a payment can settle invoices and credit notes together.
+					allocationMovementType = ifnull(allocationRecord.get("Movement_Type"),"").toString().trim();
+					if(allocationMovementType != PAYMENT_MOVEMENT_OUTBOUND && allocationMovementType != PAYMENT_MOVEMENT_REFUND)
+					{
+						allocationMovementType = PAYMENT_MOVEMENT_OUTBOUND;
+						if(invoiceRecord != null && invoiceRecord.containKey("id") && ifnull(invoiceRecord.get("Invoice_Type"),"").toString().trim() == "Credit Note")
+						{
+							allocationMovementType = PAYMENT_MOVEMENT_REFUND;
+						}
+					}
+
+					if((supplierId == "" || bookingId == "" || settlementId == "" || mfspReference == "") && invoiceRecord != null && invoiceRecord.containKey("id"))
+					{
+						if(supplierId == "")
+						{
+							invoiceSupplierLookup = invoiceRecord.get("Supplier");
+							if(invoiceSupplierLookup != null)
+							{
+								supplierId = ifnull(invoiceSupplierLookup.get("id"),"").toString().trim();
+								if(supplierName == "")
+								{
+									supplierName = ifnull(invoiceSupplierLookup.get("name"),"").toString().trim();
+								}
+							}
+						}
+						if(bookingId == "")
+						{
+							invoiceBookingLookup = invoiceRecord.get("Booking");
+							if(invoiceBookingLookup != null)
+							{
+								bookingId = ifnull(invoiceBookingLookup.get("id"),"").toString().trim();
+							}
+						}
+						if(settlementId == "")
+						{
+							invoiceSettlementLookup = invoiceRecord.get("Supplier_Settlement");
+							if(invoiceSettlementLookup != null)
+							{
+								settlementId = ifnull(invoiceSettlementLookup.get("id"),"").toString().trim();
+							}
+						}
+						if(mfspReference == "")
+						{
+							mfspReference = ifnull(invoiceRecord.get("MFSP_Reference"),"").toString().trim();
+						}
+					}
+
+					if(supplierId == "")
+					{
+						res.put("error",true);
+						res.put("message","One payment allocation has no supplier.");
+						return res;
+					}
+
+					if(supplierCodeForEntry == "" && supplierId != "")
+					{
+						if(supplierCodeCache.containKey(supplierId))
+						{
+							supplierCodeForEntry = ifnull(supplierCodeCache.get(supplierId),"").toString().trim();
+						}
+						else
+						{
+							supplierRecordForCode = zoho.crm.getRecordById("Vendors",supplierId);
+							if(supplierRecordForCode != null && supplierRecordForCode.containKey("id"))
+							{
+								supplierCodeForEntry = ifnull(supplierRecordForCode.get("TP_Reference"),ifnull(supplierRecordForCode.get("Connection_Reference"),"")).toString().trim();
+							}
+							supplierCodeCache.put(supplierId,supplierCodeForEntry);
+						}
+					}
+
+					ensureSupplierAccountResp = standalone.ensureSupplierAccountingAccount(supplierId);
+
+					if(ensureSupplierAccountResp != null && ensureSupplierAccountResp.containKey("error") && ensureSupplierAccountResp.get("error") == true)
+					{
+						res.put("error",true);
+						res.put("message","Supplier payable account could not be prepared for supplier " + supplierId + ": " + ifnull(ensureSupplierAccountResp.get("message"),"Unknown error").toString());
+						return res;
+					}
+
+					supplierAccountId = ifnull(ensureSupplierAccountResp.get("accounting_account_id"),"").toString().trim();
+
+					if(supplierAccountId == "")
+					{
+						res.put("error",true);
+						res.put("message","Supplier payable account could not be resolved for supplier " + supplierId + ".");
+						return res;
+					}
+
+					invoiceTotalAmount = 0.0;
+					reimbursableAmount = 0.0;
+					totalPayableAmount = 0.0;
+					prorationRatio = 1.0;
+					proratedInvoiceTotalAmount = 0.0;
+					proratedReimbursableAmount = 0.0;
+					normalizedAllocationAmount = 0.0;
+
+					if(invoiceRecord != null && invoiceRecord.containKey("id"))
+					{
+						invoiceTotalAmount = ifnull(invoiceRecord.get("Invoice_Total"),0).toDecimal();
+						reimbursableAmount = ifnull(invoiceRecord.get("Reimbursable_Expense"),0).toDecimal();
+						totalPayableAmount = ifnull(invoiceRecord.get("Total_Payable_Amount"),0).toDecimal();
+					}
+
+					if(totalPayableAmount <= 0)
+					{
+						totalPayableAmount = invoiceTotalAmount + reimbursableAmount;
+					}
+
+					if(totalPayableAmount <= 0)
+					{
+						totalPayableAmount = allocationAmount;
+					}
+
+					if(totalPayableAmount > 0)
+					{
+						prorationRatio = allocationAmount / totalPayableAmount;
+					}
+
+					proratedInvoiceTotalAmount = invoiceTotalAmount * prorationRatio;
+					proratedReimbursableAmount = reimbursableAmount * prorationRatio;
+					normalizedAllocationAmount = (((allocationAmount * 100) + 0.5).toLong()) / 100.0;
+					proratedInvoiceTotalAmount = (((proratedInvoiceTotalAmount * 100) + 0.5).toLong()) / 100.0;
+					proratedReimbursableAmount = (((proratedReimbursableAmount * 100) + 0.5).toLong()) / 100.0;
+					prorationDelta = normalizedAllocationAmount - (proratedInvoiceTotalAmount + proratedReimbursableAmount);
+
+					if(prorationDelta != 0)
+					{
+						if(proratedInvoiceTotalAmount + prorationDelta >= 0)
+						{
+							proratedInvoiceTotalAmount = proratedInvoiceTotalAmount + prorationDelta;
+						}
+						else if(proratedReimbursableAmount + prorationDelta >= 0)
+						{
+							proratedReimbursableAmount = proratedReimbursableAmount + prorationDelta;
+						}
+					}
+
+					if(proratedReimbursableAmount > 0)
+					{
+						paymentLineMap = Map();
+						paymentLineMap.put("allocation_sequence",allocationSequence);
+						paymentLineMap.put("allocation_line_no",allocationLineNo);
+						paymentLineMap.put("line_type",LINE_TYPE_PAYMENT);
+						paymentLineMap.put("account_role",ACCOUNT_ROLE_ADJUSTMENT);
+						paymentLineMap.put("account_id",headerAccountingAccountId);
+						paymentLineMap.put("supplier_invoice_id",invoiceId);
+						paymentLineMap.put("is_irpf_line",false);
+						paymentLineMap.put("is_reimbursable",true);
+						paymentLineMap.put("description","Supplier payment reimbursable settlement - " + if(invoiceNameForEntry != "",invoiceNameForEntry,paymentName));
+
+						if(allocationMovementType == PAYMENT_MOVEMENT_REFUND)
+						{
+							paymentLineMap.put("debit",proratedReimbursableAmount);
+							paymentLineMap.put("credit",0.0);
+						}
+						else
+						{
+							paymentLineMap.put("debit",0.0);
+							paymentLineMap.put("credit",proratedReimbursableAmount);
+						}
+
+						lineDefinitions.add(paymentLineMap);
+						allocationLineNo = allocationLineNo + 1;
+					}
+
+					if(proratedInvoiceTotalAmount > 0)
+					{
+						paymentLineMap = Map();
+						paymentLineMap.put("allocation_sequence",allocationSequence);
+						paymentLineMap.put("allocation_line_no",allocationLineNo);
+						paymentLineMap.put("line_type",LINE_TYPE_PAYMENT);
+						paymentLineMap.put("account_role",ACCOUNT_ROLE_ADJUSTMENT);
+						paymentLineMap.put("account_id",headerAccountingAccountId);
+						paymentLineMap.put("supplier_invoice_id",invoiceId);
+						paymentLineMap.put("is_irpf_line",false);
+						paymentLineMap.put("is_reimbursable",false);
+						paymentLineMap.put("description","Supplier payment invoice total settlement - " + if(invoiceNameForEntry != "",invoiceNameForEntry,paymentName));
+
+						if(allocationMovementType == PAYMENT_MOVEMENT_REFUND)
+						{
+							paymentLineMap.put("debit",proratedInvoiceTotalAmount);
+							paymentLineMap.put("credit",0.0);
+						}
+						else
+						{
+							paymentLineMap.put("debit",0.0);
+							paymentLineMap.put("credit",proratedInvoiceTotalAmount);
+						}
+
+						lineDefinitions.add(paymentLineMap);
+						allocationLineNo = allocationLineNo + 1;
+					}
+
+					supplierLineMap = Map();
+					supplierLineMap.put("allocation_sequence",allocationSequence);
+					supplierLineMap.put("allocation_line_no",allocationLineNo);
+					supplierLineMap.put("line_type",LINE_TYPE_SUPPLIER);
+					supplierLineMap.put("account_role",ACCOUNT_ROLE_SUPPLIER);
+					supplierLineMap.put("account_id",supplierAccountId);
+					supplierLineMap.put("supplier_invoice_id",invoiceId);
+					supplierLineMap.put("is_irpf_line",false);
+					supplierLineMap.put("is_reimbursable",false);
+					supplierLineMap.put("description","Supplier payable settlement - " + if(invoiceNameForEntry != "",invoiceNameForEntry,paymentName));
+
+					if(allocationMovementType == PAYMENT_MOVEMENT_REFUND)
+					{
+						supplierLineMap.put("debit",0.0);
+						supplierLineMap.put("credit",normalizedAllocationAmount);
+					}
+					else
+					{
+						supplierLineMap.put("debit",normalizedAllocationAmount);
+						supplierLineMap.put("credit",0.0);
+					}
+
+					lineDefinitions.add(supplierLineMap);
+
+					if(supplierId != "" && !distinctSupplierIds.contains(supplierId))
+					{
+						distinctSupplierIds.add(supplierId);
+					}
+					if(bookingId != "" && !distinctBookingIds.contains(bookingId))
+					{
+						distinctBookingIds.add(bookingId);
+					}
+					if(settlementId != "" && !distinctSettlementIds.contains(settlementId))
+					{
+						distinctSettlementIds.add(settlementId);
+					}
+					if(mfspReference != "" && !distinctMfspReferences.contains(mfspReference))
+					{
+						distinctMfspReferences.add(mfspReference);
+					}
+					if(invoiceId != "" && !distinctInvoiceIds.contains(invoiceId))
+					{
+						distinctInvoiceIds.add(invoiceId);
+					}
+					if(invoiceNameForEntry != "" && !distinctInvoiceNames.contains(invoiceNameForEntry))
+					{
+						distinctInvoiceNames.add(invoiceNameForEntry);
+					}
+					if(supplierCodeForEntry != "" && !distinctSupplierCodes.contains(supplierCodeForEntry))
+					{
+						distinctSupplierCodes.add(supplierCodeForEntry);
+					}
+
+					allocationIdsToUpdate.add(allocationId);
+					totalPaymentAmount = totalPaymentAmount + allocationAmount;
+				}
+
+				if(totalPaymentAmount <= 0 || lineDefinitions.isEmpty())
+				{
+					res.put("error",true);
+					res.put("message","The Supplier Payment did not produce any Accounting Entry Lines.");
+					return res;
+				}
+
+				resolvedSupplierCode = "";
+				if(distinctSupplierCodes.size() == 1)
+				{
+					resolvedSupplierCode = distinctSupplierCodes.get(0);
+				}
+				if(resolvedSupplierCode == "" && distinctSupplierIds.size() == 1)
+				{
+					resolvedSupplierCode = distinctSupplierIds.get(0);
+				}
+				if(resolvedSupplierCode == "")
+				{
+					resolvedSupplierCode = "MULTI";
+				}
+
+				if(distinctInvoiceIds.size() == 1 && distinctInvoiceNames.size() == 1)
+				{
+					entryName = "INV-" + distinctInvoiceNames.get(0) + "-" + resolvedSupplierCode + "-PAY-" + supplierPaymentId;
+				}
+				else
+				{
+					entryName = "PAY-MULTI-" + resolvedSupplierCode + "-" + supplierPaymentId;
+				}
+
+				existingEntry = Map();
+				existingEntryId = "";
+				existingEntries = zoho.crm.searchRecords("Accounting_Entries","(Name:equals:" + entryName + ")");
+
+				if((existingEntries == null || existingEntries.isEmpty()) && legacyEntryName != "")
+				{
+					existingEntries = zoho.crm.searchRecords("Accounting_Entries","(Name:equals:" + legacyEntryName + ")");
+				}
+
+				if(existingEntries != null)
+				{
+					for each  existingCandidate in existingEntries
+					{
+						if(existingCandidate != null && existingCandidate.containKey("id"))
+						{
+							existingEntry = existingCandidate;
+							existingEntryId = existingCandidate.get("id").toString();
+							break;
+						}
+					}
+				}
+
+				if(existingEntryId != "" && !replaceExistingBool)
+				{
+					res.put("accounting_entry_id",existingEntryId);
+					res.put("message","Accounting Entry already exists. Pass replaceExisting=true to rebuild it.");
+					return res;
+				}
+
+				if(existingEntryId != "")
+				{
+					existingBooksStatus = ifnull(existingEntry.get("Books_Post_Status"),"").toString().trim();
+
+					if(existingBooksStatus == "Posted")
+					{
+						res.put("error",true);
+						res.put("message","The existing Accounting Entry is already posted and cannot be regenerated automatically.");
+						return res;
+					}
+
+					lineIdsToDelete = List();
+
+					for each  pageToken in pageTokens
+					{
+						pageIndex = pageToken.toLong();
+						lineBatch = zoho.crm.searchRecords("Accounting_Entry_Lines","(Accounting_Entry:equals:" + existingEntryId + ")",pageIndex,200);
+
+						if(lineBatch == null || lineBatch.isEmpty())
+						{
+							break;
+						}
+
+						for each  lineRecord in lineBatch
+						{
+							if(lineRecord != null && lineRecord.containKey("id"))
+							{
+								lineIdsToDelete.add(lineRecord.get("id").toString());
+							}
+						}
+
+						if(lineBatch.size() < 200)
+						{
+							break;
+						}
+					}
+
+					if(!lineIdsToDelete.isEmpty())
+					{
+						deleteIdBuffer = List();
+
+						for each  deleteId in lineIdsToDelete
+						{
+							deleteIdBuffer.add(deleteId);
+
+							if(deleteIdBuffer.size() == 100)
+							{
+								deleteIdsCsv = "";
+
+								for each  bufferedId in deleteIdBuffer
+								{
+									deleteIdsCsv = if(deleteIdsCsv == "",bufferedId,deleteIdsCsv + "," + bufferedId);
+								}
+
+								deleteResp = invokeurl
+								[
+									url :CRM_API_BASE_URL + "/Accounting_Entry_Lines?ids=" + deleteIdsCsv + "&wf_trigger=false"
+									type :DELETE
+									connection:"crm_oauth_connection"
+								];
+
+								if(deleteResp == null || !deleteResp.containKey("data"))
+								{
+									res.put("error",true);
+									res.put("message","Accounting Entry Lines could not be deleted before regeneration.");
+									return res;
+								}
+
+								deleteIdBuffer = List();
+							}
+						}
+
+						if(!deleteIdBuffer.isEmpty())
+						{
+							deleteIdsCsv = "";
+
+							for each  bufferedId in deleteIdBuffer
+							{
+								deleteIdsCsv = if(deleteIdsCsv == "",bufferedId,deleteIdsCsv + "," + bufferedId);
+							}
+
+							deleteResp = invokeurl
+							[
+								url :CRM_API_BASE_URL + "/Accounting_Entry_Lines?ids=" + deleteIdsCsv + "&wf_trigger=false"
+								type :DELETE
+								connection:"crm_oauth_connection"
+							];
+
+							if(deleteResp == null || !deleteResp.containKey("data"))
+							{
+								res.put("error",true);
+								res.put("message","Accounting Entry Lines could not be deleted before regeneration.");
+								return res;
+							}
+						}
+					}
+				}
+
+				entryMap = Map();
+				entryMap.put("Name",entryName);
+				if(paymentDate != "")
+				{
+					entryMap.put("Entry_Date",paymentDate);
+					entryMap.put("Posting_Date",paymentDate);
+					entryMap.put("Source_Date",paymentDate);
+				}
+				entryMap.put("Movement_Type",movementType);
+				entryMap.put("Supplier","");
+				entryMap.put("Booking","");
+				entryMap.put("Supplier_Settlement","");
+				entryMap.put("MFSP_Reference","");
+				if(distinctSupplierIds.size() == 1)
+				{
+					entryMap.put("Supplier",distinctSupplierIds.get(0));
+				}
+				if(distinctBookingIds.size() == 1)
+				{
+					entryMap.put("Booking",distinctBookingIds.get(0));
+				}
+				if(distinctSettlementIds.size() == 1)
+				{
+					entryMap.put("Supplier_Settlement",distinctSettlementIds.get(0));
+				}
+				if(distinctMfspReferences.size() == 1)
+				{
+					entryMap.put("MFSP_Reference",distinctMfspReferences.get(0));
+				}
+				entryMap.put("Accounting_Status",ACCOUNTING_STATUS_READY);
+				entryMap.put("Books_Post_Status",BOOKS_POST_STATUS_NOT_READY);
+				entryMap.put("Zoho_Books_Document_Type",DOC_TYPE_JOURNAL);
+
+				if(existingEntryId != "")
+				{
+					zoho.crm.updateRecord("Accounting_Entries",existingEntryId,entryMap);
+					accountingEntryId = existingEntryId;
+					res.put("updated",true);
+				}
+				else
+				{
+					createEntryResp = zoho.crm.createRecord("Accounting_Entries",entryMap);
+
+					if(createEntryResp != null && createEntryResp.containKey("id"))
+					{
+						accountingEntryId = createEntryResp.get("id").toString();
+						res.put("created",true);
+					}
+				}
+
+				if(ifnull(accountingEntryId,"").toString().trim() == "")
+				{
+					res.put("error",true);
+					res.put("message","Accounting Entry could not be created.");
+					return res;
+				}
+
+				accountCache = Map();
+				lineIds = List();
+				totalDebit = 0.0;
+				totalCredit = 0.0;
+				hasMultipleAllocations = (allocationSequence > 1);
+
+				for each  lineDefinition in lineDefinitions
+				{
+					accountId = ifnull(lineDefinition.get("account_id"),"").toString().trim();
+					lineNo = ifnull(lineDefinition.get("allocation_line_no"),0).toLong();
+					lineAllocationSequence = ifnull(lineDefinition.get("allocation_sequence"),0).toLong();
+					lineNameSuffix = "";
+					accountRecord = Map();
+					booksAccountId = "";
+
+					if(accountId == "")
+					{
+						continue;
+					}
+
+					if(lineNo <= 0)
+					{
+						lineNo = 1;
+					}
+
+					if(hasMultipleAllocations && lineAllocationSequence > 0)
+					{
+						lineNameSuffix = "A" + lineAllocationSequence + "-" + lineNo;
+					}
+					else
+					{
+						lineNameSuffix = lineNo.toString();
+					}
+
+					if(accountCache.containKey(accountId))
+					{
+						accountRecord = accountCache.get(accountId);
+					}
+					else
+					{
+						accountRecord = zoho.crm.getRecordById("Accounting_Accounts",accountId);
+						accountCache.put(accountId,accountRecord);
+					}
+
+					if(accountRecord != null)
+					{
+						booksAccountId = ifnull(accountRecord.get("Zoho_Books_Account_Id"),"").toString().trim();
+					}
+
+					lineCreateMap = Map();
+					lineCreateMap.put("Name",entryName + " | " + lineNameSuffix);
+					lineCreateMap.put("Accounting_Entry",accountingEntryId);
+					lineCreateMap.put("Line_No",lineNo);
+					if(paymentDate != "")
+					{
+						lineCreateMap.put("Source_Date",paymentDate);
+					}
+					lineCreateMap.put("Line_Type",lineDefinition.get("line_type"));
+					lineCreateMap.put("Account_Role",lineDefinition.get("account_role"));
+					lineCreateMap.put("Account",accountId);
+					lineCreateMap.put("Debit",lineDefinition.get("debit"));
+					lineCreateMap.put("Credit",lineDefinition.get("credit"));
+					lineCreateMap.put("Is_IRPF_Line",ifnull(lineDefinition.get("is_irpf_line"),false));
+					lineCreateMap.put("Is_Reimbursable",ifnull(lineDefinition.get("is_reimbursable"),false));
+
+					lineInvoiceId = ifnull(lineDefinition.get("supplier_invoice_id"),"").toString().trim();
+					if(lineInvoiceId != "")
+					{
+						lineCreateMap.put("Supplier_Invoice",lineInvoiceId);
+					}
+
+					if(booksAccountId != "")
+					{
+						lineCreateMap.put("Zoho_Books_Account_Id",booksAccountId);
+					}
+
+					createLineResp = zoho.crm.createRecord("Accounting_Entry_Lines",lineCreateMap);
+
+					if(createLineResp != null && createLineResp.containKey("id"))
+					{
+						lineIds.add(createLineResp.get("id").toString());
+					}
+					else
+					{
+						res.put("error",true);
+						res.put("message","One Accounting Entry Line could not be created. Payload: " + lineCreateMap.toString() + " Response: " + ifnull(createLineResp,"").toString());
+						return res;
+					}
+
+					totalDebit = totalDebit + ifnull(lineDefinition.get("debit"),0).toDecimal();
+					totalCredit = totalCredit + ifnull(lineDefinition.get("credit"),0).toDecimal();
+				}
+
+				if(lineIds.isEmpty())
+				{
+					res.put("error",true);
+					res.put("message","The Supplier Payment did not produce any Accounting Entry Lines.");
+					return res;
+				}
+
+				isBalanced = (totalDebit == totalCredit);
+				updateEntryTotalsMap = Map();
+				updateEntryTotalsMap.put("Line_Count",lineIds.size());
+				updateEntryTotalsMap.put("Total_Debit",totalDebit);
+				updateEntryTotalsMap.put("Total_Credit",totalCredit);
+				updateEntryTotalsMap.put("Balanced",isBalanced);
+				updateEntryTotalsMap.put("Accounting_Status",ACCOUNTING_STATUS_READY);
+				zoho.crm.updateRecord("Accounting_Entries",accountingEntryId,updateEntryTotalsMap);
+
+				updatePaymentMap = Map();
+				updatePaymentMap.put("Accounting_Status",ACCOUNTING_STATUS_READY);
+				zoho.crm.updateRecord("Supplier_Payments",supplierPaymentId,updatePaymentMap);
+
+				for each  allocationIdToUpdate in allocationIdsToUpdate
+				{
+					updateAllocationMap = Map();
+					updateAllocationMap.put("Payment_Accounting_Status",ACCOUNTING_STATUS_READY);
+					zoho.crm.updateRecord("Supplier_Pay_Allocations",allocationIdToUpdate,updateAllocationMap);
+				}
+
+				res.put("accounting_entry_id",accountingEntryId);
+				res.put("line_ids",lineIds);
+				res.put("line_count",lineIds.size());
+				res.put("total_debit",totalDebit);
+				res.put("total_credit",totalCredit);
+				res.put("balanced",isBalanced);
+				res.put("message","Accounting Entry resolved successfully.");
+			}
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}

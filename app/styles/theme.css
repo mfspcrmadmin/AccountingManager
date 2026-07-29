@@ -1,0 +1,55 @@
+:root {
+  --font-ui: "Aptos", "Segoe UI", "Trebuchet MS", Arial, sans-serif;
+  --bg: #fbf8f1;
+  --panel: rgba(255, 255, 255, 0.92);
+  --panel-strong: #ffffff;
+  --panel-soft: #f3f6f4;
+  --text: #132019;
+  --muted: #5f7068;
+  --line: rgba(28, 56, 46, 0.12);
+  --accent: #d18857;
+  --accent-strong: #b86f41;
+  --warm: #9f643b;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --info-bg: #eefbf8;
+  --shadow: 0 18px 40px rgba(77, 49, 24, 0.10);
+  --shadow-soft: 0 4px 12px rgba(77, 49, 24, 0.06);
+  --focus-ring: 0 0 0 3px rgba(209, 136, 87, 0.22);
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--font-ui);
+  line-height: 1.45;
+  background:
+    radial-gradient(circle at top left, rgba(209, 136, 87, 0.18), transparent 22%),
+    radial-gradient(circle at top right, rgba(173, 106, 21, 0.14), transparent 24%),
+    linear-gradient(180deg, #fcf5ef 0%, var(--bg) 100%);
+}
+
+h1,
+h2,
+h3,
+strong,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-ui);
+}
+
+h1,
+h2,
+h3,
+p,
+dl {
+  margin-top: 0;
+}

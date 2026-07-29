@@ -1,0 +1,282 @@
+string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("processed_count",0);
+	res.put("updated_count",0);
+	res.put("warning_count",0);
+	res.put("updated_settlement_ids",List());
+	res.put("warnings",List());
+	res.put("details",List());
+
+	try
+	{
+		settlementIdsString = ifnull(settlementIdsString,"").toString().trim();
+
+		pageTokens = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25".toList(",");
+		settlementRecords = List();
+		seenSettlementIds = Map();
+
+		if(settlementIdsString == "")
+		{
+			res.put("error",true);
+			res.put("message","settlementIdsString is empty. Pass one or more Supplier Settlement ids separated by |||.");
+			return res;
+		}
+		else
+		{
+			targetSettlementIds = settlementIdsString.toList("|||");
+
+			for each rawSettlementId in targetSettlementIds
+			{
+				settlementId = ifnull(rawSettlementId,"").toString().trim();
+
+				if(settlementId == "" || seenSettlementIds.containKey(settlementId))
+				{
+					continue;
+				}
+
+				settlementRecord = zoho.crm.getRecordById("Supplier_Settlements",settlementId.toLong());
+
+				if(settlementRecord != null && settlementRecord.containKey("id"))
+				{
+					settlementRecords.add(settlementRecord);
+					seenSettlementIds.put(settlementId,true);
+				}
+				else
+				{
+					warningsList = res.get("warnings");
+					warningsList.add("Settlement not found: " + settlementId);
+					res.put("warnings",warningsList);
+				}
+			}
+		}
+
+		if(settlementRecords.isEmpty())
+		{
+			res.put("message","No Supplier Settlements found for the requested scope.");
+			warningsList = res.get("warnings");
+			res.put("warning_count",warningsList.size());
+			return res;
+		}
+
+		for each settlementRecord in settlementRecords
+		{
+			try
+			{
+				settlementId = ifnull(settlementRecord.get("id"),"").toString();
+				settlementName = ifnull(settlementRecord.get("Name"),settlementId).toString();
+				currentGrossInvoiceAmount = ifnull(settlementRecord.get("Gross_Invoice_Amount"),0).toDecimal();
+				currentCreditNoteAmount = ifnull(settlementRecord.get("Credit_Note_Amount"),0).toDecimal();
+				currentTotalInvoice = ifnull(settlementRecord.get("Total_Invoice"),0).toDecimal();
+				currentTotalPaid = ifnull(settlementRecord.get("Total_Paid"),0).toDecimal();
+				currentStatus = ifnull(settlementRecord.get("Admin_Status"),"").toString().trim();
+
+				grossInvoiceAmountFromInvoices = 0.0;
+				creditNoteAmountFromInvoices = 0.0;
+				totalInvoiceFromInvoices = 0.0;
+				totalPaidFromInvoices = 0.0;
+				totalPaidFromAllocations = 0.0;
+				invoiceCount = 0;
+				allocationCount = 0;
+				distinctPaymentIds = Map();
+
+				invoiceCriteria = "(Supplier_Settlement:equals:" + settlementId + ")";
+
+				for each pageToken in pageTokens
+				{
+					pageIndex = pageToken.toLong();
+					invoiceBatch = zoho.crm.searchRecords("Supplier_Invoices",invoiceCriteria,pageIndex,200);
+
+					if(invoiceBatch == null || invoiceBatch.isEmpty())
+					{
+						break;
+					}
+
+					for each invoiceRecord in invoiceBatch
+					{
+						if(invoiceRecord == null || !invoiceRecord.containKey("id"))
+						{
+							continue;
+						}
+
+						invoiceCount = invoiceCount + 1;
+						invoiceTotal = 0.0;
+						invoicePaid = ifnull(invoiceRecord.get("Amount_Paid"),0).toDecimal();
+						invoiceType = ifnull(invoiceRecord.get("Invoice_Type"),"").toString().trim();
+						invoiceSign = 1.0;
+
+						if(invoiceRecord.get("Invoice_Total") != null)
+						{
+							invoiceTotal = ifnull(invoiceRecord.get("Invoice_Total"),0).toDecimal();
+						}
+						else if(invoiceRecord.get("Total_Payable_Amount") != null)
+						{
+							invoiceTotal = ifnull(invoiceRecord.get("Total_Payable_Amount"),0).toDecimal();
+						}
+						else if(invoiceRecord.get("Total_Amount") != null)
+						{
+							invoiceTotal = ifnull(invoiceRecord.get("Total_Amount"),0).toDecimal();
+						}
+
+						if(invoiceType == "Credit Note")
+						{
+							invoiceSign = -1.0;
+							creditNoteAmountFromInvoices = creditNoteAmountFromInvoices + invoiceTotal;
+						}
+						else
+						{
+							grossInvoiceAmountFromInvoices = grossInvoiceAmountFromInvoices + invoiceTotal;
+						}
+
+						totalInvoiceFromInvoices = totalInvoiceFromInvoices + (invoiceTotal * invoiceSign);
+						totalPaidFromInvoices = totalPaidFromInvoices + (invoicePaid * invoiceSign);
+					}
+
+					if(invoiceBatch.size() < 200)
+					{
+						break;
+					}
+				}
+
+				allocationCriteria = "(Supplier_Settlement:equals:" + settlementId + ")";
+
+				for each pageToken in pageTokens
+				{
+					pageIndex = pageToken.toLong();
+					allocationBatch = zoho.crm.searchRecords("Supplier_Pay_Allocations",allocationCriteria,pageIndex,200);
+
+					if(allocationBatch == null || allocationBatch.isEmpty())
+					{
+						break;
+					}
+
+					for each allocationRecord in allocationBatch
+					{
+						if(allocationRecord == null || !allocationRecord.containKey("id"))
+						{
+							continue;
+						}
+
+						allocationCount = allocationCount + 1;
+						totalPaidFromAllocations = totalPaidFromAllocations + ifnull(allocationRecord.get("Allocated_Amount"),0).toDecimal();
+						paymentLookup = allocationRecord.get("Supplier_Payment");
+
+						if(paymentLookup != null)
+						{
+							paymentId = ifnull(paymentLookup.get("id"),"").toString().trim();
+
+							if(paymentId != "")
+							{
+								distinctPaymentIds.put(paymentId,true);
+							}
+						}
+					}
+
+					if(allocationBatch.size() < 200)
+					{
+						break;
+					}
+				}
+
+				nextStatus = currentStatus;
+
+				if(totalInvoiceFromInvoices > 0)
+				{
+					if(totalPaidFromInvoices >= totalInvoiceFromInvoices)
+					{
+						nextStatus = "Paid";
+					}
+					else if(totalPaidFromInvoices > 0)
+					{
+						nextStatus = "Partially Paid";
+					}
+					else
+					{
+						nextStatus = "To Be Paid";
+					}
+				}
+
+				needsUpdate = currentGrossInvoiceAmount != grossInvoiceAmountFromInvoices || currentCreditNoteAmount != creditNoteAmountFromInvoices || currentTotalInvoice != totalInvoiceFromInvoices || currentTotalPaid != totalPaidFromInvoices || currentStatus != nextStatus;
+
+				detail = Map();
+				detail.put("settlement_id",settlementId);
+				detail.put("settlement_name",settlementName);
+				detail.put("invoice_count",invoiceCount);
+				detail.put("allocation_count",allocationCount);
+				detail.put("payment_count",distinctPaymentIds.keys().size());
+				detail.put("current_gross_invoice_amount",currentGrossInvoiceAmount);
+				detail.put("new_gross_invoice_amount",grossInvoiceAmountFromInvoices);
+				detail.put("current_credit_note_amount",currentCreditNoteAmount);
+				detail.put("new_credit_note_amount",creditNoteAmountFromInvoices);
+				detail.put("current_total_invoice",currentTotalInvoice);
+				detail.put("new_total_invoice",totalInvoiceFromInvoices);
+				detail.put("current_total_paid",currentTotalPaid);
+				detail.put("new_total_paid",totalPaidFromInvoices);
+				detail.put("allocation_total_paid",totalPaidFromAllocations);
+				detail.put("current_status",currentStatus);
+				detail.put("new_status",nextStatus);
+				detail.put("needs_update",needsUpdate);
+
+				detailsList = res.get("details");
+				detailsList.add(detail);
+				res.put("details",detailsList);
+
+				res.put("processed_count",res.get("processed_count") + 1);
+
+				if(totalPaidFromAllocations != totalPaidFromInvoices)
+				{
+					warningsList = res.get("warnings");
+					warningsList.add("Settlement " + settlementName + " (" + settlementId + ") has a paid mismatch: invoices = " + totalPaidFromInvoices + ", allocations = " + totalPaidFromAllocations + ".");
+					res.put("warnings",warningsList);
+				}
+
+				if(needsUpdate)
+				{
+					updateMap = Map();
+					updateMap.put("Gross_Invoice_Amount",grossInvoiceAmountFromInvoices);
+					updateMap.put("Credit_Note_Amount",creditNoteAmountFromInvoices);
+					updateMap.put("Total_Invoice",totalInvoiceFromInvoices);
+					updateMap.put("Total_Paid",totalPaidFromInvoices);
+					updateMap.put("Admin_Status",nextStatus);
+					zoho.crm.updateRecord("Supplier_Settlements",settlementId.toLong(),updateMap);
+
+					res.put("updated_count",res.get("updated_count") + 1);
+
+					updatedIdsList = res.get("updated_settlement_ids");
+					updatedIdsList.add(settlementId);
+					res.put("updated_settlement_ids",updatedIdsList);
+				}
+			}
+			catch (settlementError)
+			{
+				warningsList = res.get("warnings");
+				warningsList.add("Settlement update failed for " + ifnull(settlementRecord.get("id"),"unknown").toString() + ": " + settlementError.toString());
+				res.put("warnings",warningsList);
+			}
+		}
+
+		warningsList = res.get("warnings");
+		res.put("warning_count",warningsList.size());
+
+		modeLabel = "Rebuild completed.";
+		updateLabel = "updated ";
+
+		scopeLabel = "all settlements";
+
+		if(settlementIdsString != "")
+		{
+			scopeLabel = "the requested settlements";
+		}
+
+		res.put("message",modeLabel + " Processed " + res.get("processed_count") + " settlement(s) for " + scopeLabel + " and " + updateLabel + res.get("updated_count") + ".");
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e.toString());
+	}
+
+	return res;
+}

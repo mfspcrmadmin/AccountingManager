@@ -1,0 +1,206 @@
+string standalone.ensureSupplierPaymentAccount(String supplierId,String accountingAccountId)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("payment_account_id","");
+	res.put("created",false);
+
+	try
+	{
+		supplierId = ifnull(supplierId,"").toString().trim();
+		accountingAccountId = ifnull(accountingAccountId,"").toString().trim();
+
+		if(supplierId == "")
+		{
+			res.put("error",true);
+			res.put("message","supplierId is empty.");
+		}
+		else
+		{
+			supplier = zoho.crm.getRecordById("Vendors",supplierId);
+
+			if(supplier == null || !supplier.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Supplier not found.");
+			}
+			else
+			{
+				supplierName = ifnull(supplier.get("Vendor_Name"),"").toString().trim();
+				supplierTaxName = ifnull(supplier.get("Tax_Name"),"").toString().trim();
+				paymentAccountDisplayName = if(supplierTaxName != "",supplierTaxName,supplierName);
+				accountNumber = ifnull(supplier.get("Account_Number"),"").toString().trim();
+				cifNif = ifnull(supplier.get("CIF_NIF"),"").toString().trim();
+				paymentAccountId = "";
+				firstOwnedAccount = Map();
+				usableAccount = Map();
+
+				if(accountNumber == "" || cifNif == "")
+				{
+					res.put("message","Supplier is missing Account_Number or CIF_NIF.");
+				}
+				else
+				{
+					existingAccounts = zoho.crm.searchRecords("Payment_Accounts","(Owner_Supplier:equals:" + supplierId + ")");
+
+					if(existingAccounts != null)
+					{
+						for each  existingAccount in existingAccounts
+						{
+							if(existingAccount != null && existingAccount.containKey("id"))
+							{
+								if(firstOwnedAccount.isEmpty())
+								{
+									firstOwnedAccount = existingAccount;
+								}
+
+								accountStatus = ifnull(existingAccount.get("Status"),"").toString().trim().toLowerCase();
+								allowedValue = ifnull(existingAccount.get("Allowed_For_Supplier_Payments"),false).toString().trim().toLowerCase();
+
+								if(accountStatus != "inactive" && allowedValue == "true")
+								{
+									paymentAccountId = existingAccount.get("id").toString();
+									usableAccount = existingAccount;
+									break;
+								}
+							}
+						}
+					}
+
+					if(paymentAccountId != "")
+					{
+						updateExistingMap = Map();
+						existingAccountingLookup = usableAccount.get("Accounting_Account");
+						existingAccountingId = "";
+						existingIban = ifnull(usableAccount.get("IBAN"),"").toString().trim();
+
+						if(existingAccountingLookup != null)
+						{
+							existingAccountingId = ifnull(existingAccountingLookup.get("id"),"").toString();
+						}
+
+						if(accountingAccountId != "" && existingAccountingId != accountingAccountId)
+						{
+							updateExistingMap.put("Accounting_Account",accountingAccountId);
+						}
+						if(existingIban == "")
+						{
+							updateExistingMap.put("IBAN",accountNumber);
+						}
+
+						if(!updateExistingMap.isEmpty())
+						{
+							zoho.crm.updateRecord("Payment_Accounts",paymentAccountId,updateExistingMap);
+						}
+					}
+					else if(!firstOwnedAccount.isEmpty())
+					{
+						paymentAccountId = firstOwnedAccount.get("id").toString();
+						updateOwnedMap = Map();
+						currentAllowedValue = ifnull(firstOwnedAccount.get("Allowed_For_Supplier_Payments"),false).toString().trim().toLowerCase();
+						currentStatus = ifnull(firstOwnedAccount.get("Status"),"").toString().trim();
+						currentOwnerType = ifnull(firstOwnedAccount.get("Owner_Type"),"").toString().trim();
+						currentName = ifnull(firstOwnedAccount.get("Name"),"").toString().trim();
+						currentBankAccountName = ifnull(firstOwnedAccount.get("Bank_Account_Name"),"").toString().trim();
+						currentIban = ifnull(firstOwnedAccount.get("IBAN"),"").toString().trim();
+						currentExternalId = ifnull(firstOwnedAccount.get("External_ID"),"").toString().trim();
+						currentAccountingLookup = firstOwnedAccount.get("Accounting_Account");
+						currentAccountingId = "";
+
+						if(currentAccountingLookup != null)
+						{
+							currentAccountingId = ifnull(currentAccountingLookup.get("id"),"").toString();
+						}
+
+						if(currentAllowedValue != "true")
+						{
+							updateOwnedMap.put("Allowed_For_Supplier_Payments",true);
+						}
+						if(currentStatus == "" || currentStatus.toLowerCase() == "inactive")
+						{
+							updateOwnedMap.put("Status","Active");
+						}
+						if(currentOwnerType != "Supplier")
+						{
+							updateOwnedMap.put("Owner_Type","Supplier");
+						}
+						if(currentName == "")
+						{
+							updateOwnedMap.put("Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName + " | " + accountNumber,accountNumber));
+						}
+						if(currentBankAccountName == "")
+						{
+							updateOwnedMap.put("Bank_Account_Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName,cifNif));
+						}
+						if(currentIban == "")
+						{
+							updateOwnedMap.put("IBAN",accountNumber);
+						}
+						if(currentExternalId == "")
+						{
+							updateOwnedMap.put("External_ID",cifNif + "_" + accountNumber);
+						}
+						if(accountingAccountId != "" && currentAccountingId != accountingAccountId)
+						{
+							updateOwnedMap.put("Accounting_Account",accountingAccountId);
+						}
+
+						if(!updateOwnedMap.isEmpty())
+						{
+							zoho.crm.updateRecord("Payment_Accounts",paymentAccountId,updateOwnedMap);
+						}
+					}
+					else
+					{
+						createPaymentMap = Map();
+						createPaymentMap.put("Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName + " | " + accountNumber,accountNumber));
+						createPaymentMap.put("IBAN",accountNumber);
+						createPaymentMap.put("Bank_Account_Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName,cifNif));
+						createPaymentMap.put("External_ID",cifNif + "_" + accountNumber);
+						createPaymentMap.put("Status","Active");
+						createPaymentMap.put("Currency","EUR");
+						createPaymentMap.put("Method_Type","Bank Transfer");
+						createPaymentMap.put("Allowed_For_Supplier_Payments",true);
+						createPaymentMap.put("Owner_Type","Supplier");
+						createPaymentMap.put("Owner_Supplier",supplierId);
+
+						if(accountingAccountId != "")
+						{
+							createPaymentMap.put("Accounting_Account",accountingAccountId);
+						}
+
+						createPaymentResp = zoho.crm.createRecord("Payment_Accounts",createPaymentMap);
+
+						if(createPaymentResp != null && createPaymentResp.containKey("id"))
+						{
+							paymentAccountId = createPaymentResp.get("id").toString();
+							res.put("created",true);
+						}
+						else
+						{
+							res.put("error",true);
+							res.put("message","Payment account could not be created.");
+						}
+					}
+
+					if(paymentAccountId != "" && res.get("error") != true)
+					{
+						res.put("payment_account_id",paymentAccountId);
+						if(res.get("message") == "")
+						{
+							res.put("message","Payment account ready.");
+						}
+					}
+				}
+			}
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}

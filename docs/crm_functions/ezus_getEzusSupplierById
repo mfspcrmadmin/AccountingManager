@@ -1,0 +1,18 @@
+string standalone.ezus_getEzusSupplierById(String supplierReference)
+{
+res = Map();
+if(isnull(supplierReference) || supplierReference.trim() == "")
+{
+	res.put("error",true);
+	res.put("message","supplierReference is empty");
+	return res;
+}
+token = standalone.getEzusToken();
+if(token == "")
+{
+	res.put("error",true);
+	res.put("message","Could not obtain the token.");
+	return res;
+}
+return standalone.getEzusSupplierByIdWithToken(supplierReference,token);
+}

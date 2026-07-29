@@ -1,0 +1,212 @@
+string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("settlement_id","");
+	res.put("vendor_id","");
+	res.put("technical_key","");
+	res.put("created",false);
+	res.put("updated",false);
+	res.put("skipped",false);
+
+	try
+	{
+		bookingId = ifnull(bookingId,"").toString().trim();
+		if(bookingId == "")
+		{
+			res.put("error",true);
+			res.put("message","bookingId is empty.");
+			return res;
+		}
+
+		booking = zoho.crm.getRecordById("Deals",bookingId);
+		if(booking == null || !booking.containKey("id"))
+		{
+			res.put("error",true);
+			res.put("message","Booking not found.");
+			return res;
+		}
+
+		contactLookup = booking.get("Contact_Name");
+		if(contactLookup == null || ifnull(contactLookup.get("id"),"").toString().trim() == "")
+		{
+			res.put("skipped",true);
+			res.put("message","No agent contact is linked to this Booking; no agent commission settlement was created.");
+			return res;
+		}
+
+		contactId = contactLookup.get("id").toString().trim();
+		contactName = ifnull(contactLookup.get("name"),"").toString().trim();
+		if(contactName == "")
+		{
+			contactName = "Agent " + contactId;
+		}
+
+		commissionAmount = ifnull(booking.get("Final_Commission"),0).toDecimal();
+		technicalKey = "AGENT_COMMISSION_" + bookingId + "_" + contactId;
+		res.put("technical_key",technicalKey);
+		settlementMatches = zoho.crm.searchRecords("Supplier_Settlements","(Technical_Key:equals:" + technicalKey + ")");
+		existingSettlement = Map();
+		existingSettlementId = "";
+		if(settlementMatches != null)
+		{
+			for each settlementMatch in settlementMatches
+			{
+				if(settlementMatch != null && settlementMatch.containKey("id"))
+				{
+					existingSettlement = settlementMatch;
+					existingSettlementId = settlementMatch.get("id").toString();
+					break;
+				}
+			}
+		}
+		if(existingSettlementId != "")
+		{
+			existingSettlement = zoho.crm.getRecordById("Supplier_Settlements",existingSettlementId);
+			if(existingSettlement == null || !existingSettlement.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","The existing agent commission settlement could not be loaded.");
+				return res;
+			}
+		}
+
+		if(commissionAmount <= 0)
+		{
+			if(existingSettlementId == "")
+			{
+				res.put("skipped",true);
+				res.put("message","Final Commission is empty or zero; no agent commission settlement was created.");
+				return res;
+			}
+
+			totalInvoiced = ifnull(existingSettlement.get("Total_Invoice"),0).toDecimal();
+			totalPaid = ifnull(existingSettlement.get("Total_Paid"),0).toDecimal();
+			if(totalInvoiced != 0 || totalPaid != 0)
+			{
+				res.put("skipped",true);
+				res.put("settlement_id",existingSettlementId);
+				res.put("message","Final Commission is zero, but the existing agent commission settlement is already invoiced or paid and was not changed.");
+				return res;
+			}
+
+			cancelMap = Map();
+			cancelMap.put("Total_Service_Cost",0);
+			cancelMap.put("Admin_Status","Cancelled");
+			zoho.crm.updateRecord("Supplier_Settlements",existingSettlementId,cancelMap);
+			res.put("updated",true);
+			res.put("settlement_id",existingSettlementId);
+			res.put("message","Agent commission settlement cancelled because Final Commission is zero.");
+			return res;
+		}
+
+		vendorMatches = zoho.crm.searchRecords("Vendors","(Agent_CRM_Contact_ID:equals:" + contactId + ")");
+		vendorId = "";
+		if(vendorMatches != null)
+		{
+			for each vendorMatch in vendorMatches
+			{
+				if(vendorMatch != null && vendorMatch.containKey("id"))
+				{
+					vendorId = vendorMatch.get("id").toString();
+					break;
+				}
+			}
+		}
+
+		if(vendorId == "")
+		{
+			defaultAccountingAccountCode = "4109000";
+
+			defaultAccountingAccountId = "";
+			accountMatches = zoho.crm.searchRecords("Accounting_Accounts","(Name:equals:" + defaultAccountingAccountCode + ")");
+			if(accountMatches != null)
+			{
+				for each accountMatch in accountMatches
+				{
+					if(accountMatch != null && accountMatch.containKey("id"))
+					{
+						defaultAccountingAccountId = accountMatch.get("id").toString();
+						break;
+					}
+				}
+			}
+			if(defaultAccountingAccountId == "")
+			{
+				res.put("error",true);
+				res.put("message","Accounting Account " + defaultAccountingAccountCode + " was not found; the Agent Vendor was not created.");
+				return res;
+			}
+
+			vendorMap = Map();
+			vendorMap.put("Vendor_Name",contactName);
+			vendorMap.put("Agent_CRM_Contact_ID",contactId);
+			vendorMap.put("Vendor_Type","Agent");
+			vendorMap.put("Status","Active");
+			vendorMap.put("Default_Accounting_Account",defaultAccountingAccountId);
+			vendorResponse = zoho.crm.createRecord("Vendors",vendorMap);
+			if(vendorResponse == null || !vendorResponse.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Agent Vendor could not be created.");
+				return res;
+			}
+			vendorId = vendorResponse.get("id").toString();
+		}
+
+		res.put("vendor_id",vendorId);
+		mfspReference = ifnull(booking.get("MFSP_Reference"),"").toString().trim();
+		settlementName = "AGCOM-" + if(mfspReference != "",mfspReference,bookingId) + "-" + contactId;
+		settlementMap = Map();
+		settlementMap.put("Name",settlementName);
+		settlementMap.put("Booking",bookingId);
+		settlementMap.put("Supplier",vendorId);
+		settlementMap.put("Supplier_Name",contactName);
+		settlementMap.put("Total_Service_Cost",commissionAmount);
+		settlementMap.put("Technical_Key",technicalKey);
+		settlementMap.put("Settlement_Type","Agent Commission");
+		settlementMap.put("Supplier_Key_Source","CRM Supplier");
+		settlementMap.put("MFSP_Reference",mfspReference);
+
+		if(existingSettlementId == "")
+		{
+			settlementMap.put("Admin_Status","Pending Invoice");
+			settlementResponse = zoho.crm.createRecord("Supplier_Settlements",settlementMap);
+			if(settlementResponse == null || !settlementResponse.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Agent commission settlement could not be created.");
+				return res;
+			}
+			res.put("created",true);
+			res.put("settlement_id",settlementResponse.get("id").toString());
+			res.put("message","Agent commission settlement created for " + contactName + ".");
+		}
+		else
+		{
+			totalInvoiced = ifnull(existingSettlement.get("Total_Invoice"),0).toDecimal();
+			totalPaid = ifnull(existingSettlement.get("Total_Paid"),0).toDecimal();
+			if(totalInvoiced != 0 || totalPaid != 0)
+			{
+				res.put("skipped",true);
+				res.put("settlement_id",existingSettlementId);
+				res.put("message","Agent commission settlement already has invoices or payments; its amount was not changed.");
+				return res;
+			}
+
+			settlementMap.put("Admin_Status","Pending Invoice");
+			zoho.crm.updateRecord("Supplier_Settlements",existingSettlementId,settlementMap);
+			res.put("updated",true);
+			res.put("settlement_id",existingSettlementId);
+			res.put("message","Agent commission settlement updated for " + contactName + ".");
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e.toString());
+	}
+
+	return res;
+}

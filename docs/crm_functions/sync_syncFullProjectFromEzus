@@ -1,0 +1,219 @@
+string standalone.sync_syncFullProjectFromEzus(String bookingId,String ezusProjectRef,String bookingStage,String bookingOwnerId,String layout,Map options)
+{
+res = Map();
+syncAuditAtField = "Last_Ezus_Sync_At";
+syncAuditByField = "Last_Ezus_Sync_By";
+bookingAlternativeField = "Ezus_Alternative_Id";
+bookingServiceStatusField = "Status_EZUS";
+projectData = Map();
+projectGetRes = Map();
+currentAlternativeId = "";
+storedAlternativeId = "";
+shouldPersistAlternativeAfterServices = false;
+// -------- Defaults --------
+if(isnull(options))
+{
+	options = Map();
+}
+syncProject = ifnull(options.get("syncProject"),true);
+syncTravellers = ifnull(options.get("syncTravellers"),true);
+syncServices = ifnull(options.get("syncServices"),true);
+dryRun = ifnull(options.get("dryRun"),false);
+skipDeletes = ifnull(options.get("skipDeletes"),false);
+// -------- Validate inputs --------
+if(isnull(bookingId) || bookingId == "")
+{
+	res.put("error",true);
+	res.put("message","CRM Booking ID is null or empty.");
+	return res;
+}
+if(isnull(ezusProjectRef) || ezusProjectRef == "")
+{
+	res.put("error",true);
+	res.put("message","Ezus Project ID in CRM is null or empty.");
+	return res;
+}
+try 
+{
+	bookingRecord = zoho.crm.getRecordById("Deals",bookingId);
+	if(!isnull(bookingRecord))
+	{
+		storedAlternativeId = ifnull(bookingRecord.get(bookingAlternativeField),"").toString().trim();
+	}
+}
+catch (eBookingRecord)
+{
+	storedAlternativeId = "";
+}
+// -------- Token once --------
+token = standalone.getEzusToken();
+if(token == "")
+{
+	res.put("error",true);
+	res.put("message","Could not obtain Ezus token.");
+	return res;
+}
+if(syncProject || syncServices)
+{
+	projectGetRes = standalone.getEZUSProjectByIdWithToken(ezusProjectRef,token);
+	if(projectGetRes.get("error") == true || projectGetRes.get("error") == "true")
+	{
+		res.put("error",true);
+		res.put("message",projectGetRes.get("message"));
+		return res;
+	}
+	projectData = projectGetRes.get("result");
+	if(!isnull(projectData))
+	{
+		currentAlternativeId = standalone.extractEzusProjectMainAlternativeId(projectData).toString().trim();
+	}
+}
+if(syncServices && storedAlternativeId != "" && currentAlternativeId != "" && !storedAlternativeId.equalsIgnoreCase(currentAlternativeId))
+{
+	blockingStatuses = List();
+	pageNumbers = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15".toList(",");
+	stopLoadingServices = false;
+	for each  pageNumText in pageNumbers
+	{
+		if(stopLoadingServices == false)
+		{
+			try 
+			{
+				pageNum = pageNumText.toLong();
+				servicePage = zoho.crm.searchRecords("Booking_Services","(Booking:equals:" + bookingId + ")",pageNum,200);
+				if(!isnull(servicePage) && !servicePage.isEmpty())
+				{
+					for each  bookingService in servicePage
+					{
+						bookingServiceStatus = ifnull(bookingService.get(bookingServiceStatusField),"").toString().trim();
+						if(!bookingServiceStatus.equalsIgnoreCase("Unassigned"))
+						{
+							if(bookingServiceStatus == "")
+							{
+								blockingStatuses.add("(empty)");
+							}
+							else
+							{
+								blockingStatuses.add(bookingServiceStatus);
+							}
+							stopLoadingServices = true;
+							break;
+						}
+					}
+					if(servicePage.size() < 200)
+					{
+						stopLoadingServices = true;
+					}
+				}
+				else
+				{
+					stopLoadingServices = true;
+				}
+			}
+			catch (eLoadBookingServices)
+			{
+				res.put("error",true);
+				res.put("message","Could not validate Booking Services before syncing. Details: " + eLoadBookingServices.toString());
+				return res;
+			}
+		}
+	}
+	if(blockingStatuses.size() > 0)
+	{
+		res.put("error",true);
+		res.put("alternativeChangeBlocked",true);
+		res.put("message","La alternativa principal de EZUS ha cambiado de " + storedAlternativeId + " a " + currentAlternativeId + " y la booking tiene Booking Services con Status_EZUS distinto de Unassigned. No se va a sincronizar para evitar borrar estados existentes.");
+		return res;
+	}
+}
+if(syncServices && currentAlternativeId != "" && !storedAlternativeId.equalsIgnoreCase(currentAlternativeId))
+{
+	shouldPersistAlternativeAfterServices = true;
+}
+// -------- Sync Project (main booking fields) --------
+if(syncProject)
+{
+	bookingParseRes = standalone.parseEzusProjectToZohoBooking(projectData);
+	if(bookingParseRes.get("error") == true)
+	{
+		res.put("error",true);
+		res.put("message",bookingParseRes.get("message"));
+		return res;
+	}
+	bookingMap = bookingParseRes.get("result");
+	if(!dryRun)
+	{
+		bookingUpdateRes = zoho.crm.updateRecord("Deals",bookingId,bookingMap);
+		if(!isnull(bookingUpdateRes.get("status")) && bookingUpdateRes.get("status") == "error")
+		{
+			res.put("error",true);
+			res.put("message","ERROR: booking update failed in CRM. Details: " + bookingUpdateRes.get("message"));
+			return res;
+		}
+	}
+}
+// -------- Sync Travellers -------
+if(syncTravellers)
+{
+	// ideally use WithToken version
+	travellersSyncRes = standalone.syncTravellersFromEzusWithToken(bookingId,ezusProjectRef,token,skipDeletes);
+	if(travellersSyncRes.get("error") == true)
+	{
+		res.put("error",true);
+		res.put("message","ERROR: travellers sync failed. Details: " + travellersSyncRes.get("message"));
+		return res;
+	}
+}
+// -------- Sync Services ---------
+if(syncServices)
+{
+	// use your new optimized one + token + skipDeletes
+	servicesSyncRes = standalone.sync_syncServicesFromEzusWithToken(bookingId,ezusProjectRef,bookingStage,bookingOwnerId,token,skipDeletes);
+	if(servicesSyncRes.get("error") == true)
+	{
+		res.put("error",true);
+		res.put("message","ERROR: services sync failed. Details: " + servicesSyncRes.get("message"));
+		return res;
+	}
+	if(shouldPersistAlternativeAfterServices == true && !dryRun)
+	{
+		alternativeUpdateMap = Map();
+		alternativeUpdateMap.put(bookingAlternativeField,currentAlternativeId);
+		alternativeUpdateRes = zoho.crm.updateRecord("Deals",bookingId,alternativeUpdateMap);
+		if(!isnull(alternativeUpdateRes.get("status")) && alternativeUpdateRes.get("status") == "error")
+		{
+			res.put("error",true);
+			res.put("message","Services sync completed, but Ezus_Alternative_Id could not be updated. Details: " + alternativeUpdateRes.get("message"));
+			return res;
+		}
+	}
+}
+if(!dryRun)
+{
+	syncAuditMap = Map();
+	syncAuditMap.put(syncAuditAtField,standalone.jobs_formatDateTimeForCRM(zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssZ","Europe/Madrid")));
+	syncUserEmail = "";
+	try 
+	{
+		syncUserEmail = ifnull(zoho.loginuserid,"").toString().trim();
+	}
+	catch (eSyncUserEmail)
+	{
+		syncUserEmail = "";
+	}
+	if(syncUserEmail != "")
+	{
+		syncAuditMap.put(syncAuditByField,syncUserEmail);
+	}
+	syncAuditRes = zoho.crm.updateRecord("Deals",bookingId,syncAuditMap);
+	if(!isnull(syncAuditRes.get("status")) && syncAuditRes.get("status") == "error")
+	{
+		res.put("error",true);
+		res.put("message","Synchronization completed, but sync audit fields could not be updated. Details: " + syncAuditRes.get("message"));
+		return res;
+	}
+}
+res.put("error",false);
+res.put("message","Synchronization done successfully!");
+return res;
+}

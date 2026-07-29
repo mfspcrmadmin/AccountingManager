@@ -1,0 +1,75 @@
+#accounting-entries-workspace .bookings-load-action,
+#accounting-entry-lines-workspace .bookings-load-action {
+  margin-top: 16px;
+}
+
+.accounting-load-action {
+  margin-bottom: 16px;
+}
+
+.accounting-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "Trebuchet MS", Arial, sans-serif;
+}
+
+.accounting-status.present {
+  background: rgba(20, 83, 45, 0.12);
+  color: #166534;
+}
+
+.accounting-status.missing {
+  background: rgba(180, 35, 24, 0.12);
+  color: var(--danger);
+}
+
+.accounting-tabs-panel {
+  margin-bottom: 16px;
+}
+
+.accounting-account-create-popup {
+  width: min(680px, calc(100vw - 32px));
+}
+
+/* Accounting workspace presentation. */
+.accounting-tabs-panel {
+  padding: 8px;
+  border-color: rgba(19, 32, 25, 0.08);
+  background: #fafcfb;
+}
+
+.accounting-workspace .panel-header h2,
+#accounting-entries-workspace .panel-header h2,
+#accounting-entry-lines-workspace .panel-header h2 {
+  color: #102a2d;
+}
+
+.accounting-status {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.accounting-status.present {
+  border-color: rgba(29, 122, 70, 0.18);
+  background: #edf7f3;
+  color: #126750;
+}
+
+.accounting-status.missing {
+  border-color: rgba(180, 35, 24, 0.18);
+  background: #fef3f2;
+}
+
+.accounting-workspace .table-wrap,
+#accounting-entries-workspace .table-wrap,
+#accounting-entry-lines-workspace .table-wrap {
+  border-color: rgba(19, 32, 25, 0.10);
+  border-radius: 14px;
+}

@@ -1,0 +1,90 @@
+string standalone.accEnt_rebuildAccountingEntryTotals(String accountingEntryId)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("accounting_entry_id","");
+	res.put("line_count",0);
+	res.put("total_debit",0.0);
+	res.put("total_credit",0.0);
+	res.put("balanced",false);
+
+	try
+	{
+		accountingEntryId = ifnull(accountingEntryId,"").toString().trim();
+
+		if(accountingEntryId == "")
+		{
+			res.put("error",true);
+			res.put("message","accountingEntryId is empty.");
+		}
+		else
+		{
+			entryRecord = zoho.crm.getRecordById("Accounting_Entries",accountingEntryId);
+
+			if(entryRecord == null || !entryRecord.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Accounting Entry not found.");
+			}
+			else
+			{
+				pageTokens = "1,2,3,4,5,6,7,8,9,10".toList(",");
+				totalDebit = 0.0;
+				totalCredit = 0.0;
+				lineCount = 0;
+
+				for each  pageToken in pageTokens
+				{
+					pageIndex = pageToken.toLong();
+					lineBatch = zoho.crm.searchRecords("Accounting_Entry_Lines","(Accounting_Entry:equals:" + accountingEntryId + ")",pageIndex,200);
+
+					if(lineBatch == null || lineBatch.isEmpty())
+					{
+						break;
+					}
+
+					for each  lineRecord in lineBatch
+					{
+						if(lineRecord == null || !lineRecord.containKey("id"))
+						{
+							continue;
+						}
+
+						lineCount = lineCount + 1;
+						totalDebit = totalDebit + ifnull(lineRecord.get("Debit"),0).toDecimal();
+						totalCredit = totalCredit + ifnull(lineRecord.get("Credit"),0).toDecimal();
+					}
+
+					if(lineBatch.size() < 200)
+					{
+						break;
+					}
+				}
+
+				isBalanced = (totalDebit == totalCredit);
+
+				updateMap = Map();
+				updateMap.put("Line_Count",lineCount);
+				updateMap.put("Total_Debit",totalDebit);
+				updateMap.put("Total_Credit",totalCredit);
+				updateMap.put("Balanced",isBalanced);
+				zoho.crm.updateRecord("Accounting_Entries",accountingEntryId,updateMap);
+
+				res.put("accounting_entry_id",accountingEntryId);
+				res.put("line_count",lineCount);
+				res.put("total_debit",totalDebit);
+				res.put("total_credit",totalCredit);
+				res.put("balanced",isBalanced);
+				res.put("message","Accounting Entry totals rebuilt.");
+			}
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}

@@ -1,0 +1,111 @@
+{
+  "error": "false",
+  "reference": "supplier_reference",
+  "info_number": "202306001-S",
+  "type": "accom, activity",
+  "company_name": "The best hotel",
+  "info_notes": "Emily confirmed: this hotel really is the best in town.",
+  "website": "www.the_best_hotel.com",
+  "capacity": "200",
+  "visual_url": "https://docs.google.com/presentation/d/10GoT7nVkSIScaHUQEPh-EyUms5o6D7bcgUYsJlyql94",
+  "user": {
+    "email": "travel-design@e-corp.com",
+    "first_name": "Alice",
+    "last_name": "Tate",
+    "agency": "Paris Agency"
+  },
+  "category": {
+    "reference": "category_reference",
+    "name": "Accommodation / Lodging",
+    "subcategory_reference": "subcategory_reference",
+    "subcategory_name": "Hotel Room"
+  },
+  "destination": {
+    "reference": "destination_reference",
+    "name": "France",
+    "subdestination_reference": "subdestination_reference",
+    "subdestination_name": "Paris"
+  },
+  "address": {
+    "label": "58 Rue de Paradis",
+    "city": "Paris",
+    "country": "France",
+    "zip": "75010",
+    "geo": {
+      "x": 48.875761,
+      "y": 2.348727
+    }
+  },
+  "medias": {
+    "data": [
+      {
+        "media_name": "The lobby",
+        "path_full": "www.the_best_hotel.com/media/loby.jpg"
+      }
+    ],
+    "size": 1
+  },
+  "products": {
+    "data": [
+      {
+        "reference": "product_reference",
+        "title": "2-bed room with breakfast"
+      }
+    ],
+    "size": 1
+  },
+  "contacts": {
+    "data": [
+      {
+        "reference": "contact_reference",
+        "email": "contact@moke.com",
+        "first_name": "Jane",
+        "last_name": "Doe",
+        "title": "CEO",
+        "gender": "Ms",
+        "phone": "0101010101",
+        "phone2": "0606060606",
+        "is_main": true
+      },
+      {
+        "reference": "contact_reference",
+        "email": "bob@proton.me",
+        "first_name": "Bob",
+        "last_name": "Morane",
+        "title": "Project Manager",
+        "gender": "Mr",
+        "phone": "0202020202",
+        "phone2": "0707070707",
+        "is_main": false
+      }
+    ],
+    "size": 2
+  },
+  "langs": [
+    {
+      "lang": "american",
+      "name": "The best hotel",
+      "short_description": "The best hotel: Parisian luxury redefined.",
+      "long_description": "Welcome to The best hotel, a luxurious Parisian hotel nestled in the heart of..."
+    },
+    {
+      "lang": "spanish",
+      "name": "The best hotel",
+      "short_description": "Luz y lujo en París: The best hotel.",
+      "long_description": "Bienvenido a The best hotel, un lujoso hotel parisino ubicado en el corazón de..."
+    }
+  ],
+  "custom_fields": [
+    {
+      "name": "Stars",
+      "value": "5"
+    }
+  ],
+  "tags": [
+    {
+      "reference": "mice",
+      "type": "supplier",
+      "name": "MICE"
+    }
+  ]
+}

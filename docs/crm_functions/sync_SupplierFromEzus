@@ -1,0 +1,20 @@
+string standalone.sync_SupplierFromEzus(String supplierId)
+{
+res = Map();
+supplier = zoho.crm.getRecordById("Vendors",supplierId);
+if(isnull(supplier) || supplier.isEmpty())
+{
+	res.put("error",true);
+	res.put("message","Supplier from CRM is null or empty.");
+	return res;
+}
+ezusApiRef = ifnull(supplier.get("Ezus_Supplier_API"),"").trim();
+if(ezusApiRef != "")
+{
+	return standalone.updateSupplierFromEzus(supplierId);
+}
+else
+{
+	return "Ezus Api field on this record is empty and it cannot be updated.";
+}
+}

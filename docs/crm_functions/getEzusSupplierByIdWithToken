@@ -1,0 +1,54 @@
+string standalone.getEzusSupplierByIdWithToken(String supplierReference,String token)
+{
+res = Map();
+if(isnull(supplierReference) || supplierReference.trim() == "")
+{
+	res.put("error",true);
+	res.put("message","supplierReference is empty");
+	return res;
+}
+if(isnull(token) || token.trim() == "")
+{
+	res.put("error",true);
+	res.put("message","token is empty");
+	return res;
+}
+url = zoho.crm.getOrgVariable("EZUS_API_URL_Supplier");
+params = Map();
+params.put("reference",supplierReference);
+headers = Map();
+headers.put("x-api-key",zoho.crm.getOrgVariable("EZUS_API_Key"));
+headers.put("Authorization","Bearer " + token);
+try 
+{
+	supplierGetRes = invokeurl
+	[
+		url :url
+		type :GET
+		parameters:params
+		headers:headers
+	];
+}
+catch (e)
+{
+	res.put("error",true);
+	res.put("message","Error calling Ezus supplier endpoint");
+	return res;
+}
+if(isnull(supplierGetRes))
+{
+	res.put("error",true);
+	res.put("message","Empty response from Ezus supplier endpoint");
+	return res;
+}
+if(!isnull(supplierGetRes.get("error")) && supplierGetRes.get("error").equals(true))
+{
+	res.put("error",true);
+	res.put("message",ifnull(supplierGetRes.get("message"),"Ezus returned an error"));
+	return res;
+}
+res.put("error",false);
+res.put("message","Action was done successfully!");
+res.put("result",supplierGetRes);
+return res;
+}

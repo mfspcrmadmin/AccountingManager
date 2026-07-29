@@ -1,0 +1,283 @@
+string standalone.updateSupplierFromEzus(String supplierId)
+{
+res = Map();
+body = Map();
+syncedFields = List();
+// --------------------
+// 1) Get CRM Supplier data
+// --------------------
+supplier = zoho.crm.getRecordById("Vendors",supplierId);
+if(isnull(supplier) || supplier.isEmpty())
+{
+	res.put("error",true);
+	res.put("message","Supplier from CRM is null or empty.");
+	return res;
+}
+ezusApiRef = ifnull(supplier.get("Ezus_Supplier_API"),"").trim();
+if(ezusApiRef.equals(""))
+{
+	res.put("error",true);
+	res.put("message","Supplier does not have Ezus_Supplier_API. Use create function instead.");
+	return res;
+}
+vendorName = ifnull(supplier.get("Vendor_Name"),"");
+if(vendorName == "")
+{
+	res.put("error",true);
+	res.put("message","Vendor name is empty. Please fill Vendor_Name and try again.");
+	return res;
+}
+// --------------------
+// 2) Get Ezus token
+// --------------------
+token = standalone.getEzusToken();
+if(token == "")
+{
+	res.put("error",true);
+	res.put("message","Could not obtain Ezus token.");
+	return res;
+}
+// --------------------
+// 3) Get Ezus fields - Update
+// --------------------
+supplierGetRes = standalone.getEzusSupplierByIdWithToken(ezusApiRef,token);
+if(isnull(supplierGetRes) || supplierGetRes.isEmpty())
+{
+	res.put("error",true);
+	res.put("message","Supplier from Ezus is null or empty.");
+	return res;
+}
+errVal = supplierGetRes.get("error");
+if(errVal == true || errVal == "true")
+{
+	res.put("error",true);
+	res.put("message","ERROR - Ezus supplier get failed: " + supplierGetRes.toString());
+	return res;
+}
+supplierEzus = supplierGetRes.get("result");
+companyName = ifnull(supplierEzus.get("company_name"),"");
+website = ifnull(supplierEzus.get("website"),"");
+Supplier_Notes = ifnull(supplierEzus.get("info_notes"),"");
+category = "";
+subcategory = "";
+categoryMap = ifnull(supplierEzus.get("category"),"");
+if(categoryMap != "")
+{
+	category = ifnull(categoryMap.get("name"),"");
+	subcategory = ifnull(categoryMap.get("subcategory_name"),"");
+}
+destination = "";
+subdestination = "";
+destinationMap = ifnull(supplierEzus.get("destination"),"");
+if(destinationMap != "")
+{
+	destination = ifnull(destinationMap.get("name"),"");
+	subdestination = ifnull(destinationMap.get("subdestination_name"),"");
+}
+addressLabel = "";
+addressZip = "";
+addressCity = "";
+addressCountry = "";
+addressMap = ifnull(supplierEzus.get("address"),"");
+if(addressMap != "")
+{
+	addressLabel = ifnull(addressMap.get("label"),"");
+	addressZip = ifnull(addressMap.get("zip"),"");
+	addressCity = ifnull(addressMap.get("city"),"");
+	addressCountry = ifnull(addressMap.get("country"),"");
+}
+// --------------------
+// Custom fields -> map (name => value)
+// --------------------
+cfMap = Map();
+customFields = ifnull(supplierEzus.get("custom_fields"),"");
+if(!isnull(customFields) && !customFields.isEmpty())
+{
+	for each  cf in customFields
+	{
+		n = ifnull(cf.get("name"),"");
+		v = ifnull(cf.get("value"),"");
+		if(n != "")
+		{
+			cfMap.put(n,v);
+		}
+	}
+}
+Account_Number = ifnull(cfMap.get("bank_account"),"");
+Payment_Method = ifnull(cfMap.get("payment-method"),"");
+Payment_Conditions = ifnull(cfMap.get("payment-conditions"),"");
+Commission_Amount = ifnull(cfMap.get("commission-amount"),"");
+Commission_Status = ifnull(cfMap.get("commission-status"),"");
+Commission_Notes = ifnull(cfMap.get("commission__notes"),"");
+Booking_Instructions = ifnull(cfMap.get("booking__instructions"),"");
+Cancellation_Policy = ifnull(cfMap.get("cancellation-policy"),"");
+Groups_Info = ifnull(cfMap.get("groups__info"),"");
+Reduce_Mobility_Info = ifnull(cfMap.get("reduce__mobility__info"),"");
+Restrictions = ifnull(cfMap.get("restrictions"),"");
+Status = ifnull(cfMap.get("status"),"");
+// --------------------
+// 4) Build CRM payload from EZUS
+// --------------------
+if(companyName != "")
+{
+	body.put("Vendor_Name",companyName);
+	syncedFields.add("Vendor_Name");
+}
+if(website != "")
+{
+	body.put("Website",website);
+	syncedFields.add("Website");
+}
+if(Supplier_Notes != "")
+{
+	body.put("Supplier_Notes",Supplier_Notes);
+	syncedFields.add("Supplier_Notes");
+}
+if(category != "")
+{
+	cleanCategory = category.replaceAll("\\*","");
+	body.put("Supplier_Category",cleanCategory);
+	syncedFields.add("Supplier_Category");
+}
+if(subcategory != "")
+{
+	body.put("Subcategory",subcategory);
+	syncedFields.add("Subcategory");
+}
+if(destination != "")
+{
+	body.put("Destination",destination);
+	syncedFields.add("Destination");
+}
+if(subdestination != "")
+{
+	body.put("Subdestination",subdestination);
+	syncedFields.add("Subdestination");
+}
+if(addressLabel != "")
+{
+	body.put("Address",addressLabel);
+	syncedFields.add("Address");
+}
+if(addressZip != "")
+{
+	body.put("Zip_Code",addressZip);
+	syncedFields.add("Zip_Code");
+}
+if(addressCity != "")
+{
+	body.put("City_Town",addressCity);
+	body.put("Analysis_City",addressCity);
+	syncedFields.add("City_Town");
+	syncedFields.add("Analysis_City");
+}
+if(addressCountry != "")
+{
+	body.put("Country",addressCountry);
+	syncedFields.add("Country");
+}
+if(Account_Number != "")
+{
+	body.put("Account_Number",Account_Number);
+	syncedFields.add("Account_Number");
+}
+if(Payment_Method != "")
+{
+	body.put("Payment_Method",Payment_Method);
+	syncedFields.add("Payment_Method");
+}
+if(Payment_Conditions != "")
+{
+	body.put("Payment_Conditions",Payment_Conditions);
+	syncedFields.add("Payment_Conditions");
+}
+if(Commission_Amount != "")
+{
+	body.put("Commission_Amount",Commission_Amount);
+	syncedFields.add("Commission_Amount");
+}
+if(Commission_Status != "")
+{
+	body.put("Commission_Status",Commission_Status);
+	syncedFields.add("Commission_Status");
+}
+if(Commission_Notes != "")
+{
+	body.put("Commission_Notes",Commission_Notes);
+	syncedFields.add("Commission_Notes");
+}
+if(Booking_Instructions != "")
+{
+	body.put("Booking_Instructions",Booking_Instructions);
+	syncedFields.add("Booking_Instructions");
+}
+if(Cancellation_Policy != "")
+{
+	body.put("Cancellation_Policy",Cancellation_Policy);
+	syncedFields.add("Cancellation_Policy");
+}
+if(Groups_Info != "")
+{
+	body.put("Groups_Info",Groups_Info);
+	syncedFields.add("Groups_Info");
+}
+if(Reduce_Mobility_Info != "")
+{
+	body.put("Reduce_Mobility_Info",Reduce_Mobility_Info);
+	syncedFields.add("Reduce_Mobility_Info");
+}
+if(Restrictions != "")
+{
+	body.put("Restrictions",Restrictions);
+	syncedFields.add("Restrictions");
+}
+if(Status != "")
+{
+	body.put("Status",Status);
+	syncedFields.add("Status");
+}
+// --------------------
+// 5) Update CRM with EZUS fields
+// --------------------
+updRes = zoho.crm.updateRecord("Vendors",supplierId,body);
+if(!isnull(updRes) && !isnull(updRes.get("status")) && updRes.get("status") == "error")
+{
+	res.put("error",true);
+	res.put("message","ERROR - Supplier fields fetched from Ezus, but failed updating CRM: " + updRes.toString());
+	return res;
+}
+// --------------------
+// 6) Sync supplier contacts from EZUS -> CRM Contacts
+// --------------------
+contactsBlock = supplierEzus.get("contacts");
+syncContactsRes = standalone.sync_syncSupplierCRMContactsFromEZUS(supplierId,contactsBlock);
+if(syncContactsRes.get("error") == true)
+{
+	res.put("error",true);
+	res.put("message","Supplier fields synced, but contacts sync failed: " + syncContactsRes.get("message"));
+	return res;
+}
+// --------------------
+// 7) Record the successful Ezus synchronization for the Accounting workspace
+// --------------------
+syncAudit = Map();
+// CRM DateTime fields require the normalized format used by the project sync.
+syncAudit.put("Last_Ezus_Sync_At",standalone.jobs_formatDateTimeForCRM(zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssZ","Europe/Madrid")));
+// Keep the same audit identity source used by sync_syncFullProjectFromEzus.
+// zoho.loginuserid resolves to the logged-in user's CRM email in this org.
+syncUserEmail = ifnull(zoho.loginuserid,"").toString().trim();
+if(syncUserEmail != "")
+{
+	syncAudit.put("Last_Ezus_Sync_By",syncUserEmail);
+}
+syncAuditRes = zoho.crm.updateRecord("Vendors",supplierId,syncAudit);
+if(!isnull(syncAuditRes) && !isnull(syncAuditRes.get("status")) && syncAuditRes.get("status") == "error")
+{
+	res.put("error",true);
+	res.put("message","Supplier data synced, but the Ezus synchronization audit could not be saved: " + syncAuditRes.toString());
+	return res;
+}
+res.put("error",false);
+res.put("message","Supplier synced successfully from Ezus! Fields updated in CRM: " + syncedFields.toString());
+return res;
+}

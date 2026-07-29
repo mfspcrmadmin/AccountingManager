@@ -1,0 +1,806 @@
+string standalone.accEnt_resolveSupplierInvoiceAccountingEntry(String supplierInvoiceId,String replaceExisting)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("accounting_entry_id","");
+	res.put("created",false);
+	res.put("updated",false);
+	res.put("line_ids",List());
+	res.put("line_count",0);
+	res.put("total_debit",0.0);
+	res.put("total_credit",0.0);
+	res.put("balanced",false);
+	res.put("accounting_rule_id","");
+	res.put("movement_type","");
+
+	try
+	{
+		supplierInvoiceId = ifnull(supplierInvoiceId,"").toString().trim();
+		replaceExisting = ifnull(replaceExisting,"false").toString().trim().toLowerCase();
+		replaceExistingBool = (replaceExisting == "true" || replaceExisting == "1" || replaceExisting == "yes");
+
+		if(supplierInvoiceId == "")
+		{
+			res.put("error",true);
+			res.put("message","supplierInvoiceId is empty.");
+		}
+		else
+		{
+			invoiceRecord = zoho.crm.getRecordById("Supplier_Invoices",supplierInvoiceId);
+
+			if(invoiceRecord == null || !invoiceRecord.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","Supplier Invoice not found.");
+			}
+			else
+			{
+				ALLOWED_INVOICE_STATUSES = "Approved,To Be Paid,Partially Paid,Paid".toList(",");
+				ACCOUNTING_STATUS_READY = "Ready to Review";
+				BOOKS_POST_STATUS_NOT_READY = "Not Ready";
+				DOC_TYPE_BILL = "Bill";
+				DOC_TYPE_VENDOR_CREDIT = "Vendor Credit";
+				LINE_TYPE_SUPPLIER = "Supplier";
+				LINE_TYPE_EXPENSE = "Expense";
+				LINE_TYPE_IRPF = "IRPF";
+				LINE_TYPE_REIMBURSABLE = "Reimbursable";
+				ACCOUNT_ROLE_SUPPLIER = "Supplier Payable";
+				ACCOUNT_ROLE_BASE_EXPENSE = "Base Expense";
+				ACCOUNT_ROLE_IRPF = "IRPF Withholding";
+				ACCOUNT_ROLE_REIMBURSABLE = "Reimbursable Expense";
+				IRPF_ACCOUNT_CODE = "4751001";
+				CRM_DELETE_CONNECTION = "crm_oauth_connection";
+				CRM_API_BASE_URL = "https://www.zohoapis.com/crm/v8";
+				pageTokens = "1,2,3,4,5,6,7,8,9,10".toList(",");
+
+				invoiceName = ifnull(invoiceRecord.get("Name"),supplierInvoiceId).toString().trim();
+				invoiceStatus = ifnull(invoiceRecord.get("Status"),"").toString().trim();
+				invoiceDate = ifnull(invoiceRecord.get("Invoice_Date"),"").toString().trim();
+				supplierLookup = invoiceRecord.get("Supplier");
+				bookingLookup = invoiceRecord.get("Booking");
+				settlementLookup = invoiceRecord.get("Supplier_Settlement");
+				originalInvoiceLookup = invoiceRecord.get("Original_Invoice");
+				supplierId = "";
+				bookingId = "";
+				settlementId = "";
+				originalInvoiceId = "";
+				supplierName = ifnull(invoiceRecord.get("Supplier_Name"),"").toString().trim();
+				mfspReference = ifnull(invoiceRecord.get("MFSP_Reference"),"").toString().trim();
+				taxBaseAmount = ifnull(invoiceRecord.get("Invoice_Amount_Excl_VAT"),0).toDecimal();
+				expenseAmountInclVat = ifnull(invoiceRecord.get("Invoice_Amount_Incl_VAT"),0).toDecimal();
+				reimbursableAmount = ifnull(invoiceRecord.get("Reimbursable_Expense"),0).toDecimal();
+				irpfAmount = ifnull(invoiceRecord.get("IRPF_Amount"),0).toDecimal() + ifnull(invoiceRecord.get("Additional_IRPF_Amount"),0).toDecimal();
+				totalPayableAmount = ifnull(invoiceRecord.get("Total_Payable_Amount"),0).toDecimal();
+				invoiceType = ifnull(invoiceRecord.get("Invoice_Type"),"").toString().trim();
+
+				if(invoiceStatus == "" || !ALLOWED_INVOICE_STATUSES.contains(invoiceStatus))
+				{
+					res.put("error",true);
+					res.put("message","Supplier Invoice status is not eligible for accounting entry generation.");
+					return res;
+				}
+
+				if(supplierLookup != null)
+				{
+					supplierId = ifnull(supplierLookup.get("id"),"").toString().trim();
+					if(supplierName == "")
+					{
+						supplierName = ifnull(supplierLookup.get("name"),"").toString().trim();
+					}
+				}
+				if(bookingLookup != null)
+				{
+					bookingId = ifnull(bookingLookup.get("id"),"").toString().trim();
+				}
+				if(settlementLookup != null)
+				{
+					settlementId = ifnull(settlementLookup.get("id"),"").toString().trim();
+				}
+				if(originalInvoiceLookup != null)
+				{
+					originalInvoiceId = ifnull(originalInvoiceLookup.get("id"),"").toString().trim();
+				}
+
+				if(supplierId == "")
+				{
+					res.put("error",true);
+					res.put("message","Supplier Invoice has no Supplier.");
+					return res;
+				}
+
+				supplierRecord = zoho.crm.getRecordById("Vendors",supplierId);
+
+				if(supplierRecord == null || !supplierRecord.containKey("id"))
+				{
+					res.put("error",true);
+					res.put("message","Supplier could not be loaded.");
+					return res;
+				}
+
+				supplierCode = ifnull(invoiceRecord.get("Supplier_Code"),"").toString().trim();
+				if(supplierCode == "")
+				{
+					supplierCode = ifnull(supplierRecord.get("TP_Reference"),ifnull(supplierRecord.get("Connection_Reference"),"")).toString().trim();
+				}
+				if(supplierCode == "")
+				{
+					supplierCode = supplierId;
+				}
+
+				bookingRecord = Map();
+				tripType = "";
+				clientType = "";
+				if(bookingId != "")
+				{
+					bookingRecord = zoho.crm.getRecordById("Deals",bookingId);
+					if(bookingRecord != null)
+					{
+						tripType = ifnull(bookingRecord.get("Trip_Type"),"").toString().trim();
+						clientType = ifnull(bookingRecord.get("Client_Type"),"").toString().trim();
+					}
+				}
+
+				isSelfEmployed = (ifnull(supplierRecord.get("Is_Self_Employed"),false).toString().trim().toLowerCase() == "true");
+				movementType = "Outbound Payment";
+				documentType = DOC_TYPE_BILL;
+				lowerInvoiceType = invoiceType.toLowerCase();
+
+				if(originalInvoiceId != "" || lowerInvoiceType.contains("refund") || lowerInvoiceType.contains("credit"))
+				{
+					movementType = "Supplier Refund";
+					documentType = DOC_TYPE_VENDOR_CREDIT;
+				}
+
+				res.put("movement_type",movementType);
+
+				existingEntry = Map();
+				existingEntryId = "";
+				existingEntries = zoho.crm.searchRecords("Accounting_Entries","(Supplier_Invoice:equals:" + supplierInvoiceId + ")");
+
+				if(existingEntries != null)
+				{
+					for each  existingCandidate in existingEntries
+					{
+						if(existingCandidate != null && existingCandidate.containKey("id"))
+						{
+							existingEntry = existingCandidate;
+							existingEntryId = existingCandidate.get("id").toString();
+							break;
+						}
+					}
+				}
+
+				if(existingEntryId != "" && !replaceExistingBool)
+				{
+					res.put("accounting_entry_id",existingEntryId);
+					res.put("message","Accounting Entry already exists. Pass replaceExisting=true to rebuild it.");
+					return res;
+				}
+
+				if(existingEntryId != "")
+				{
+					existingBooksStatus = ifnull(existingEntry.get("Books_Post_Status"),"").toString().trim();
+
+					if(existingBooksStatus == "Posted")
+					{
+						res.put("error",true);
+						res.put("message","The existing Accounting Entry is already posted and cannot be regenerated automatically.");
+						return res;
+					}
+
+					lineIdsToDelete = List();
+
+					for each  pageToken in pageTokens
+					{
+						pageIndex = pageToken.toLong();
+						lineBatch = zoho.crm.searchRecords("Accounting_Entry_Lines","(Accounting_Entry:equals:" + existingEntryId + ")",pageIndex,200);
+
+						if(lineBatch == null || lineBatch.isEmpty())
+						{
+							break;
+						}
+
+						for each  lineRecord in lineBatch
+						{
+							if(lineRecord != null && lineRecord.containKey("id"))
+							{
+								lineIdsToDelete.add(lineRecord.get("id").toString());
+							}
+						}
+
+						if(lineBatch.size() < 200)
+						{
+							break;
+						}
+					}
+
+					if(!lineIdsToDelete.isEmpty())
+					{
+						deleteIdBuffer = List();
+
+						for each  deleteId in lineIdsToDelete
+						{
+							deleteIdBuffer.add(deleteId);
+
+							if(deleteIdBuffer.size() == 100)
+							{
+								deleteIdsCsv = "";
+
+								for each  bufferedId in deleteIdBuffer
+								{
+									deleteIdsCsv = if(deleteIdsCsv == "",bufferedId,deleteIdsCsv + "," + bufferedId);
+								}
+
+								deleteResp = invokeurl
+								[
+									url :CRM_API_BASE_URL + "/Accounting_Entry_Lines?ids=" + deleteIdsCsv + "&wf_trigger=false"
+									type :DELETE
+									connection:"crm_oauth_connection"
+								];
+
+								if(deleteResp == null || !deleteResp.containKey("data"))
+								{
+									res.put("error",true);
+									res.put("message","Accounting Entry Lines could not be deleted before regeneration.");
+									return res;
+								}
+
+								deleteIdBuffer = List();
+							}
+						}
+
+						if(!deleteIdBuffer.isEmpty())
+						{
+							deleteIdsCsv = "";
+
+							for each  bufferedId in deleteIdBuffer
+							{
+								deleteIdsCsv = if(deleteIdsCsv == "",bufferedId,deleteIdsCsv + "," + bufferedId);
+							}
+
+							deleteResp = invokeurl
+							[
+								url :CRM_API_BASE_URL + "/Accounting_Entry_Lines?ids=" + deleteIdsCsv + "&wf_trigger=false"
+								type :DELETE
+								connection:"crm_oauth_connection"
+							];
+
+							if(deleteResp == null || !deleteResp.containKey("data"))
+							{
+								res.put("error",true);
+								res.put("message","Accounting Entry Lines could not be deleted before regeneration.");
+								return res;
+							}
+						}
+					}
+				}
+
+				supplierAccountId = "";
+				defaultAccountingLookup = supplierRecord.get("Default_Accounting_Account");
+				if(defaultAccountingLookup != null)
+				{
+					supplierAccountId = ifnull(defaultAccountingLookup.get("id"),"").toString().trim();
+				}
+
+				if(supplierAccountId == "")
+				{
+					accountCode = ifnull(supplierRecord.get("Cuenta_Contable"),"").toString().trim();
+					supplierDisplayName = ifnull(supplierRecord.get("Vendor_Name"),supplierName).toString().trim();
+
+					if(accountCode != "")
+					{
+						accountMatches = zoho.crm.searchRecords("Accounting_Accounts","(Name:equals:" + accountCode + ")");
+
+						if(accountMatches != null)
+						{
+							for each  accountMatch in accountMatches
+							{
+								if(accountMatch != null && accountMatch.containKey("id"))
+								{
+									supplierAccountId = accountMatch.get("id").toString();
+									break;
+								}
+							}
+						}
+
+						if(supplierAccountId == "")
+						{
+							createSupplierAccountMap = Map();
+							createSupplierAccountMap.put("Name",accountCode);
+							createSupplierAccountMap.put("Account_Name",if(supplierDisplayName != "",supplierDisplayName,accountCode));
+							createSupplierAccountMap.put("Account_Type","Payable");
+							createSupplierAccountMap.put("Account_Subtype","Supplier Payable");
+							createSupplierAccountMap.put("Status","Active");
+							createSupplierAccountResp = zoho.crm.createRecord("Accounting_Accounts",createSupplierAccountMap);
+
+							if(createSupplierAccountResp != null && createSupplierAccountResp.containKey("id"))
+							{
+								supplierAccountId = createSupplierAccountResp.get("id").toString();
+							}
+						}
+
+						if(supplierAccountId != "")
+						{
+							updateSupplierMap = Map();
+							updateSupplierMap.put("Default_Accounting_Account",supplierAccountId);
+							zoho.crm.updateRecord("Vendors",supplierId,updateSupplierMap);
+						}
+					}
+				}
+
+				if(supplierAccountId == "")
+				{
+					res.put("error",true);
+					res.put("message","Supplier payable account could not be resolved.");
+					return res;
+				}
+
+				// Agent Vendors are always created with 4109000. For an Agent
+				// Commission settlement on a Wendy Perrin Client booking, the
+				// payable account is overridden only in this accounting entry.
+				isAgentCommissionSettlement = false;
+				if(settlementId != "")
+				{
+					settlementRecord = zoho.crm.getRecordById("Supplier_Settlements",settlementId);
+					if(settlementRecord != null && ifnull(settlementRecord.get("Settlement_Type"),"").toString().trim() == "Agent Commission")
+					{
+						isAgentCommissionSettlement = true;
+					}
+				}
+				if(isAgentCommissionSettlement && clientType == "Wendy Perrin Client")
+				{
+					wendyCommissionAccountId = "";
+					wendyCommissionAccountMatches = zoho.crm.searchRecords("Accounting_Accounts","(Name:equals:4100118)");
+					if(wendyCommissionAccountMatches != null)
+					{
+						for each wendyCommissionAccount in wendyCommissionAccountMatches
+						{
+							if(wendyCommissionAccount != null && wendyCommissionAccount.containKey("id"))
+							{
+								wendyCommissionAccountId = wendyCommissionAccount.get("id").toString();
+								break;
+							}
+						}
+					}
+					if(wendyCommissionAccountId == "")
+					{
+						res.put("error",true);
+						res.put("message","Accounting Account 4100118 could not be resolved for the Wendy Perrin agent commission.");
+						return res;
+					}
+					supplierAccountId = wendyCommissionAccountId;
+				}
+
+				irpfAccountId = "";
+				irpfAccountMatches = zoho.crm.searchRecords("Accounting_Accounts","(Name:equals:" + IRPF_ACCOUNT_CODE + ")");
+
+				if(irpfAccountMatches != null)
+				{
+					for each  irpfAccountRecord in irpfAccountMatches
+					{
+						if(irpfAccountRecord == null || !irpfAccountRecord.containKey("id"))
+						{
+							continue;
+						}
+
+						irpfAccountId = irpfAccountRecord.get("id").toString();
+						break;
+					}
+				}
+
+				if(irpfAmount > 0 && irpfAccountId == "")
+				{
+					createIrpfAccountMap = Map();
+					createIrpfAccountMap.put("Name",IRPF_ACCOUNT_CODE);
+					createIrpfAccountMap.put("Account_Name","Hacienda Publica acreedora por retenciones practicadas");
+					createIrpfAccountMap.put("Account_Type","Payable");
+					createIrpfAccountMap.put("Account_Subtype","Withholding IRPF");
+					createIrpfAccountMap.put("Status","Active");
+					createIrpfAccountResp = zoho.crm.createRecord("Accounting_Accounts",createIrpfAccountMap);
+
+					if(createIrpfAccountResp != null && createIrpfAccountResp.containKey("id"))
+					{
+						irpfAccountId = createIrpfAccountResp.get("id").toString();
+					}
+				}
+
+				if(!isSelfEmployed && reimbursableAmount > 0)
+				{
+					res.put("error",true);
+					res.put("message","Reimbursable Expense is only expected for self-employed supplier invoices.");
+					return res;
+				}
+
+				if(!isSelfEmployed && irpfAmount > 0)
+				{
+					res.put("error",true);
+					res.put("message","IRPF Amount is only expected for self-employed supplier invoices.");
+					return res;
+				}
+
+				if(irpfAmount > 0 && irpfAccountId == "")
+				{
+					res.put("error",true);
+					res.put("message","Withholding IRPF accounting account could not be resolved.");
+					return res;
+				}
+
+				selectedRule = Map();
+				fallbackRule = Map();
+				activeRules = zoho.crm.searchRecords("Accounting_Rules","(Status:equals:Active)");
+
+				if(activeRules != null)
+				{
+					for each  ruleRecord in activeRules
+					{
+						if(ruleRecord == null || !ruleRecord.containKey("id"))
+						{
+							continue;
+						}
+
+						ruleIsSelfEmployed = (ifnull(ruleRecord.get("Is_Self_Employed"),false).toString().trim().toLowerCase() == "true");
+						ruleTripType = ifnull(ruleRecord.get("Trip_Type"),"").toString().trim();
+
+						if(ruleIsSelfEmployed != isSelfEmployed)
+						{
+							continue;
+						}
+
+						if(isSelfEmployed)
+						{
+							if(tripType != "" && ruleTripType == tripType)
+							{
+								selectedRule = ruleRecord;
+								break;
+							}
+
+							if(fallbackRule.isEmpty() && (ruleTripType == "" || ruleTripType == "-None-"))
+							{
+								fallbackRule = ruleRecord;
+							}
+
+							if(selectedRule.isEmpty())
+							{
+								selectedRule = ruleRecord;
+							}
+						}
+						else
+						{
+							if(tripType != "" && ruleTripType == tripType)
+							{
+								selectedRule = ruleRecord;
+								break;
+							}
+
+							if(fallbackRule.isEmpty() && (ruleTripType == "" || ruleTripType == "-None-"))
+							{
+								fallbackRule = ruleRecord;
+							}
+						}
+					}
+				}
+
+				if(selectedRule.isEmpty() && !fallbackRule.isEmpty())
+				{
+					selectedRule = fallbackRule;
+				}
+
+				if(selectedRule.isEmpty())
+				{
+					res.put("error",true);
+					res.put("message","No active Accounting Rule matched the Supplier Invoice.");
+					return res;
+				}
+
+				accountingRuleId = selectedRule.get("id").toString();
+				baseExpenseLookup = selectedRule.get("Base_Expense_Account");
+				reimbursableLookup = selectedRule.get("Reimbursable_Account");
+				baseExpenseAccountId = "";
+				reimbursableAccountId = "";
+
+				if(baseExpenseLookup != null)
+				{
+					baseExpenseAccountId = ifnull(baseExpenseLookup.get("id"),"").toString().trim();
+				}
+				if(reimbursableLookup != null)
+				{
+					reimbursableAccountId = ifnull(reimbursableLookup.get("id"),"").toString().trim();
+				}
+
+				if(expenseAmountInclVat > 0 && baseExpenseAccountId == "")
+				{
+					res.put("error",true);
+					res.put("message","Base Expense account could not be resolved from the Accounting Rule.");
+					return res;
+				}
+
+				if(reimbursableAmount > 0 && reimbursableAccountId == "")
+				{
+					res.put("error",true);
+					res.put("message","Reimbursable account could not be resolved from the Accounting Rule.");
+					return res;
+				}
+
+				entryName = "INV-" + invoiceName + "-" + supplierCode + "-REG";
+				entryMap = Map();
+				entryMap.put("Name",entryName);
+				entryMap.put("Supplier_Invoice",supplierInvoiceId);
+				if(invoiceDate != "")
+				{
+					entryMap.put("Entry_Date",invoiceDate);
+					entryMap.put("Posting_Date",invoiceDate);
+					entryMap.put("Source_Date",invoiceDate);
+				}
+				entryMap.put("Movement_Type",movementType);
+				entryMap.put("Supplier",supplierId);
+				if(bookingId != "")
+				{
+					entryMap.put("Booking",bookingId);
+				}
+				if(settlementId != "")
+				{
+					entryMap.put("Supplier_Settlement",settlementId);
+				}
+				if(mfspReference != "")
+				{
+					entryMap.put("MFSP_Reference",mfspReference);
+				}
+				entryMap.put("Is_Self_Employed",isSelfEmployed);
+				entryMap.put("Accounting_Rule_Used",accountingRuleId);
+				entryMap.put("Rule_Override_Used",false);
+				entryMap.put("Accounting_Status",ACCOUNTING_STATUS_READY);
+				if(tripType != "")
+				{
+					entryMap.put("Trip_Type",tripType);
+				}
+				entryMap.put("Books_Post_Status",BOOKS_POST_STATUS_NOT_READY);
+				entryMap.put("Zoho_Books_Document_Type",documentType);
+
+				if(existingEntryId != "")
+				{
+					zoho.crm.updateRecord("Accounting_Entries",existingEntryId,entryMap);
+					accountingEntryId = existingEntryId;
+					res.put("updated",true);
+				}
+				else
+				{
+					createEntryResp = zoho.crm.createRecord("Accounting_Entries",entryMap);
+
+					if(createEntryResp != null && createEntryResp.containKey("id"))
+					{
+						accountingEntryId = createEntryResp.get("id").toString();
+						res.put("created",true);
+					}
+				}
+
+				if(ifnull(accountingEntryId,"").toString().trim() == "")
+				{
+					res.put("error",true);
+					res.put("message","Accounting Entry could not be created.");
+					return res;
+				}
+
+				accountCache = Map();
+				lineIds = List();
+				lineNo = 1;
+				totalDebit = 0.0;
+				totalCredit = 0.0;
+				lineDefinitions = List();
+
+				if(movementType == "Supplier Refund")
+				{
+					if(totalPayableAmount > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_SUPPLIER);
+						lineMap.put("account_role",ACCOUNT_ROLE_SUPPLIER);
+						lineMap.put("account_id",supplierAccountId);
+						lineMap.put("debit",totalPayableAmount);
+						lineMap.put("credit",0.0);
+						lineMap.put("description","Reverse supplier payable");
+						lineMap.put("is_irpf_line",false);
+						lineMap.put("is_reimbursable",false);
+						lineDefinitions.add(lineMap);
+					}
+					if(irpfAmount > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_IRPF);
+						lineMap.put("account_role",ACCOUNT_ROLE_IRPF);
+						lineMap.put("account_id",irpfAccountId);
+						lineMap.put("debit",irpfAmount);
+						lineMap.put("credit",0.0);
+						lineMap.put("description","Reverse IRPF withholding");
+						lineMap.put("is_irpf_line",true);
+						lineMap.put("is_reimbursable",false);
+						lineDefinitions.add(lineMap);
+					}
+					if(expenseAmountInclVat > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_EXPENSE);
+						lineMap.put("account_role",ACCOUNT_ROLE_BASE_EXPENSE);
+						lineMap.put("account_id",baseExpenseAccountId);
+						lineMap.put("debit",0.0);
+						lineMap.put("credit",expenseAmountInclVat);
+						lineMap.put("description","Reverse main expense including VAT");
+						lineMap.put("is_irpf_line",false);
+						lineMap.put("is_reimbursable",false);
+						lineDefinitions.add(lineMap);
+					}
+					if(reimbursableAmount > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_REIMBURSABLE);
+						lineMap.put("account_role",ACCOUNT_ROLE_REIMBURSABLE);
+						lineMap.put("account_id",reimbursableAccountId);
+						lineMap.put("debit",0.0);
+						lineMap.put("credit",reimbursableAmount);
+						lineMap.put("description","Reverse reimbursable expense");
+						lineMap.put("is_irpf_line",false);
+						lineMap.put("is_reimbursable",true);
+						lineDefinitions.add(lineMap);
+					}
+				}
+				else
+				{
+					if(expenseAmountInclVat > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_EXPENSE);
+						lineMap.put("account_role",ACCOUNT_ROLE_BASE_EXPENSE);
+						lineMap.put("account_id",baseExpenseAccountId);
+						lineMap.put("debit",expenseAmountInclVat);
+						lineMap.put("credit",0.0);
+						lineMap.put("description","Main expense including VAT");
+						lineMap.put("is_irpf_line",false);
+						lineMap.put("is_reimbursable",false);
+						lineDefinitions.add(lineMap);
+					}
+					if(reimbursableAmount > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_REIMBURSABLE);
+						lineMap.put("account_role",ACCOUNT_ROLE_REIMBURSABLE);
+						lineMap.put("account_id",reimbursableAccountId);
+						lineMap.put("debit",reimbursableAmount);
+						lineMap.put("credit",0.0);
+						lineMap.put("description","Reimbursable expense");
+						lineMap.put("is_irpf_line",false);
+						lineMap.put("is_reimbursable",true);
+						lineDefinitions.add(lineMap);
+					}
+					if(irpfAmount > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_IRPF);
+						lineMap.put("account_role",ACCOUNT_ROLE_IRPF);
+						lineMap.put("account_id",irpfAccountId);
+						lineMap.put("debit",0.0);
+						lineMap.put("credit",irpfAmount);
+						lineMap.put("description","IRPF withholding");
+						lineMap.put("is_irpf_line",true);
+						lineMap.put("is_reimbursable",false);
+						lineDefinitions.add(lineMap);
+					}
+					if(totalPayableAmount > 0)
+					{
+						lineMap = Map();
+						lineMap.put("line_type",LINE_TYPE_SUPPLIER);
+						lineMap.put("account_role",ACCOUNT_ROLE_SUPPLIER);
+						lineMap.put("account_id",supplierAccountId);
+						lineMap.put("debit",0.0);
+						lineMap.put("credit",totalPayableAmount);
+						lineMap.put("description","Supplier payable");
+						lineMap.put("is_irpf_line",false);
+						lineMap.put("is_reimbursable",false);
+						lineDefinitions.add(lineMap);
+					}
+				}
+
+				for each  lineDefinition in lineDefinitions
+				{
+					accountId = ifnull(lineDefinition.get("account_id"),"").toString().trim();
+					accountRecord = Map();
+					booksAccountId = "";
+
+					if(accountId == "")
+					{
+						continue;
+					}
+
+					if(accountCache.containKey(accountId))
+					{
+						accountRecord = accountCache.get(accountId);
+					}
+					else
+					{
+						accountRecord = zoho.crm.getRecordById("Accounting_Accounts",accountId);
+						accountCache.put(accountId,accountRecord);
+					}
+
+					if(accountRecord != null)
+					{
+						booksAccountId = ifnull(accountRecord.get("Zoho_Books_Account_Id"),"").toString().trim();
+					}
+
+					lineCreateMap = Map();
+					lineCreateMap.put("Name",entryName + " | " + lineNo);
+					lineCreateMap.put("Accounting_Entry",accountingEntryId);
+					lineCreateMap.put("Line_No",lineNo);
+					lineCreateMap.put("Supplier_Invoice",supplierInvoiceId);
+					if(invoiceDate != "")
+					{
+						lineCreateMap.put("Source_Date",invoiceDate);
+					}
+					lineCreateMap.put("Line_Type",lineDefinition.get("line_type"));
+					lineCreateMap.put("Account_Role",lineDefinition.get("account_role"));
+					lineCreateMap.put("Account",accountId);
+					lineCreateMap.put("Debit",lineDefinition.get("debit"));
+					lineCreateMap.put("Credit",lineDefinition.get("credit"));
+					lineCreateMap.put("Is_IRPF_Line",lineDefinition.get("is_irpf_line"));
+					lineCreateMap.put("Is_Reimbursable",lineDefinition.get("is_reimbursable"));
+
+					if(booksAccountId != "")
+					{
+						lineCreateMap.put("Zoho_Books_Account_Id",booksAccountId);
+					}
+
+					createLineResp = zoho.crm.createRecord("Accounting_Entry_Lines",lineCreateMap);
+
+					if(createLineResp != null && createLineResp.containKey("id"))
+					{
+						lineIds.add(createLineResp.get("id").toString());
+					}
+					else
+					{
+						res.put("error",true);
+						res.put("message","One Accounting Entry Line could not be created.");
+						return res;
+					}
+
+					totalDebit = totalDebit + ifnull(lineDefinition.get("debit"),0).toDecimal();
+					totalCredit = totalCredit + ifnull(lineDefinition.get("credit"),0).toDecimal();
+					lineNo = lineNo + 1;
+				}
+
+				if(lineIds.isEmpty())
+				{
+					res.put("error",true);
+					res.put("message","The Supplier Invoice did not produce any Accounting Entry Lines.");
+					return res;
+				}
+
+				isBalanced = (totalDebit == totalCredit);
+				updateEntryTotalsMap = Map();
+				updateEntryTotalsMap.put("Line_Count",lineIds.size());
+				updateEntryTotalsMap.put("Total_Debit",totalDebit);
+				updateEntryTotalsMap.put("Total_Credit",totalCredit);
+				updateEntryTotalsMap.put("Balanced",isBalanced);
+				updateEntryTotalsMap.put("Accounting_Status",ACCOUNTING_STATUS_READY);
+				zoho.crm.updateRecord("Accounting_Entries",accountingEntryId,updateEntryTotalsMap);
+
+				updateInvoiceMap = Map();
+				updateInvoiceMap.put("Accounting_Status",ACCOUNTING_STATUS_READY);
+				zoho.crm.updateRecord("Supplier_Invoices",supplierInvoiceId,updateInvoiceMap);
+
+				res.put("accounting_entry_id",accountingEntryId);
+				res.put("line_ids",lineIds);
+				res.put("line_count",lineIds.size());
+				res.put("total_debit",totalDebit);
+				res.put("total_credit",totalCredit);
+				res.put("balanced",isBalanced);
+				res.put("accounting_rule_id",accountingRuleId);
+				res.put("message","Accounting Entry resolved successfully.");
+			}
+		}
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}

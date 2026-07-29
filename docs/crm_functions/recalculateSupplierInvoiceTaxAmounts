@@ -1,0 +1,95 @@
+string standalone.accEnt_recalculateSupplierInvoiceTaxAmounts()
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("processed_count",0);
+	res.put("updated_count",0);
+	res.put("skipped_count",0);
+	res.put("error_count",0);
+	res.put("updated_ids",List());
+	res.put("errors",List());
+
+	try
+	{
+		pageTokens = "1,2,3,4,5,6,7,8,9,10".toList(",");
+		processedCount = 0;
+		updatedCount = 0;
+		skippedCount = 0;
+		errorCount = 0;
+		updatedIds = List();
+		errors = List();
+
+		for each  pageToken in pageTokens
+		{
+			pageIndex = pageToken.toLong();
+			invoiceBatch = zoho.crm.getRecords("Supplier_Invoices",pageIndex,200);
+
+			if(invoiceBatch == null || invoiceBatch.isEmpty())
+			{
+				break;
+			}
+
+			for each  invoiceRecord in invoiceBatch
+			{
+				try
+				{
+					if(invoiceRecord == null || !invoiceRecord.containKey("id"))
+					{
+						skippedCount = skippedCount + 1;
+						continue;
+					}
+
+					invoiceId = invoiceRecord.get("id").toString();
+					taxBaseAmount = ifnull(invoiceRecord.get("Invoice_Amount_Excl_VAT"),0).toDecimal();
+					vatRate = ifnull(invoiceRecord.get("VAT_percentage"),0).toDecimal();
+					irpfRate = ifnull(invoiceRecord.get("IRPF_percentage"),0).toDecimal();
+					vatAmount = (taxBaseAmount * vatRate) / 100;
+					irpfAmount = (taxBaseAmount * irpfRate) / 100;
+					updateMap = Map();
+					updateMap.put("VAT_Amount",vatAmount);
+					updateMap.put("IRPF_Amount",irpfAmount);
+					updateResp = zoho.crm.updateRecord("Supplier_Invoices",invoiceId,updateMap);
+					processedCount = processedCount + 1;
+
+					if(updateResp != null && (updateResp.containKey("id") || updateResp.containKey("Modified_Time") || ifnull(updateResp.get("code"),"").toString().trim().toLowerCase() == "success"))
+					{
+						updatedCount = updatedCount + 1;
+						updatedIds.add(invoiceId);
+					}
+					else
+					{
+						errorCount = errorCount + 1;
+						errors.add(invoiceId + ": update failed.");
+					}
+				}
+				catch (invoiceError)
+				{
+					processedCount = processedCount + 1;
+					errorCount = errorCount + 1;
+					errors.add(ifnull(invoiceRecord.get("id"),"unknown").toString() + ": " + invoiceError);
+				}
+			}
+
+			if(invoiceBatch.size() < 200)
+			{
+				break;
+			}
+		}
+
+		res.put("processed_count",processedCount);
+		res.put("updated_count",updatedCount);
+		res.put("skipped_count",skippedCount);
+		res.put("error_count",errorCount);
+		res.put("updated_ids",updatedIds);
+		res.put("errors",errors);
+		res.put("message","Supplier invoice VAT and IRPF amounts recalculated.");
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e);
+	}
+
+	return res;
+}
