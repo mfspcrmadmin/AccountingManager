@@ -1,10 +1,10 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createCrmClient = function (zoho, helpers) {
     function debugLog(label, payload) {
       if (global.console && typeof global.console.log === "function") {
-        global.console.log("[PurchasesManager][CRM] " + label, payload || "");
+        global.console.log("[AccountingManager][CRM] " + label, payload || "");
       }
     }
 
@@ -20,7 +20,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       }
 
       if (global.console && typeof global.console.error === "function") {
-        global.console.error("[PurchasesManager][CRM] " + label, details);
+        global.console.error("[AccountingManager][CRM] " + label, details);
       }
     }
 

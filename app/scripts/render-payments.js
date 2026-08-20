@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createPaymentsRenderer = function (deps) {
     var elements = deps.elements;
@@ -66,11 +66,18 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
     }
 
     function renderPaymentsWorkspace(view, onSelected) {
+      var isSpecificDateRange = (view.filters.datePreset || "specific") === "specific";
+      if (elements.paymentFilterDatePreset) {
+        elements.paymentFilterDatePreset.value = view.filters.datePreset || "specific";
+        elements.paymentFilterDatePreset.closest(".filters-grid").classList.toggle("is-custom-date-range", isSpecificDateRange);
+      }
       if (elements.paymentFilterDateFrom) {
         elements.paymentFilterDateFrom.value = view.filters.dateFrom || "";
+        elements.paymentFilterDateFrom.disabled = !isSpecificDateRange;
       }
       if (elements.paymentFilterDateTo) {
         elements.paymentFilterDateTo.value = view.filters.dateTo || "";
+        elements.paymentFilterDateTo.disabled = !isSpecificDateRange;
       }
       if (elements.paymentFilterSupplierCode) {
         elements.paymentFilterSupplierCode.value = view.filters.supplierCode || "";
@@ -201,6 +208,18 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       setTextWithTitle(elements.selectedPaymentTitle, helpersApi.getPaymentReference(payment));
       if (elements.selectedPaymentCreatedBy) {
         elements.selectedPaymentCreatedBy.textContent = "Created by " + helpers.textValue(helpers.getLookupName(payment.Created_By));
+      }
+      if (elements.selectedPaymentHeroAmount) {
+        setTextWithTitle(elements.selectedPaymentHeroAmount, helpers.formatCurrency(helpers.getPaymentAmount(payment, fieldCandidates)));
+      }
+      if (elements.selectedPaymentHeroMeta) {
+        setTextWithTitle(
+          elements.selectedPaymentHeroMeta,
+          [
+            helpers.textValue(helpers.getCandidateValue(payment, fieldCandidates.payment.movementType), ""),
+            helpers.textValue(helpers.getLookupName(payment.Payment_Account), "")
+          ].filter(Boolean).join(" · ") || "-"
+        );
       }
       setTextWithTitle(elements.selectedPaymentDate, helpers.formatDate(payment.Payment_Date));
       setTextWithTitle(

@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createPaymentCreateModule = function (deps) {
     var FIELD_CANDIDATES = deps.FIELD_CANDIDATES;
@@ -466,7 +466,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       renderInvoicePaymentPanel();
     }
 
-    function onInvoicePaymentHeaderAccountDropdownClick(event) {
+    function getInvoicePaymentHeaderAccountIdFromEvent(event) {
       var target = event.target;
       var accountId = target && target.getAttribute ? target.getAttribute("data-payment-header-account-id") : "";
 
@@ -474,6 +474,24 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         target = target.closest("[data-payment-header-account-id]");
         accountId = target ? target.getAttribute("data-payment-header-account-id") : "";
       }
+
+      return accountId;
+    }
+
+    function onInvoicePaymentHeaderAccountDropdownPointerDown(event) {
+      var accountId = getInvoicePaymentHeaderAccountIdFromEvent(event);
+
+      if (!accountId) {
+        return;
+      }
+
+      // Confirm the choice before the input blur can close and re-render the menu.
+      event.preventDefault();
+      selectInvoicePaymentHeaderAccount(accountId);
+    }
+
+    function onInvoicePaymentHeaderAccountDropdownClick(event) {
+      var accountId = getInvoicePaymentHeaderAccountIdFromEvent(event);
 
       if (!accountId) {
         return;
@@ -907,6 +925,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       (context.suppliers || []).forEach(function (supplierContext) {
         var selectedAccountId;
         var allowedAccountIds;
+        var fallbackAccountId;
 
         if (!supplierContext.id) {
           return;
@@ -923,8 +942,15 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         });
 
         if (selectedAccountId && allowedAccountIds.indexOf(selectedAccountId) === -1) {
-          paymentAccountsBySupplier.__error = "Selected payment account for " + supplierContext.name + " is no longer available.";
-          return;
+          fallbackAccountId = String(getPreferredPaymentAccountIdForSupplier(supplierContext.id) || "");
+
+          if (fallbackAccountId && allowedAccountIds.indexOf(fallbackAccountId) !== -1) {
+            selectedAccountId = fallbackAccountId;
+            state.paymentCreation.form.paymentAccountsBySupplier[supplierContext.id] = fallbackAccountId;
+          } else {
+            paymentAccountsBySupplier.__error = "Selected payment account for " + supplierContext.name + " is no longer available.";
+            return;
+          }
         }
 
         paymentAccountsBySupplier[supplierContext.id] = selectedAccountId;
@@ -1007,6 +1033,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       var supplierContext;
       var supplierId;
       var selectedAccountId;
+      var defaultAccountId;
       var ensuredAccountId;
 
       (context && context.invoices ? context.invoices : []).forEach(function (invoice) {
@@ -1032,6 +1059,14 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         selectedAccountId = String(resolved[supplierId] || "").trim();
 
         if (selectedAccountId) {
+          continue;
+        }
+
+        defaultAccountId = String(getPreferredPaymentAccountIdForSupplier(supplierId) || "").trim();
+
+        if (defaultAccountId) {
+          resolved[supplierId] = defaultAccountId;
+          hasChanges = true;
           continue;
         }
 
@@ -1557,6 +1592,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       onInvoicePaymentHeaderAccountKeydown: onInvoicePaymentHeaderAccountKeydown,
       onInvoicePaymentHeaderAccountBlur: onInvoicePaymentHeaderAccountBlur,
       onInvoicePaymentHeaderAccountToggleClick: onInvoicePaymentHeaderAccountToggleClick,
+      onInvoicePaymentHeaderAccountDropdownPointerDown: onInvoicePaymentHeaderAccountDropdownPointerDown,
       onInvoicePaymentHeaderAccountDropdownClick: onInvoicePaymentHeaderAccountDropdownClick,
       onCreateSupplierPaymentSubmit: onCreateSupplierPaymentSubmit,
       refreshInvoicesAndPaymentsAfterSupplierPayment: refreshInvoicesAndPaymentsAfterSupplierPayment

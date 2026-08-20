@@ -1,0 +1,167 @@
+form Card_Purchase
+{
+	displayname = "Card Purchase"
+	success message = "Credit Service Notification Added Successfully"
+	Booking_Info
+	(
+		type = section
+		displayname = "Booking Info"
+		visibility = true
+	 	row = 1
+	 	column = 0   
+		width = medium
+	)
+	MFSP_Reference
+	(
+    	type = text
+		displayname = "MFSP Reference"
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Booking_Name
+	(
+    	type = text
+		displayname = "Booking Name"
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Service_Information
+	(
+		type = section
+		displayname = "Service Info"
+		visibility = true
+	 	row = 2
+	 	column = 0   
+		width = medium
+	)
+	Service_Id
+	(
+    	type = text
+		displayname = "Service Id"
+		private = true
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Supplier_Code
+	(
+    	type = text
+		displayname = "Supplier Code"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Supplier_Name
+	(
+    	type = text
+		displayname = "Supplier Name"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Service_Name
+	(
+    	type = text
+		displayname = "Service Name"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Service_Date
+	(
+    	type = date
+		displayname = "Service Date"
+		alloweddays = 0,1,2,3,4,5,6
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Finance_Info
+	(
+		type = section
+		displayname = "Finance Info"
+		visibility = true
+	 	row = 3
+	 	column = 0   
+		width = medium
+	)
+	Amount
+	(
+		type = EUR
+		format = dotcomma
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	Operational_Info
+	(
+		type = section
+		displayname = "Operational Info"
+		visibility = true
+	 	row = 4
+	 	column = 0   
+		width = medium
+	)
+	Status
+	(
+		type = picklist
+		maxchar = 100
+		values = {"Pending Accounting Review","Ok"}
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Observations
+	(
+    	type = textarea
+		height = 100px
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Meta
+	(
+		type = section
+		visibility = true
+	 	row = 5
+	 	column = 0   
+		width = medium
+	)
+	Requested_By
+	(
+    	type = email
+		displayname = "Requested By"
+		maxchar = 80
+	 	row = 5
+	 	column = 1   
+		width = medium
+		personal data = true
+	)
+	
+	actions
+	{
+		on add
+		{
+			submit
+			(
+   				type = submit
+   				displayname = "Submit"
+			)
+		}
+		on edit
+		{
+			update
+			(
+   				type = submit
+   				displayname = "Update"
+			)
+			cancel
+			(
+   				type = cancel
+   				displayname = "Cancel"
+			)
+		}
+	}
+}

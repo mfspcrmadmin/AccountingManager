@@ -1,0 +1,123 @@
+form Pre_Payments_Form
+{
+	displayname = "Pre-Payments Form"
+	success message = "Data Added Successfully!"
+	Section
+	(
+		type = section
+	 	row = 1
+	 	column = 0   
+		width = medium
+	)
+	must have Amount
+	(
+		type = EUR
+		format = spacecomma
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	must have Percent
+	(
+    	type = percentage
+		initial value = 100%
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	must have When_To_Be_Paid
+	(
+		type = picklist
+		displayname = "When To Be Paid"
+		maxchar = 100
+		values = {"On a specific date","Within 1 day","Within 2 days","Within 3 days","10 days prior to service date","15 days prior to service date","20 days prior to service date","30 days prior to service date"}
+		initial value = "On a specific date"
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Payment_Date
+	(
+    	type = date
+		displayname = "Payment Date"
+		alloweddays = 1,2,3,4,5
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	must have Status
+	(
+		type = picklist
+		maxchar = 100
+		values = {"Not Paid","Paid","Cancelled"}
+		initial value = "Not Paid"
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Proforma_Associated
+	(
+		type = picklist	
+		displayname = "Proforma Associated"
+		values  = Proforma_Form.ID
+    	bidirectional = Payments
+    	displayformat = [MFSP_Reference + " - " + Supplier_Reference + " - " + Added_Time]
+		advanced field search = true
+		sortorder = ascending
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Bank_Receipt
+	(
+    	type = checkbox
+		displayname = "Bank Receipt"
+		initial value = false
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Payment_Proof
+	(
+    	type = upload file
+		displayname = "Payment Proof"
+    	file count = 3
+				browse = local_drive
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Accounted
+	(
+    	type = checkbox
+		initial value = false
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	
+	actions
+	{
+		on add
+		{
+			submit
+			(
+   				type = submit
+   				displayname = "Submit"
+			)
+		}
+		on edit
+		{
+			update
+			(
+   				type = submit
+   				displayname = "Update"
+			)
+			cancel
+			(
+   				type = cancel
+   				displayname = "Cancel"
+			)
+		}
+	}
+}

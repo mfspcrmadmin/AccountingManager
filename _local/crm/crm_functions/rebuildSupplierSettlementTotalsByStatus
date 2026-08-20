@@ -1,0 +1,153 @@
+string standalone.venSet_rebuildVendorSettlementTotalsByStatus(String bookingStatus, String settlementStatus)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("criteria","");
+	res.put("matched_count",0);
+	res.put("processed_count",0);
+	res.put("updated_count",0);
+	res.put("warning_count",0);
+	res.put("batch_count",0);
+	res.put("warnings",List());
+
+	try
+	{
+		bookingStatus = ifnull(bookingStatus,"").toString().trim();
+		settlementStatus = ifnull(settlementStatus,"").toString().trim();
+
+		// Requiring a filter prevents an accidental recalculation of every settlement.
+		if(bookingStatus == "" && settlementStatus == "")
+		{
+			res.put("error",true);
+			res.put("message","Pass bookingStatus, settlementStatus, or both. Empty filters are not allowed.");
+			return res;
+		}
+
+		criteriaParts = List();
+		if(bookingStatus != "")
+		{
+			criteriaParts.add("(Booking_Status:equals:" + bookingStatus + ")");
+		}
+		if(settlementStatus != "")
+		{
+			criteriaParts.add("(Admin_Status:equals:" + settlementStatus + ")");
+		}
+
+		criteria = "";
+		for each criteriaPart in criteriaParts
+		{
+			if(criteria == "")
+			{
+				criteria = criteriaPart;
+			}
+			else
+			{
+				criteria = "(" + criteria + "and" + criteriaPart + ")";
+			}
+		}
+		res.put("criteria",criteria);
+
+		pageTokens = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25".toList(",");
+		batchIdsString = "";
+		batchSize = 0;
+		stopPaging = false;
+
+		for each pageToken in pageTokens
+		{
+			if(stopPaging)
+			{
+				break;
+			}
+
+			settlementBatch = zoho.crm.searchRecords("Supplier_Settlements",criteria,pageToken.toLong(),200);
+			if(settlementBatch == null || settlementBatch.isEmpty())
+			{
+				break;
+			}
+
+			for each settlementRecord in settlementBatch
+			{
+				settlementId = ifnull(settlementRecord.get("id"),"").toString().trim();
+				if(settlementId == "")
+				{
+					continue;
+				}
+
+				res.put("matched_count",res.get("matched_count") + 1);
+				if(batchIdsString == "")
+				{
+					batchIdsString = settlementId;
+				}
+				else
+				{
+					batchIdsString = batchIdsString + "|||" + settlementId;
+				}
+				batchSize = batchSize + 1;
+
+				// Keep each call small: the called function reads invoices and allocations
+				// for every settlement and may itself need several CRM pages.
+				if(batchSize >= 25)
+				{
+					batchResult = standalone.rebuildSupplierSettlementTotals(batchIdsString);
+					res.put("batch_count",res.get("batch_count") + 1);
+					res.put("processed_count",res.get("processed_count") + ifnull(batchResult.get("processed_count"),0));
+					res.put("updated_count",res.get("updated_count") + ifnull(batchResult.get("updated_count"),0));
+					if(ifnull(batchResult.get("error"),false))
+					{
+						warningsList = res.get("warnings");
+						warningsList.add("Batch failed: " + ifnull(batchResult.get("message"),"Unknown error").toString());
+						res.put("warnings",warningsList);
+					}
+
+					for each warning in ifnull(batchResult.get("warnings"),List())
+					{
+						warningsList = res.get("warnings");
+						warningsList.add(warning);
+						res.put("warnings",warningsList);
+					}
+
+					batchIdsString = "";
+					batchSize = 0;
+				}
+			}
+
+			if(settlementBatch.size() < 200)
+			{
+				stopPaging = true;
+			}
+		}
+
+		if(batchSize > 0)
+		{
+			batchResult = standalone.rebuildSupplierSettlementTotals(batchIdsString);
+			res.put("batch_count",res.get("batch_count") + 1);
+			res.put("processed_count",res.get("processed_count") + ifnull(batchResult.get("processed_count"),0));
+			res.put("updated_count",res.get("updated_count") + ifnull(batchResult.get("updated_count"),0));
+			if(ifnull(batchResult.get("error"),false))
+			{
+				warningsList = res.get("warnings");
+				warningsList.add("Batch failed: " + ifnull(batchResult.get("message"),"Unknown error").toString());
+				res.put("warnings",warningsList);
+			}
+
+			for each warning in ifnull(batchResult.get("warnings"),List())
+			{
+				warningsList = res.get("warnings");
+				warningsList.add(warning);
+				res.put("warnings",warningsList);
+			}
+		}
+
+		warningsList = res.get("warnings");
+		res.put("warning_count",warningsList.size());
+		res.put("message","Rebuild completed. Matched " + res.get("matched_count") + " settlement(s), processed " + res.get("processed_count") + " and updated " + res.get("updated_count") + " in " + res.get("batch_count") + " batch(es).");
+	}
+	catch (e)
+	{
+		res.put("error",true);
+		res.put("message",e.toString());
+	}
+
+	return res;
+}

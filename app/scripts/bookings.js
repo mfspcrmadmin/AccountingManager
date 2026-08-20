@@ -1,5 +1,5 @@
 (function (global) {
-  var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+  var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createBookingsModule = function (deps) {
     var MODULES = deps.MODULES;
@@ -29,6 +29,81 @@
     var loadBookingSearchFallbackPage = deps.loadBookingSearchFallbackPage;
     var buildRemotePageSummary = deps.buildRemotePageSummary;
     var getFriendlyLoadErrorMessage = deps.getFriendlyLoadErrorMessage;
+    var getCurrentUserEmail = deps.getCurrentUserEmail;
+    var openAgentCommissionInvoice = deps.openAgentCommissionInvoice;
+
+    var agentCommissionBookingId = "";
+
+    function setAgentCommissionPopup(isOpen, message, canRecalculate, messageTone) {
+      if (!elements.agentCommissionPopup) {
+        return;
+      }
+
+      elements.agentCommissionPopup.hidden = !isOpen;
+      if (elements.agentCommissionMessage) {
+        elements.agentCommissionMessage.textContent = message || "";
+        elements.agentCommissionMessage.classList.toggle("is-error", messageTone === "error");
+      }
+      if (elements.agentCommissionRecalculate) {
+        elements.agentCommissionRecalculate.hidden = !canRecalculate;
+        elements.agentCommissionRecalculate.disabled = false;
+        elements.agentCommissionRecalculate.textContent = "Recalculate settlements";
+      }
+    }
+
+    async function findAgentCommissionSettlement(bookingId) {
+      var settlements = await crm.searchRecord(MODULES.settlements, "(Booking:equals:" + helpers.escapeCriteriaValue(bookingId) + ")");
+
+      return (settlements || []).filter(function (settlement) {
+        return helpers.normalizeString(settlement && settlement.Settlement_Type) === "agentcommission";
+      })[0] || null;
+    }
+
+    function getAgentCommissionRecalculationResult(recalculationOutput) {
+      var commissionResult = recalculationOutput && recalculationOutput.agent_commission;
+
+      if (typeof commissionResult === "string") {
+        try {
+          commissionResult = JSON.parse(commissionResult);
+        } catch (error) {
+          commissionResult = null;
+        }
+      }
+
+      return commissionResult && typeof commissionResult === "object" ? commissionResult : null;
+    }
+
+    function getAgentCommissionSettlementId(recalculationOutput) {
+      var commissionResult = getAgentCommissionRecalculationResult(recalculationOutput);
+
+      return String(commissionResult && commissionResult.settlement_id || "").trim();
+    }
+
+    function getAgentCommissionRecalculationError(recalculationOutput) {
+      var commissionResult = getAgentCommissionRecalculationResult(recalculationOutput);
+
+      if (!commissionResult || commissionResult.error !== true) {
+        return "";
+      }
+
+      return String(commissionResult.message || "The agent commission settlement could not be recalculated.").trim();
+    }
+
+    async function findRecalculatedAgentCommissionSettlement(recalculationOutput, bookingId) {
+      var settlementId = getAgentCommissionSettlementId(recalculationOutput);
+      var settlement;
+
+      // The Deluge function returns the record ID it has just created or updated.
+      // Use it first: criteria searches can lag briefly behind a CRM write.
+      if (settlementId) {
+        settlement = await crm.getRecord(MODULES.settlements, settlementId);
+        if (settlement) {
+          return settlement;
+        }
+      }
+
+      return findAgentCommissionSettlement(bookingId);
+    }
 
     function onBookingsStageToggleClick(event) {
       event.preventDefault();
@@ -190,28 +265,6 @@
         "booking";
     }
 
-    function getBookingShortcutLayoutValue(bookingRecord) {
-      var layout = bookingRecord && bookingRecord.Layout;
-
-      if (!layout) {
-        return "";
-      }
-
-      if (typeof layout === "object") {
-        return String(layout.api_name || layout.name || layout.id || "").trim();
-      }
-
-      return String(layout || "").trim();
-    }
-
-    function getBookingShortcutEzusProjectRef(bookingRecord) {
-      return String(
-        helpers.getCandidateValue(bookingRecord, FIELD_CANDIDATES.booking.ezusProjectRef) ||
-        bookingRecord && bookingRecord.Ezus_Project_ID ||
-        ""
-      ).trim();
-    }
-
     async function resolveBookingShortcutRecordByMfsp(mfspCode) {
       var normalizedMfsp = String(mfspCode || "").trim();
       var mfspFieldApi;
@@ -261,10 +314,7 @@
       var bookingRecord;
       var bookingLabel;
       var bookingId;
-      var bookingStage;
-      var bookingOwnerId;
-      var layout;
-      var ezusProjectRef;
+      var syncActionUserEmail;
       var response;
       var output;
       var result;
@@ -277,22 +327,15 @@
         bookingRecord = await resolveBookingShortcutRecordByMfsp(mfspCode);
         bookingLabel = getBookingShortcutDisplayName(bookingRecord, mfspCode);
         bookingId = String(bookingRecord.id || "").trim();
-        bookingStage = String(helpers.getCandidateValue(bookingRecord, FIELD_CANDIDATES.booking.stage) || bookingRecord.Stage || "").trim();
-        bookingOwnerId = String(helpers.getLookupId(bookingRecord.Owner) || "").trim();
-        layout = getBookingShortcutLayoutValue(bookingRecord);
-        ezusProjectRef = getBookingShortcutEzusProjectRef(bookingRecord);
 
-        if (!ezusProjectRef) {
-          throw new Error("This booking does not have an Ezus Project API value.");
-        }
-
+        syncActionUserEmail = await getCurrentUserEmail();
         response = await crm.executeFunction(SYNC_PROJECT_FROM_EZUS_FUNCTION, {
           bookingId: bookingId,
-          ezusProjectRef: ezusProjectRef,
-          bookingStage: bookingStage,
-          bookingOwnerId: bookingOwnerId,
-          layout: layout,
-          options: {}
+          args: JSON.stringify({
+            sync: {
+              syncActionUserEmail: syncActionUserEmail
+            }
+          })
         });
         output = getFunctionOutputObject(response) || {};
         result = getFunctionResponseResult(response);
@@ -358,6 +401,97 @@
       }
     }
 
+    async function onBookingRowActionClick(action, bookingId, mfspCode) {
+      if (action === "trip-closure") {
+        return onBookingTripClosureClick(mfspCode);
+      }
+
+      if (action !== "pay-agent-commission") {
+        return;
+      }
+
+      if (!bookingId) {
+        setAgentCommissionPopup(true, "This booking does not have an ID, so its agent commission cannot be registered.", false);
+        return;
+      }
+
+      agentCommissionBookingId = String(bookingId).trim();
+      setAgentCommissionPopup(true, "Checking the agent commission settlement...", false);
+
+      try {
+        var settlement = await findAgentCommissionSettlement(agentCommissionBookingId);
+
+        if (!settlement) {
+          setAgentCommissionPopup(true, "No agent commission settlement was found for this booking. Recalculate settlements to create it.", true);
+          return;
+        }
+
+        await openAgentCommissionInvoice(settlement);
+        setAgentCommissionPopup(false, "", false);
+      } catch (error) {
+        debugError("onBookingRowActionClick failed", error, {
+          action: action,
+          bookingId: bookingId
+        });
+        setAgentCommissionPopup(true, error.message || "Could not check the agent commission settlement.", false);
+      }
+    }
+
+    async function onAgentCommissionRecalculateClick() {
+      var response;
+      var output;
+      var result;
+      var settlement;
+      var agentCommissionError;
+
+      if (!agentCommissionBookingId) {
+        setAgentCommissionPopup(true, "This booking is no longer available. Close this window and try again.", false);
+        return;
+      }
+
+      if (elements.agentCommissionRecalculate) {
+        elements.agentCommissionRecalculate.disabled = true;
+        elements.agentCommissionRecalculate.textContent = "Recalculating...";
+      }
+      if (elements.agentCommissionMessage) {
+        elements.agentCommissionMessage.textContent = "Recalculating settlements...";
+      }
+
+      try {
+        response = await crm.executeFunction(RECALCULATE_SUPPLIER_SETTLEMENTS_FOR_BOOKING_FUNCTION, {
+          bookingId: agentCommissionBookingId
+        });
+        output = getFunctionOutputObject(response) || {};
+        result = getFunctionResponseResult(response);
+
+        if (output.error === true || output.success === false || result.success === false) {
+          throw new Error(output.message || result.message || "Settlements could not be recalculated.");
+        }
+
+        agentCommissionError = getAgentCommissionRecalculationError(output);
+        if (agentCommissionError) {
+          throw new Error(agentCommissionError);
+        }
+
+        settlement = await findRecalculatedAgentCommissionSettlement(output, agentCommissionBookingId);
+        if (!settlement) {
+          setAgentCommissionPopup(true, "The agent commission settlement is still missing after recalculation. There is another problem with this booking; please review its agent, agency and commission data.", false);
+          return;
+        }
+
+        await openAgentCommissionInvoice(settlement);
+        setAgentCommissionPopup(false, "", false);
+      } catch (error) {
+        debugError("onAgentCommissionRecalculateClick failed", error, { bookingId: agentCommissionBookingId });
+        setAgentCommissionPopup(true, error.message || "Settlements could not be recalculated. There is another problem with this booking.", false, "error");
+      }
+    }
+
+    function closeAgentCommissionPopup() {
+      agentCommissionBookingId = "";
+      setAgentCommissionPopup(false, "", false);
+    }
+
     function getClosureNumber(record, fieldName) {
       var value = Number(record && record[fieldName]);
       return Number.isFinite(value) ? value : 0;
@@ -366,6 +500,24 @@
     function getClosureInvoiceTotal(invoice) {
       return Number(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES)) ||
         Number(helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.totalPayableAmount)) || 0;
+    }
+
+    function getClosureInvoiceTypeBadge(invoice) {
+      var invoiceType = helpers.textValue(helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.invoiceType));
+      var normalizedType = String(invoiceType || "").toLowerCase();
+      var tone = "is-final";
+
+      if (normalizedType.indexOf("credit") !== -1) {
+        tone = "is-credit";
+      } else if (normalizedType.indexOf("proforma") !== -1) {
+        tone = "is-proforma";
+      } else if (normalizedType.indexOf("ticket") !== -1) {
+        tone = "is-tickets";
+      } else if (normalizedType.indexOf("commission") !== -1) {
+        tone = "is-commission";
+      }
+
+      return '<span class="invoice-type-badge ' + tone + '">' + helpers.escapeHtml(invoiceType || "-") + "</span>";
     }
 
     function isNoServicesSettlement(settlement) {
@@ -392,6 +544,57 @@
       return "is-pending";
     }
 
+    function getClosureRowColor(tone, isReviewed) {
+      return isReviewed ? "reviewed" : tone === "is-ok" ? "matched" : tone === "is-alert" ? "missing" : "pending";
+    }
+
+    function compareClosureRows(left, right, sortKey, direction) {
+      var leftValue = left[sortKey];
+      var rightValue = right[sortKey];
+      var comparison = typeof leftValue === "number" && typeof rightValue === "number"
+        ? leftValue - rightValue
+        : String(leftValue || "").localeCompare(String(rightValue || ""), "en", { sensitivity: "base" });
+
+      return direction === "desc" ? -comparison : comparison;
+    }
+
+    function getClosureSortHeader(label, key, sort) {
+      var isActive = sort.key === key;
+      var indicator = isActive ? (sort.direction === "asc" ? " ↑" : " ↓") : "";
+
+      return '<th><button class="booking-closure-sort' + (isActive ? " is-active" : "") + '" type="button" data-booking-closure-sort="' + key + '">' + helpers.escapeHtml(label + indicator) + "</button></th>";
+    }
+
+    function getClosureSettlementMetrics(settlement, invoices) {
+      var settlementId = String(settlement && settlement.id || "");
+      var relatedInvoices = (invoices || []).filter(function (invoice) {
+        return helpers.getLookupId(invoice.Supplier_Settlement) === settlementId;
+      });
+      var quoted = getClosureNumber(settlement, "Total_Service_Cost");
+      var invoiced = relatedInvoices.length
+        ? relatedInvoices.reduce(function (total, invoice) { return total + getClosureInvoiceTotal(invoice); }, 0)
+        : getClosureNumber(settlement, "Total_Invoice");
+      var paid = getClosureNumber(settlement, "Total_Paid");
+      var hasInvoice = relatedInvoices.length > 0;
+      var isPaid = hasInvoice && paid >= invoiced - 0.01;
+      var variance = quoted - invoiced;
+      var review = getClosureReviewStatus(settlement);
+      var isReviewed = helpers.normalizeString(review) === "reviewed";
+      var tone = !hasInvoice ? "is-alert" : hasInvoice && isPaid && Math.abs(variance) <= 0.01 ? "is-ok" : "is-pending";
+      var status = !hasInvoice ? "Invoice missing" : Math.abs(variance) > 0.01 ? "Amount differs from quote" : tone === "is-ok" ? "Matched and paid" : "Payment pending";
+
+      return {
+        supplier: settlement.Supplier_Name || helpers.getLookupName(settlement.Supplier) || settlement.Name || "-",
+        quoted: quoted,
+        invoiced: invoiced,
+        paid: paid,
+        variance: variance,
+        status: status,
+        review: review,
+        color: getClosureRowColor(tone, isReviewed)
+      };
+    }
+
     function renderBookingClosure() {
       var closure = state.bookingClosure || {};
       var booking = closure.booking;
@@ -409,6 +612,8 @@
       var costVariance;
       var summary;
       var rows;
+      var closureFilter;
+      var closureSort;
 
       if (!elements.bookingClosurePopup) {
         return;
@@ -458,6 +663,7 @@
 
       summary = [
         ["Sales Price now", helpers.formatCurrency(currentSalesPrice)],
+        ["Balance Due Amount", helpers.formatCurrency(getClosureNumber(booking, "Balance_Amount"))],
         ["Quoted cost", helpers.formatCurrency(quotedCost)],
         ["Invoiced cost", helpers.formatCurrency(invoicedCost)],
         ["Paid", helpers.formatCurrency(paidCost)],
@@ -465,6 +671,18 @@
         ["Final margin", helpers.formatCurrency(actualMargin)],
         [costVariance >= 0 ? "Gain vs quote" : "Loss vs quote", helpers.formatCurrency(Math.abs(costVariance))]
       ];
+      closureFilter = closure.filter || "all";
+      closureSort = closure.sort || { key: "supplier", direction: "asc" };
+      settlements = settlements.filter(function (settlement) {
+        return closureFilter === "all" || getClosureSettlementMetrics(settlement, invoices).color === closureFilter;
+      }).sort(function (left, right) {
+        return compareClosureRows(
+          getClosureSettlementMetrics(left, invoices),
+          getClosureSettlementMetrics(right, invoices),
+          closureSort.key,
+          closureSort.direction
+        );
+      });
       rows = settlements.map(function (settlement) {
         var settlementId = String(settlement.id || "");
         var relatedInvoices = invoices.filter(function (invoice) {
@@ -481,23 +699,33 @@
         var varianceTone = hasInvoice && variance > 0.01 ? "is-gain" : hasInvoice && variance < -0.01 ? "is-loss" : "";
         var closureReviewStatus = getClosureReviewStatus(settlement);
         var isReviewed = helpers.normalizeString(closureReviewStatus) === "reviewed";
-        var tone = hasInvoice && isPaid && Math.abs(variance) <= 0.01
-          ? "is-ok"
-          : hasInvoice && Math.abs(variance) > 0.01
+        var isAgentCommission = helpers.normalizeString(settlement && settlement.Settlement_Type) === "agentcommission";
+        var tone = !hasInvoice
           ? "is-alert"
+          : hasInvoice && isPaid && Math.abs(variance) <= 0.01
+          ? "is-ok"
           : "is-pending";
-        var status = tone === "is-ok" ? "Matched and paid" : tone === "is-alert" ? "Amount differs from quote" : !hasInvoice ? "Invoice missing" : "Payment pending";
+        var status = !hasInvoice
+          ? "Invoice missing"
+          : Math.abs(variance) > 0.01
+          ? "Amount differs from quote"
+          : tone === "is-ok"
+          ? "Matched and paid"
+          : "Payment pending";
+        var settlementDetail = isAgentCommission
+          ? "Commission"
+          : String(settlement.Service_Count || 0) + " services";
 
         return [
-          '<tr class="booking-closure-row ' + tone + '" data-booking-closure-settlement-id="' + helpers.escapeHtml(settlementId) + '">',
-          "<td><strong>" + helpers.escapeHtml(settlement.Supplier_Name || helpers.getLookupName(settlement.Supplier) || settlement.Name || "-") + "</strong><br><span class=\"table-inline-secondary\">" + helpers.escapeHtml(settlement.Name || "") + " · " + helpers.escapeHtml(String(settlement.Service_Count || 0)) + " services</span></td>",
+          '<tr class="booking-closure-row ' + tone + (isReviewed ? " is-reviewed" : "") + (isAgentCommission ? " booking-closure-agent-commission" : "") + '" data-booking-closure-settlement-id="' + helpers.escapeHtml(settlementId) + '">',
+          "<td><strong>" + helpers.escapeHtml(settlement.Supplier_Name || helpers.getLookupName(settlement.Supplier) || settlement.Name || "-") + "</strong><br><span class=\"table-inline-secondary\">" + helpers.escapeHtml(settlement.Name || "") + " · " + helpers.escapeHtml(settlementDetail) + "</span></td>",
           '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(quoted)) + "</td>",
           '<td class="numeric-cell">' + helpers.escapeHtml(hasInvoice ? helpers.formatCurrency(invoiced) : "-") + "</td>",
           '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(paid)) + "</td>",
           '<td class="numeric-cell booking-closure-variance ' + varianceTone + '">' + helpers.escapeHtml(hasInvoice ? helpers.formatCurrency(variance) : "-") + "</td>",
           "<td>" + helpers.escapeHtml(status) + "</td>",
-          '<td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(closureReviewStatus)) + '">' + helpers.escapeHtml(closureReviewStatus) + "</span></td>",
-          '<td><details class="booking-closure-actions"><summary>Actions</summary><div>' +
+          '<td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(closureReviewStatus)) + (isReviewed ? " booking-closure-review-pill" : "") + '">' + helpers.escapeHtml(closureReviewStatus) + "</span></td>",
+          '<td><details class="booking-closure-actions"><summary aria-label="Settlement actions" title="Settlement actions">&#8942;</summary><div>' +
             (isReviewed
               ? '<button type="button" class="button secondary" disabled>Reviewed</button>'
               : '<button type="button" class="button secondary" data-booking-closure-review-settlement-id="' + helpers.escapeHtml(settlementId) + '">Mark as reviewed</button>') +
@@ -510,8 +738,8 @@
         '<div class="booking-closure-summary">' + summary.map(function (item) {
           return "<div><span>" + helpers.escapeHtml(item[0]) + "</span><strong>" + helpers.escapeHtml(item[1]) + "</strong></div>";
         }).join("") + "</div>" +
-        '<div class="booking-closure-legend"><span class="is-ok">Matched, invoiced and paid</span><span class="is-pending">Invoice or payment pending</span><span class="is-alert">Amount differs from quote</span></div>' +
-        '<div class="table-wrap booking-closure-table-wrap"><table class="results-table"><thead><tr><th>Supplier / settlement</th><th class="numeric-cell">Quoted</th><th class="numeric-cell">Invoiced</th><th class="numeric-cell">Paid</th><th class="numeric-cell">Variance</th><th>Status</th><th>Closure review</th><th>Actions</th></tr></thead><tbody>' +
+        '<div class="booking-closure-legend"><button type="button" class="' + (closureFilter === "all" ? "is-active" : "") + '" data-booking-closure-filter="all">All</button><button type="button" class="is-ok' + (closureFilter === "matched" ? " is-active" : "") + '" data-booking-closure-filter="matched">Matched, invoiced and paid</button><button type="button" class="is-pending' + (closureFilter === "pending" ? " is-active" : "") + '" data-booking-closure-filter="pending">Payment pending or amount differs from quote</button><button type="button" class="is-alert' + (closureFilter === "missing" ? " is-active" : "") + '" data-booking-closure-filter="missing">Invoice missing</button><button type="button" class="is-reviewed' + (closureFilter === "reviewed" ? " is-active" : "") + '" data-booking-closure-filter="reviewed">Reviewed</button></div>' +
+        '<div class="table-wrap booking-closure-table-wrap"><table class="results-table"><thead><tr>' + getClosureSortHeader("Supplier / settlement", "supplier", closureSort) + getClosureSortHeader("Quoted", "quoted", closureSort) + getClosureSortHeader("Invoiced", "invoiced", closureSort) + getClosureSortHeader("Paid", "paid", closureSort) + getClosureSortHeader("Variance", "variance", closureSort) + getClosureSortHeader("Status", "status", closureSort) + getClosureSortHeader("Closure review", "review", closureSort) + "<th>Actions</th></tr></thead><tbody>" +
         (rows || '<tr><td colspan="8" class="table-empty">No settlements were found for this booking.</td></tr>') +
         "</tbody></table></div>";
     }
@@ -558,8 +786,8 @@
           '<section class="booking-closure-detail-section"><h3>Services</h3>' + renderTable(["Service Date", "Name", "Status"], services.map(function (service) {
             return "<tr><td>" + helpers.escapeHtml(helpers.formatDate(service.Service_Date)) + "</td><td>" + helpers.escapeHtml(service.Product_Description || "-") + "</td><td>" + helpers.escapeHtml(service.Status_EZUS || "-") + "</td></tr>";
           }).join(""), "No services found for this settlement.") + "</section>" +
-          '<section class="booking-closure-detail-section"><h3>Invoices</h3>' + renderTable(["Invoice", "Date", "Amount"], invoices.map(function (invoice) {
-            return "<tr><td>" + helpers.escapeHtml(invoice.Name || "-") + "</td><td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + '</td><td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(getClosureInvoiceTotal(invoice))) + "</td></tr>";
+          '<section class="booking-closure-detail-section"><h3>Invoices</h3>' + renderTable(["Invoice", "Invoice type", "Date", "Amount"], invoices.map(function (invoice) {
+            return "<tr><td>" + helpers.escapeHtml(invoice.Name || "-") + "</td><td>" + getClosureInvoiceTypeBadge(invoice) + "</td><td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + '</td><td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(getClosureInvoiceTotal(invoice))) + "</td></tr>";
           }).join(""), "No invoices found for this settlement.") + "</section>" +
           '<section class="booking-closure-detail-section"><h3>Payments</h3>' + renderTable(["Payment", "Date", "Amount"], payments.map(function (payment) {
             payment = payment || {};
@@ -573,6 +801,32 @@
         state.bookingClosure.detail.isOpen = false;
       }
       renderBookingClosureDetail();
+    }
+
+    function onBookingClosureTableControlClick(event) {
+      var target = event.target && event.target.closest("[data-booking-closure-sort], [data-booking-closure-filter]");
+      var sortKey;
+      var filter;
+
+      if (!target) {
+        return;
+      }
+
+      sortKey = target.getAttribute("data-booking-closure-sort");
+      filter = target.getAttribute("data-booking-closure-filter");
+
+      if (sortKey) {
+        state.bookingClosure.sort = state.bookingClosure.sort || { key: "supplier", direction: "asc" };
+        if (state.bookingClosure.sort.key === sortKey) {
+          state.bookingClosure.sort.direction = state.bookingClosure.sort.direction === "asc" ? "desc" : "asc";
+        } else {
+          state.bookingClosure.sort = { key: sortKey, direction: "asc" };
+        }
+      } else if (filter) {
+        state.bookingClosure.filter = state.bookingClosure.filter === filter && filter !== "all" ? "all" : filter;
+      }
+
+      renderBookingClosure();
     }
 
     async function onBookingClosureSettlementClick(event) {
@@ -670,6 +924,8 @@
           booking: null,
           settlements: [],
           invoices: [],
+          filter: "all",
+          sort: { key: "supplier", direction: "asc" },
           detail: { isOpen: false, isLoading: false, settlement: null, services: [], invoices: [], payments: [] }
         };
         renderBookingClosure();
@@ -923,11 +1179,15 @@
       setActionsPopupOpen: setBookingActionsPopupOpen,
       onSyncProjectClick: onBookingSyncProjectClick,
       onRecalculateSettlementClick: onBookingRecalculateSettlementClick,
+      onRowActionClick: onBookingRowActionClick,
+      onAgentCommissionRecalculateClick: onAgentCommissionRecalculateClick,
+      closeAgentCommissionPopup: closeAgentCommissionPopup,
       onTripClosureClick: onBookingTripClosureClick,
       closeBookingClosure: closeBookingClosure,
       closeBookingClosureDetail: closeBookingClosureDetail,
       onClosureRefreshClick: onBookingClosureRefreshClick,
       onClosureReviewClick: onBookingClosureReviewClick,
+      onClosureTableControlClick: onBookingClosureTableControlClick,
       onClosureSettlementClick: onBookingClosureSettlementClick,
       loadBrowserData: loadBookingsBrowserData,
       buildView: buildBookingsView

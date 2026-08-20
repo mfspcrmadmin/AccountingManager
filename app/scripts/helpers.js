@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   function formatCurrency(value) {
     return new Intl.NumberFormat("en-US", {

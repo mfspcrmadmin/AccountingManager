@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createInvoiceCreateModule = function (deps) {
     var MODULES = deps.MODULES;
@@ -156,6 +156,25 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       }
 
       return helpers.getLookupName(settlement && settlement.Booking) || "-";
+    }
+
+    async function getInvoiceCreateBookingMfspReference(bookingId) {
+      var booking;
+
+      if (!bookingId) {
+        return "";
+      }
+
+      try {
+        booking = await crm.getRecord(MODULES.bookings, bookingId);
+        return String(helpers.getCandidateValue(booking, FIELD_CANDIDATES.booking.mfsp) || "").trim();
+      } catch (error) {
+        debugWarn("getInvoiceCreateBookingMfspReference failed", {
+          bookingId: bookingId,
+          errorMessage: error && error.message || String(error || "")
+        });
+        return "";
+      }
     }
 
     function getInvoiceCreateSettlementSearchText(settlement) {
@@ -966,6 +985,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
 
     function validateInvoiceCreateDocumentStep() {
       var recordLabelCapitalized = isInvoiceCreateRefundMode() ? "Refund reference" : "Invoice number";
+      var selectedTypeValue = getInvoiceCreateSelectedTypeValue();
 
       if (!validateInvoiceCreateSettlementStep()) {
         return false;
@@ -981,6 +1001,13 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       if (!elements.invoiceCreateDate.value) {
         showInvoiceCreateValidationError("Choose an invoice date before continuing.", {
           invoiceDate: "Invoice date is required."
+        });
+        return false;
+      }
+
+      if (!isInvoiceCreateRefundMode() && !selectedTypeValue) {
+        showInvoiceCreateValidationError("Select an invoice type before continuing.", {
+          invoiceType: "Invoice Type is required."
         });
         return false;
       }
@@ -2039,6 +2066,9 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       var recordLabel = isRefundMode ? "refund" : "invoice";
       var recordLabelCapitalized = isRefundMode ? "Refund" : "Invoice";
       var selectedTypeValue;
+      var bookingMfspReference;
+      var vendorEzusSupplierReference;
+      var vendorAccountingReference;
       var selectedDocumentFile = getInvoiceCreateDocumentFile();
       var attachmentUploadResult;
       var attachmentNotice = "";
@@ -2075,7 +2105,15 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         return;
       }
 
-      if (!isRefundMode && getInvoiceCreateSelectedTypeValue() === INVOICE_TYPES.finalInvoice && selectedDocumentFile == null) {
+      selectedTypeValue = getInvoiceCreateSelectedTypeValue();
+      if (!isRefundMode && !selectedTypeValue) {
+        showInvoiceCreateValidationError("Select an invoice type before creating the invoice.", {
+          invoiceType: "Invoice Type is required."
+        });
+        return;
+      }
+
+      if (!isRefundMode && selectedTypeValue === INVOICE_TYPES.finalInvoice && selectedDocumentFile == null) {
         showInvoiceCreateValidationError("Attach the invoice file before creating the " + recordLabel + ".", {
           invoiceFile: "Invoice File is required."
         });
@@ -2231,8 +2269,6 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       supplierName = state.supplier.Vendor_Name || state.supplier.Name || helpers.getLookupName(state.supplier);
       supplierCode = helpers.getCandidateValue(state.supplier, FIELD_CANDIDATES.supplier.connectionReference) || "";
       bookingId = helpers.getLookupId(state.invoiceCreation.selectedSettlement.Booking);
-      selectedTypeValue = getInvoiceCreateSelectedTypeValue();
-
       if (invoiceNumberValue && !await validateInvoiceCreateNumberUniqueness(state.supplierId, invoiceNumberValue)) {
         elements.invoiceCreateNumber.setCustomValidity(
           (isRefundMode ? "Refund reference" : "Invoice number") + " must be unique for the selected supplier."
@@ -2263,7 +2299,16 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       payload[getResolvedInvoiceCreateFieldApi("reimbursableExpense", "Reimbursable_Expense")] = computedAmounts.reimbursableExpense;
       payload[getResolvedInvoiceCreateFieldApi("invoiceTotal", "Invoice_Total")] = computedAmounts.invoiceTotal;
       payload[getResolvedInvoiceCreateFieldApi("totalPayableAmount", "Total_Payable_Amount")] = computedAmounts.totalPayableAmount;
-      payload.Ezus_Supplier_Reference = state.invoiceCreation.selectedSettlement.Ezus_Supplier_Reference || state.supplier.Ezus_Supplier_Reference || "";
+      vendorEzusSupplierReference = String(helpers.getCandidateValue(state.supplier, FIELD_CANDIDATES.supplier.ezusReference) || "").trim();
+      vendorAccountingReference = String(helpers.getCandidateValue(state.supplier, FIELD_CANDIDATES.supplier.accounting) || "").trim();
+
+      if (vendorEzusSupplierReference || state.invoiceCreation.selectedSettlement.Ezus_Supplier_Reference) {
+        payload[getResolvedInvoiceCreateFieldApi("ezusReference", "Ezus_Supplier_Reference")] = vendorEzusSupplierReference || state.invoiceCreation.selectedSettlement.Ezus_Supplier_Reference;
+      }
+
+      if (vendorAccountingReference && state.invoiceCreation.invoiceFields.supplierAccounting) {
+        payload[getResolvedInvoiceCreateFieldApi("supplierAccounting", "Cuenta_Contable_Supplier")] = vendorAccountingReference;
+      }
 
       if (invoiceNumberValue) {
         payload[getResolvedInvoiceCreateFieldApi("invoiceNumber", "Name")] = invoiceNumberValue;
@@ -2279,7 +2324,8 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         payload[getResolvedInvoiceCreateFieldApi("bookingLookup", "Booking")] = { id: bookingId };
       }
 
-      payload.MFSP_Reference = getInvoiceCreateSettlementMfsp(state.invoiceCreation.selectedSettlement) || "";
+      bookingMfspReference = await getInvoiceCreateBookingMfspReference(bookingId);
+      payload[getResolvedInvoiceCreateFieldApi("mfsp", "MFSP_Reference")] = bookingMfspReference || getInvoiceCreateSettlementMfsp(state.invoiceCreation.selectedSettlement) || "";
 
       setInvoiceCreateLoading(true, isRefundMode ? "Creating refund..." : "Creating invoice...");
 

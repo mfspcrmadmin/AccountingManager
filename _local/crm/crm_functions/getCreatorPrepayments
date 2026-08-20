@@ -1,0 +1,77 @@
+string standalone.creator_getCreatorPrepayments(string status, string paymentDateFrom, string paymentDateTo, string searchText)
+{
+result = Map();
+result.put("success",false);
+prepayments = List();
+params = Map();
+params.put("max_records",200);
+params.put("field_config","all");
+criteria = "";
+
+if(!isnull(status) && status.trim() != "")
+{
+	criteria = "Status == \"" + status.trim() + "\"";
+}
+if(!isnull(paymentDateFrom) && paymentDateFrom.trim() != "")
+{
+	criteria = criteria + if(criteria != ""," && ","") + "Payment_Date >= '" + paymentDateFrom.trim() + "'";
+}
+if(!isnull(paymentDateTo) && paymentDateTo.trim() != "")
+{
+	criteria = criteria + if(criteria != ""," && ","") + "Payment_Date <= '" + paymentDateTo.trim() + "'";
+}
+if(!isnull(searchText) && searchText.trim() != "")
+{
+	searchText = searchText.trim().replaceAll("\"","");
+	searchCriteria = "(Proforma_Associated.Supplier_Reference.contains(\"" + searchText + "\") || Proforma_Associated.Supplier_Name.contains(\"" + searchText + "\") || Proforma_Associated.MFSP_Reference.contains(\"" + searchText + "\") || Proforma_Associated.Booking_Name.contains(\"" + searchText + "\"))";
+	criteria = criteria + if(criteria != ""," && ","") + searchCriteria;
+}
+if(criteria != "")
+{
+	params.put("criteria",criteria);
+}
+
+try
+{
+	prepaymentsResponse = invokeurl
+	[
+		url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/All_Pre_Payments"
+		type :GET
+		parameters:params
+		connection:"administrationmanager"
+	];
+}
+catch (e)
+{
+	result.put("message","Creator prepayments could not be queried. Check the administrationmanager connection and its read permissions.");
+	return result.toString();
+}
+
+for each prepayment in ifnull(prepaymentsResponse.get("data"),List())
+{
+	prepaymentData = Map();
+	prepaymentData.put("accounted",ifnull(prepayment.get("Accounted"),false));
+	prepaymentData.put("payment_date",ifnull(prepayment.get("Payment_Date"),""));
+	prepaymentData.put("amount",ifnull(prepayment.get("Amount"),0));
+	prepaymentData.put("status",ifnull(prepayment.get("Status"),""));
+	prepaymentData.put("transaction_type",ifnull(prepayment.get("Proforma_Associated.Transaction_Type"),""));
+	prepaymentData.put("booking_mfsp",ifnull(prepayment.get("Proforma_Associated.MFSP_Reference"),""));
+	prepaymentData.put("booking_name",ifnull(prepayment.get("Proforma_Associated.Booking_Name"),""));
+	prepaymentData.put("service_date",ifnull(prepayment.get("Proforma_Associated.Service_Date"),""));
+	prepaymentData.put("supplier_code",ifnull(prepayment.get("Proforma_Associated.Supplier_Reference"),""));
+	prepaymentData.put("observations",ifnull(prepayment.get("Proforma_Associated.Observations"),""));
+	prepaymentData.put("proforma_attached",prepayment.get("Proforma_Associated.Proforma_Attached"));
+	prepaymentData.put("payment_proof",prepayment.get("Payment_Proof"));
+	prepaymentData.put("check_in_date",ifnull(prepayment.get("Proforma_Associated.Check_In_Date"),""));
+	prepaymentData.put("check_out_date",ifnull(prepayment.get("Proforma_Associated.Check_Out_Date"),""));
+	prepaymentData.put("requested_by",ifnull(prepayment.get("Proforma_Associated.Requested_by"),""));
+	prepaymentData.put("requested_date",ifnull(prepayment.get("Proforma_Associated.Requested_Date"),""));
+	prepaymentData.put("when_to_be_paid",ifnull(prepayment.get("When_To_Be_Paid"),""));
+	prepayments.add(prepaymentData);
+}
+
+result.put("success",true);
+result.put("prepayments",prepayments);
+result.put("message","Prepayments loaded successfully.");
+return result.toString();
+}

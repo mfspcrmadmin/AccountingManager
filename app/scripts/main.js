@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp;
+var ns = global.AccountingManagerApp;
 
   if (!ns || !ns.helpers || !ns.getElements || !ns.createCrmClient || !ns.createRenderer || !ns.createInitialState) {
     return;
@@ -106,13 +106,13 @@ var ns = global.PurchasesManagerApp;
 
   function debugLog(label, payload) {
     if (global.console && typeof global.console.log === "function") {
-      global.console.log("[PurchasesManager] " + label, payload || "");
+      global.console.log("[AccountingManager] " + label, payload || "");
     }
   }
 
   function debugWarn(label, payload) {
     if (global.console && typeof global.console.warn === "function") {
-      global.console.warn("[PurchasesManager] " + label, payload || "");
+      global.console.warn("[AccountingManager] " + label, payload || "");
     }
   }
 
@@ -128,7 +128,7 @@ var ns = global.PurchasesManagerApp;
     }
 
     if (global.console && typeof global.console.error === "function") {
-      global.console.error("[PurchasesManager] " + label, details);
+      global.console.error("[AccountingManager] " + label, details);
     }
   }
 
@@ -167,11 +167,11 @@ var ns = global.PurchasesManagerApp;
   }
 
   function attachGlobalDebugListeners() {
-    if (global.__purchasesManagerDebugAttached) {
+    if (global.__accountingManagerDebugAttached) {
       return;
     }
 
-    global.__purchasesManagerDebugAttached = true;
+    global.__accountingManagerDebugAttached = true;
 
     global.addEventListener("error", function (event) {
       debugError("window error", event && event.error ? event.error : new Error(event.message || "Unknown window error"), {
@@ -586,7 +586,11 @@ var ns = global.PurchasesManagerApp;
     canUseBookingSearchFallback: canUseBookingSearchFallback,
     loadBookingSearchFallbackPage: loadBookingSearchFallbackPage,
     buildRemotePageSummary: buildRemotePageSummary,
-    getFriendlyLoadErrorMessage: getFriendlyLoadErrorMessage
+    getFriendlyLoadErrorMessage: getFriendlyLoadErrorMessage,
+    getCurrentUserEmail: getCurrentUserEmail,
+    openAgentCommissionInvoice: function () {
+      return openAgentCommissionInvoice.apply(null, arguments);
+    }
   });
   var onBookingsStageToggleClick = bookingsModule.onStageToggleClick;
   var onBookingsStageOptionChange = bookingsModule.onStageOptionChange;
@@ -598,11 +602,15 @@ var ns = global.PurchasesManagerApp;
   var setBookingActionsPopupOpen = bookingsModule.setActionsPopupOpen;
   var onBookingSyncProjectClick = bookingsModule.onSyncProjectClick;
   var onBookingRecalculateSettlementClick = bookingsModule.onRecalculateSettlementClick;
+  var onBookingRowActionClick = bookingsModule.onRowActionClick;
+  var onAgentCommissionRecalculateClick = bookingsModule.onAgentCommissionRecalculateClick;
+  var closeAgentCommissionPopup = bookingsModule.closeAgentCommissionPopup;
   var onBookingTripClosureClick = bookingsModule.onTripClosureClick;
   var closeBookingClosure = bookingsModule.closeBookingClosure;
   var closeBookingClosureDetail = bookingsModule.closeBookingClosureDetail;
   var onBookingClosureRefreshClick = bookingsModule.onClosureRefreshClick;
   var onBookingClosureReviewClick = bookingsModule.onClosureReviewClick;
+  var onBookingClosureTableControlClick = bookingsModule.onClosureTableControlClick;
   var onBookingClosureSettlementClick = bookingsModule.onClosureSettlementClick;
   var loadBookingsBrowserData = bookingsModule.loadBrowserData;
   var buildBookingsView = bookingsModule.buildView;
@@ -788,6 +796,7 @@ var ns = global.PurchasesManagerApp;
   var onInvoicePaymentHeaderAccountKeydown = paymentCreateModule.onInvoicePaymentHeaderAccountKeydown;
   var onInvoicePaymentHeaderAccountBlur = paymentCreateModule.onInvoicePaymentHeaderAccountBlur;
   var onInvoicePaymentHeaderAccountToggleClick = paymentCreateModule.onInvoicePaymentHeaderAccountToggleClick;
+  var onInvoicePaymentHeaderAccountDropdownPointerDown = paymentCreateModule.onInvoicePaymentHeaderAccountDropdownPointerDown;
   var onInvoicePaymentHeaderAccountDropdownClick = paymentCreateModule.onInvoicePaymentHeaderAccountDropdownClick;
   var onCreateSupplierPaymentSubmit = paymentCreateModule.onCreateSupplierPaymentSubmit;
   var refreshInvoicesAndPaymentsAfterSupplierPayment = paymentCreateModule.refreshInvoicesAndPaymentsAfterSupplierPayment;
@@ -959,6 +968,42 @@ var ns = global.PurchasesManagerApp;
   var clearSupplierWorkspace = supplierWorkspaceModule.clearSupplierWorkspace;
   var onCloseSupplierWorkspaceClick = supplierWorkspaceModule.onCloseSupplierWorkspaceClick;
 
+  async function openAgentCommissionInvoice(settlement) {
+    var supplierId = helpers.getLookupId(settlement && settlement.Supplier);
+    var settlementId = String(settlement && settlement.id || "").trim();
+    var selectedSettlement;
+
+    if (!supplierId || !settlementId) {
+      throw new Error("The agent commission settlement does not have a Vendor, so the invoice form cannot be opened.");
+    }
+
+    await setCurrentTab("suppliers");
+    await loadSupplierWorkspace(supplierId);
+    if (!state.supplierId || String(state.supplierId) !== String(supplierId)) {
+      throw new Error("The agency Vendor could not be loaded for this agent commission.");
+    }
+
+    await openCreateInvoicePanel(INVOICE_CREATE_MODES.invoice);
+    selectedSettlement = (state.invoiceCreation.settlements || []).filter(function (item) {
+      return String(item && item.id || "") === settlementId;
+    })[0] || null;
+
+    if (!selectedSettlement) {
+      // A newly created settlement can be read by ID before it is visible in
+      // the supplier search used to populate this table. Keep that record in
+      // the local list so the user can select it immediately.
+      selectedSettlement = settlement;
+      state.invoiceCreation.settlements = [settlement].concat((state.invoiceCreation.settlements || []).filter(function (item) {
+        return String(item && item.id || "") !== settlementId;
+      }));
+      state.invoiceCreation.hasLoadedSettlements = true;
+    }
+
+    state.invoiceCreation.selectedSettlements = [selectedSettlement];
+    state.invoiceCreation.settlementAllocationAmounts = {};
+    await invoiceCreateModule.selectSettlement(selectedSettlement);
+  }
+
   attachGlobalDebugListeners();
   bindEvents();
   initFallbackState();
@@ -1014,6 +1059,7 @@ var ns = global.PurchasesManagerApp;
       });
     }
     if (elements.bookingClosureContent) {
+      elements.bookingClosureContent.addEventListener("click", onBookingClosureTableControlClick);
       elements.bookingClosureContent.addEventListener("click", onBookingClosureReviewClick);
       elements.bookingClosureContent.addEventListener("click", onBookingClosureSettlementClick);
     }
@@ -1027,13 +1073,62 @@ var ns = global.PurchasesManagerApp;
         }
       });
     }
+    if (elements.agentCommissionClose) {
+      elements.agentCommissionClose.addEventListener("click", closeAgentCommissionPopup);
+    }
+    if (elements.agentCommissionRecalculate) {
+      elements.agentCommissionRecalculate.addEventListener("click", onAgentCommissionRecalculateClick);
+    }
+    if (elements.agentCommissionPopup) {
+      elements.agentCommissionPopup.addEventListener("click", function (event) {
+        if (event.target === elements.agentCommissionPopup) {
+          closeAgentCommissionPopup();
+        }
+      });
+    }
     if (elements.bookingsTableBody) {
       elements.bookingsTableBody.addEventListener("click", function (event) {
-        var row = event.target && event.target.closest("[data-booking-closure-mfsp]");
-        var mfspCode = row && row.getAttribute("data-booking-closure-mfsp");
+        var actionButton = event.target && event.target.closest("[data-booking-row-action]");
+        var actionMenu = event.target && event.target.closest(".booking-row-actions");
+        var actionRow;
 
-        if (mfspCode) {
-          onBookingTripClosureClick(mfspCode);
+        if (actionButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          actionRow = actionButton.closest("[data-booking-id]");
+          onBookingRowActionClick(
+            actionButton.getAttribute("data-booking-row-action"),
+            actionRow && actionRow.getAttribute("data-booking-id"),
+            actionRow && actionRow.getAttribute("data-booking-closure-mfsp")
+          );
+          return;
+        }
+
+        if (actionMenu) {
+          global.setTimeout(function () {
+            var summary = actionMenu.querySelector("summary");
+            var menu = actionMenu.querySelector(".booking-row-actions-menu");
+            var rect;
+            var menuWidth;
+            var left;
+            var top;
+
+            if (!actionMenu.open || !summary || !menu) {
+              return;
+            }
+
+            rect = summary.getBoundingClientRect();
+            menuWidth = menu.offsetWidth;
+            left = Math.min(rect.left, global.innerWidth - menuWidth - 8);
+            left = Math.max(8, left);
+            top = rect.bottom + 4;
+            if (top + menu.offsetHeight > global.innerHeight - 8) {
+              top = Math.max(8, rect.top - menu.offsetHeight - 4);
+            }
+            menu.style.left = left + "px";
+            menu.style.top = top + "px";
+          }, 0);
+          return;
         }
       });
     }
@@ -1111,6 +1206,10 @@ var ns = global.PurchasesManagerApp;
 
     bindInvoicesLoadFilterControl(elements.invoiceFilterDateFrom, "dateFrom");
     bindInvoicesLoadFilterControl(elements.invoiceFilterDateTo, "dateTo");
+    elements.invoiceFilterDatePreset.addEventListener("change", function () {
+      applyDateFilterPreset("invoices", elements.invoiceFilterDatePreset.value);
+      scheduleRemoteViewReload("invoices");
+    });
     bindInvoicesLoadFilterControl(elements.invoiceFilterType, "invoiceType");
     bindInvoicesLoadFilterControl(elements.invoiceFilterSupplierCode, "supplierCode");
     bindInvoicesLoadFilterControl(elements.invoiceFilterMfsp, "mfsp");
@@ -1126,6 +1225,10 @@ var ns = global.PurchasesManagerApp;
 
     bindPaymentsLoadFilterControl(elements.paymentFilterDateFrom, "dateFrom");
     bindPaymentsLoadFilterControl(elements.paymentFilterDateTo, "dateTo");
+    elements.paymentFilterDatePreset.addEventListener("change", function () {
+      applyDateFilterPreset("payments", elements.paymentFilterDatePreset.value);
+      scheduleRemoteViewReload("payments");
+    });
     bindPaymentsLoadFilterControl(elements.paymentFilterSupplierCode, "supplierCode");
     bindPaymentsLoadFilterControl(elements.paymentFilterMfsp, "mfsp");
     bindAccountingEntriesLoadFilterControl(elements.accountingEntryFilterDateFrom, "dateFrom");
@@ -1186,6 +1289,7 @@ var ns = global.PurchasesManagerApp;
     elements.invoicePaymentAccount.addEventListener("keydown", onInvoicePaymentHeaderAccountKeydown);
     elements.invoicePaymentAccount.addEventListener("blur", onInvoicePaymentHeaderAccountBlur);
     elements.invoicePaymentAccountToggle.addEventListener("click", onInvoicePaymentHeaderAccountToggleClick);
+    elements.invoicePaymentAccountDropdown.addEventListener("pointerdown", onInvoicePaymentHeaderAccountDropdownPointerDown);
     elements.invoicePaymentAccountDropdown.addEventListener("click", onInvoicePaymentHeaderAccountDropdownClick);
     elements.invoicePaymentSupplierAccountsList.addEventListener("change", onInvoicePaymentSupplierAccountChange);
     elements.invoicePaymentAllocationsList.addEventListener("change", onInvoicePaymentAllocationChange);
@@ -1463,10 +1567,10 @@ var ns = global.PurchasesManagerApp;
 
     if (viewKey === "invoices") {
       timerRef = "invoices";
-      loader = ensureInvoicesLoaded;
+      loader = loadInvoicesTabData;
     } else if (viewKey === "payments") {
       timerRef = "payments";
-      loader = ensurePaymentsLoaded;
+      loader = loadPaymentsTabData;
     } else {
       return;
     }
@@ -1518,6 +1622,13 @@ var ns = global.PurchasesManagerApp;
   function bindInvoicesLoadFilterControl(element, filterKey) {
     function updateValue() {
       state.views.invoices.filters[filterKey] = element.value;
+      if (filterKey === "dateFrom" || filterKey === "dateTo") {
+        state.views.invoices.filters.datePreset = "specific";
+        elements.invoiceFilterDatePreset.value = "specific";
+      }
+      state.views.invoices.page = 1;
+      renderAll();
+      scheduleRemoteViewReload("invoices");
     }
 
     element.addEventListener("input", updateValue);
@@ -1533,6 +1644,13 @@ var ns = global.PurchasesManagerApp;
   function bindPaymentsLoadFilterControl(element, filterKey) {
     function updateValue() {
       state.views.payments.filters[filterKey] = element.value;
+      if (filterKey === "dateFrom" || filterKey === "dateTo") {
+        state.views.payments.filters.datePreset = "specific";
+        elements.paymentFilterDatePreset.value = "specific";
+      }
+      state.views.payments.page = 1;
+      renderAll();
+      scheduleRemoteViewReload("payments");
     }
 
     element.addEventListener("input", updateValue);
@@ -1742,7 +1860,9 @@ var ns = global.PurchasesManagerApp;
     }
 
     state.views[viewKey].filters.statusValues = getNormalizedStatusFilterValues(nextValues);
+    state.views[viewKey].page = 1;
     renderAll();
+    scheduleRemoteViewReload(viewKey);
   }
 
   function onStatusFilterMenuActionClick(viewKey, event) {
@@ -1763,7 +1883,9 @@ var ns = global.PurchasesManagerApp;
       state.views[viewKey].filters.statusValues = [];
     }
 
+    state.views[viewKey].page = 1;
     renderAll();
+    scheduleRemoteViewReload(viewKey);
   }
 
   function onDocumentClickCloseStatusFilterDropdown(event) {
@@ -1943,6 +2065,81 @@ var ns = global.PurchasesManagerApp;
     ].join("-");
   }
 
+  function getDateRangeForPreset(preset) {
+    var today = new Date(getLocalIsoDate() + "T12:00:00");
+    var from = new Date(today.getTime());
+    var to = new Date(today.getTime());
+    var dayOfWeek;
+
+    switch (preset) {
+      case "this-week":
+        dayOfWeek = from.getDay() || 7;
+        from.setDate(from.getDate() - dayOfWeek + 1);
+        break;
+      case "last-week":
+        dayOfWeek = from.getDay() || 7;
+        from.setDate(from.getDate() - dayOfWeek - 6);
+        to.setDate(to.getDate() - dayOfWeek);
+        break;
+      case "last-7-days":
+        from.setDate(from.getDate() - 6);
+        break;
+      case "this-month":
+        from.setDate(1);
+        break;
+      case "last-month":
+        from.setDate(1);
+        from.setMonth(from.getMonth() - 1);
+        to.setDate(0);
+        break;
+      case "last-30-days":
+        from.setDate(from.getDate() - 29);
+        break;
+      case "year-to-date":
+        from.setMonth(0, 1);
+        break;
+      case "all-time":
+        return { dateFrom: "", dateTo: "" };
+      default:
+        return null;
+    }
+
+    return {
+      dateFrom: formatDateToIsoLocal(from),
+      dateTo: formatDateToIsoLocal(to)
+    };
+  }
+
+  function syncDateFilterPresetControls(sectionName) {
+    var isInvoices = sectionName === "invoices";
+    var filters = state.views[sectionName].filters;
+    var presetElement = isInvoices ? elements.invoiceFilterDatePreset : elements.paymentFilterDatePreset;
+    var dateFromElement = isInvoices ? elements.invoiceFilterDateFrom : elements.paymentFilterDateFrom;
+    var dateToElement = isInvoices ? elements.invoiceFilterDateTo : elements.paymentFilterDateTo;
+    var isSpecificRange = filters.datePreset === "specific";
+
+    presetElement.value = filters.datePreset || "specific";
+    dateFromElement.value = filters.dateFrom || "";
+    dateToElement.value = filters.dateTo || "";
+    dateFromElement.disabled = !isSpecificRange;
+    dateToElement.disabled = !isSpecificRange;
+    presetElement.closest(".filters-grid").classList.toggle("is-custom-date-range", isSpecificRange);
+  }
+
+  function applyDateFilterPreset(sectionName, preset) {
+    var filters = state.views[sectionName].filters;
+    var range = getDateRangeForPreset(preset);
+
+    filters.datePreset = preset;
+    if (range) {
+      filters.dateFrom = range.dateFrom;
+      filters.dateTo = range.dateTo;
+    }
+
+    syncDateFilterPresetControls(sectionName);
+    renderAll();
+  }
+
   function getPaymentsDefaultDateFrom(referenceIsoDate) {
     var resolvedIsoDate = String(referenceIsoDate || getLocalIsoDate() || "").trim();
     var referenceDate = new Date((resolvedIsoDate || getLocalIsoDate()) + "T12:00:00");
@@ -1954,11 +2151,12 @@ var ns = global.PurchasesManagerApp;
   }
 
   function buildDefaultPaymentsFilters() {
-    var todayIsoDate = getLocalIsoDate();
+    var dateRange = getDateRangeForPreset("last-7-days");
 
     return {
-      dateFrom: getPaymentsDefaultDateFrom(todayIsoDate),
-      dateTo: todayIsoDate,
+      datePreset: "last-7-days",
+      dateFrom: dateRange.dateFrom,
+      dateTo: dateRange.dateTo,
       statusValues: ["Paid"],
       supplierCode: "",
       mfsp: ""
@@ -2789,8 +2987,9 @@ var ns = global.PurchasesManagerApp;
         throw new Error(output.message || result.message || "The accounting account request email could not be sent.");
       }
 
-      renderer.showNotice(output.message || result.message || "Accounting account request sent.", {
-        tone: "success"
+      renderer.showNotice(output.message || result.message || "Email sent successfully. The accounting account has been requested.", {
+        tone: "success",
+        persistent: true
       });
     } catch (error) {
       debugError("onInvoiceCreateRequestAccountingAccountClick failed", error, {
@@ -3298,7 +3497,8 @@ var ns = global.PurchasesManagerApp;
       irpfAmount: helpers.findFieldByCandidates(fields, ["IRPF_Amount", "IRPF Amount"]),
       reimbursableExpense: helpers.findFieldByCandidates(fields, ["Reimbursable_Expense", "Reimbursable Expense"]),
       invoiceTotal: helpers.findFieldByCandidates(fields, ["Invoice_Total", "Invoice Total"]),
-      totalPayableAmount: helpers.findFieldByCandidates(fields, ["Total_Payable_Amount", "Total Payable Amount"])
+      totalPayableAmount: helpers.findFieldByCandidates(fields, ["Total_Payable_Amount", "Total Payable Amount"]),
+      supplierAccounting: helpers.findFieldByCandidates(fields, FIELD_CANDIDATES.invoice.supplierAccounting)
     };
 
     state.invoiceCreation.invoiceTypeOptions = helpers.getPicklistOptions(state.invoiceCreation.invoiceFields.invoiceType);
@@ -3609,6 +3809,43 @@ var ns = global.PurchasesManagerApp;
     }
 
     return null;
+  }
+
+  async function getCurrentUserEmail() {
+    var readers = [
+      function () {
+        return global.ZOHO && global.ZOHO.CRM && global.ZOHO.CRM.CONFIG && typeof global.ZOHO.CRM.CONFIG.getCurrentUser === "function"
+          ? global.ZOHO.CRM.CONFIG.getCurrentUser()
+          : null;
+      },
+      function () {
+        return global.$Crm && global.$Crm.user ? global.$Crm.user : null;
+      },
+      function () {
+        return global.ZOHO && global.ZOHO.CRM && global.ZOHO.CRM.API && typeof global.ZOHO.CRM.API.getCurrentUser === "function"
+          ? global.ZOHO.CRM.API.getCurrentUser()
+          : null;
+      }
+    ];
+    var index;
+    var response;
+    var email;
+
+    for (index = 0; index < readers.length; index += 1) {
+      try {
+        response = await Promise.resolve(readers[index]());
+        email = extractLoggedInUserEmail(response);
+        if (email) {
+          return email;
+        }
+      } catch (error) {
+        debugWarn("Could not read current user email for Ezus sync", {
+          error: error && error.message ? error.message : String(error)
+        });
+      }
+    }
+
+    throw new Error("Could not determine the email of the user starting the Ezus sync.");
   }
 
   async function loadWelcomeMessage() {
@@ -7393,7 +7630,14 @@ var ns = global.PurchasesManagerApp;
       "TP_Reference"
     );
 
-    supplierRecords = await loadRecordsByCoql(MODULES.suppliers, getSupplierSearchFields(), {
+    supplierRecords = await loadRecordsByCoql(MODULES.suppliers, [
+      "id",
+      "Vendor_Name",
+      "TP_Reference",
+      "Connection_Reference",
+      "Supplier_Connection_Reference",
+      "Ezus_Supplier_API"
+    ], {
       whereClause: supplierCodeFieldApi + " like '%" + escapeCoqlValue(normalizedSupplierCode) + "%'"
     });
 

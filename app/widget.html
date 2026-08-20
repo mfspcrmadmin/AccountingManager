@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Purchases Manager</title>
+    <title>Accounting Manager</title>
     <link rel="stylesheet" href="./styles/theme.css">
     <link rel="stylesheet" href="./styles/layout.css">
     <link rel="stylesheet" href="./styles/components.css">
@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="./styles/payments.css">
     <link rel="stylesheet" href="./styles/accounting.css">
     <link rel="stylesheet" href="./styles/operations.css">
+    <link rel="stylesheet" href="./styles/explorer.css">
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
   </head>
   <body>
@@ -67,17 +68,13 @@
             >&times;</button>
           </div>
 
-          <p class="booking-actions-copy">Enter an MFSP code to prepare a booking shortcut.</p>
-
           <label class="field booking-actions-field">
-            <span>MFSP code</span>
             <input id="booking-actions-mfsp" type="search" placeholder="MFSP reference">
           </label>
 
           <div class="booking-actions-buttons">
             <button id="booking-actions-sync-project" class="button primary" type="button">Sync project</button>
             <button id="booking-actions-recalculate-settlement" class="button secondary" type="button">Recalculate settlement</button>
-            <button id="booking-actions-trip-closure" class="button secondary" type="button">Trip closure</button>
           </div>
         </section>
 
@@ -102,7 +99,7 @@
             </div>
             <div class="inline-actions">
               <button id="booking-closure-refresh" class="button secondary icon-button refresh-icon-button" type="button" aria-label="Refresh trip closure" title="Refresh trip closure">&#8635;</button>
-              <button id="booking-closure-close" class="close-supplier-control" type="button">Close</button>
+              <button id="booking-closure-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
             </div>
           </div>
           <div id="booking-closure-content"></div>
@@ -116,16 +113,32 @@
               <p class="booking-actions-eyebrow">Settlement detail</p>
               <h2 id="booking-closure-detail-title">Settlement</h2>
             </div>
-            <button id="booking-closure-detail-close" class="close-supplier-control" type="button">Close</button>
+            <button id="booking-closure-detail-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
           </div>
           <div id="booking-closure-detail-content"></div>
+        </div>
+      </section>
+
+      <section id="agent-commission-popup" class="agent-commission-popup" role="dialog" aria-modal="true" aria-labelledby="agent-commission-title" hidden>
+        <div class="agent-commission-card">
+          <div class="panel-header">
+            <div>
+              <p class="booking-actions-eyebrow">Booking action</p>
+              <h2 id="agent-commission-title">Pay Agent Commission</h2>
+            </div>
+            <button id="agent-commission-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
+          </div>
+          <p id="agent-commission-message" class="agent-commission-message" aria-live="polite"></p>
+          <div class="inline-actions agent-commission-actions">
+            <button id="agent-commission-recalculate" class="button primary" type="button" hidden>Recalculate settlements</button>
+          </div>
         </div>
       </section>
 
       <section class="tab-panels">
         <section id="tab-dashboard" class="tab-panel" data-tab-panel="dashboard">
           <section class="panel welcome-panel" aria-live="polite">
-            <p class="welcome-eyebrow">Purchases Manager</p>
+            <p class="welcome-eyebrow">Accounting Manager</p>
             <h1 id="welcome-heading">Loading workspace...</h1>
             <p class="welcome-copy">We are still working on the dashboard.</p>
           </section>
@@ -135,52 +148,31 @@
           <section class="panel wide-panel operations-panel">
             <div class="panel-header operations-header">
               <div>
-                <p class="panel-eyebrow">Operations workspace</p>
-                <h2>Operations</h2>
-                <p class="operations-intro">A single place to consult the requests and registers managed by Operations in Creator.</p>
+                <p class="panel-eyebrow">Administration</p>
+                <h2 id="operations-title">Supplier prepayments</h2>
               </div>
-              <a
-                class="button secondary compact-action-button"
-                href="https://creatorapp.zoho.eu/madeforspainandportugal/administration-manager#Report:All_Pre_Payments"
-                target="_blank"
-                rel="noopener"
-              >Open Creator</a>
-            </div>
-
-            <div class="operations-type-grid" role="group" aria-label="Operation type">
-              <button class="operation-type-card is-active" type="button" data-operation-type="all">
-                <strong>All operations</strong><span>Requests and registers</span>
-              </button>
-              <button class="operation-type-card" type="button" data-operation-type="prepayments">
-                <strong>Prepayments</strong><span>Supplier advances</span>
-              </button>
-              <button class="operation-type-card" type="button" data-operation-type="client-payments">
-                <strong>Client payments</strong><span>Payment requests</span>
-              </button>
-              <button class="operation-type-card" type="button" data-operation-type="renfe">
-                <strong>Renfe</strong><span>Rail-related records</span>
-              </button>
-              <button class="operation-type-card" type="button" data-operation-type="purchases">
-                <strong>Purchase register</strong><span>Recorded purchases</span>
-              </button>
+              <div class="operations-report-switch" role="group" aria-label="Operations report">
+                <button class="operations-report-option is-active" type="button" data-operation-type="prepayments">Prepayments</button>
+                <button class="operations-report-option" type="button" data-operation-type="card-purchases">Card purchases</button>
+                <button class="operations-report-option" type="button" data-operation-type="renfe">RENFE</button>
+              </div>
             </div>
 
             <div class="filters-grid operations-filters-grid">
-              <label class="field">
+              <label id="operations-filter-status-field" class="field">
                 <span>Search</span>
                 <input id="operations-filter-search" type="search" placeholder="Reference, supplier or booking">
               </label>
-              <label class="field">
+              <label id="operations-filter-from-field" class="field">
                 <span>Status</span>
                 <select id="operations-filter-status">
                   <option value="">All statuses</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="paid">Paid</option>
-                  <option value="closed">Closed</option>
+                  <option value="Not Paid">Pending</option>
+                  <option value="Paid">Paid</option>
+                  <option value="Cancelled">Cancelled</option>
                 </select>
               </label>
-              <label class="field">
+              <label id="operations-filter-to-field" class="field">
                 <span>From</span>
                 <input id="operations-filter-from" type="date">
               </label>
@@ -195,15 +187,21 @@
             </div>
 
             <div id="operations-empty" class="empty-state operations-empty-state">
-              <h3>Ready to connect Operations</h3>
-              <p>The screen is ready. To load live data, we need to map each Creator form or report and its fields (reference, status, date, amount, supplier and booking).</p>
+              <h3>Prepayments ready to review</h3>
+              <p>Select “Apply filters” to load prepayment requests and prepayments from Creator.</p>
             </div>
 
             <div id="operations-table-wrap" class="table-wrap" hidden>
-              <table class="results-table">
-                <thead><tr><th>Type</th><th>Reference</th><th>Date</th><th>Supplier / client</th><th>Booking</th><th class="numeric-cell">Amount</th><th>Status</th><th></th></tr></thead>
+              <table class="results-table operations-results-table">
+                <thead><tr id="operations-table-head"></tr></thead>
                 <tbody id="operations-table-body"></tbody>
               </table>
+            </div>
+
+            <div id="operations-pagination-bar" class="pagination-bar" hidden>
+              <button id="operations-prev-page" class="button secondary" type="button">Previous</button>
+              <span id="operations-pagination-copy" class="pagination-copy">Page 1 of 1</span>
+              <button id="operations-next-page" class="button secondary" type="button">Next</button>
             </div>
           </section>
         </section>
@@ -269,6 +267,7 @@
               <table class="results-table bookings-results-table">
                 <thead>
                   <tr>
+                    <th class="booking-row-actions-heading"><span class="sr-only">Actions</span></th>
                     <th>Closure Status</th>
                     <th>MFSP</th>
                     <th>Booking Name</th>
@@ -387,7 +386,7 @@
                         <button id="see-supplier-in-ezus" class="button secondary compact-action-button supplier-quick-link" type="button" hidden disabled>Open in Ezus</button>
                       </div>
                     </div>
-                    <button id="close-supplier-workspace" class="close-supplier-control" type="button" hidden disabled>Close</button>
+                    <button id="close-supplier-workspace" class="close-supplier-control" type="button" aria-label="Close" title="Close" hidden disabled>&times;</button>
                   </header>
 
                   <div id="supplier-activity-stats" class="activity-stats-grid supplier-financial-summary" hidden>
@@ -471,7 +470,7 @@
                       <p id="supplier-activity-detail-eyebrow" class="panel-kicker">Details</p>
                       <h2 id="supplier-activity-detail-title">Details</h2>
                     </div>
-                    <button id="supplier-activity-detail-close" class="close-supplier-control" type="button">Close</button>
+                    <button id="supplier-activity-detail-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
                   </div>
                   <div id="supplier-activity-detail-content"></div>
                 </div>
@@ -493,7 +492,7 @@
               </div>
               <div class="inline-actions">
                 <span id="invoice-create-mode-badge" class="badge subtle">Supplier context required</span>
-                <button id="invoice-create-close" class="close-supplier-control" type="button">Close</button>
+                <button id="invoice-create-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
               </div>
             </div>
 
@@ -864,12 +863,26 @@
                 </div>
               </div>
 
-              <div class="filters-grid filters-grid-compact invoices-filters-grid">
+              <div id="invoices-filter-toolbar" class="filters-grid filters-grid-compact invoices-filters-grid list-toolbar is-custom-date-range">
                 <label class="field">
+                  <span>Period</span>
+                  <select id="invoice-filter-date-preset">
+                    <option value="specific">Specific range</option>
+                    <option value="this-week">This week</option>
+                    <option value="last-week">Last week</option>
+                    <option value="last-7-days">Last 7 days</option>
+                    <option value="this-month">This month</option>
+                    <option value="last-month">Last month</option>
+                    <option value="last-30-days">Last 30 days</option>
+                    <option value="year-to-date">Year to date</option>
+                    <option value="all-time">All time</option>
+                  </select>
+                </label>
+                <label class="field invoice-date-range-field">
                   <span>From</span>
                   <input id="invoice-filter-date-from" type="date">
                 </label>
-                <label class="field">
+                <label class="field invoice-date-range-field">
                   <span>To</span>
                   <input id="invoice-filter-date-to" type="date">
                 </label>
@@ -879,13 +892,14 @@
                   <div id="invoice-filter-status-menu" class="bookings-stage-menu" hidden></div>
                 </div>
                 <label class="field">
-                  <span>Invoice Type</span>
+                  <span>Invoice type</span>
                   <select id="invoice-filter-type">
                     <option value="">All types</option>
                     <option value="Proforma">Proforma</option>
                     <option value="Final Invoice">Final Invoice</option>
                     <option value="Credit Note">Credit Note</option>
                     <option value="Tickets">Tickets</option>
+                    <option value="Commission">Commission</option>
                   </select>
                 </label>
                 <label class="field">
@@ -896,7 +910,7 @@
                   <span>MFSP</span>
                   <input id="invoice-filter-mfsp" type="search" placeholder="MFSP reference">
                 </label>
-                <div class="bookings-load-action">
+                <div class="bookings-load-action" hidden>
                   <button id="invoices-load" class="button primary bookings-load-button" type="button">Load</button>
                 </div>
               </div>
@@ -1210,7 +1224,7 @@
               </div>
               <div class="inline-actions">
                 <span id="invoice-payment-mode-badge" class="badge subtle">Selection required</span>
-                <button id="invoice-payment-close" class="button secondary" type="button">Close</button>
+                <button id="invoice-payment-close" class="button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
               </div>
             </div>
 
@@ -1389,7 +1403,6 @@
               <div class="panel-header">
                 <div>
                   <h2>Supplier payments</h2>
-                  <p class="panel-copy">Filter supplier payments by payment date, status, supplier code and MFSP.</p>
                 </div>
                 <div class="inline-actions">
                   <button
@@ -1403,12 +1416,26 @@
                 </div>
               </div>
 
-              <div class="filters-grid filters-grid-inline payments-filters-grid">
+              <div id="payments-filter-toolbar" class="filters-grid filters-grid-inline payments-filters-grid list-toolbar">
                 <label class="field">
+                  <span>Period</span>
+                  <select id="payment-filter-date-preset">
+                    <option value="specific">Specific range</option>
+                    <option value="this-week">This week</option>
+                    <option value="last-week">Last week</option>
+                    <option value="last-7-days">Last 7 days</option>
+                    <option value="this-month">This month</option>
+                    <option value="last-month">Last month</option>
+                    <option value="last-30-days">Last 30 days</option>
+                    <option value="year-to-date">Year to date</option>
+                    <option value="all-time">All time</option>
+                  </select>
+                </label>
+                <label class="field payment-date-range-field">
                   <span>From</span>
                   <input id="payment-filter-date-from" type="date">
                 </label>
-                <label class="field">
+                <label class="field payment-date-range-field">
                   <span>To</span>
                   <input id="payment-filter-date-to" type="date">
                 </label>
@@ -1425,13 +1452,13 @@
                   <span>MFSP</span>
                   <input id="payment-filter-mfsp" type="search" placeholder="MFSP reference">
                 </label>
-                <div class="bookings-load-action">
+                <div class="bookings-load-action" hidden>
                   <button id="payments-load" class="button primary bookings-load-button" type="button">Load</button>
                 </div>
               </div>
 
               <div id="payments-empty" class="empty-state">
-                Use the filters and click Load to fetch payments.
+                No payments found
               </div>
 
               <div id="payments-table-wrap" class="table-wrap payments-table-wrap" hidden>
@@ -1458,22 +1485,22 @@
 
             <aside class="sidebar-stack">
               <section class="panel">
-                <div class="panel-header">
-                  <h2>Selected payment</h2>
+                <div class="panel-header inspector-panel-header">
                   <span id="selected-payment-pill" class="badge subtle">No payment selected</span>
                 </div>
 
                 <div id="selected-payment-empty" class="empty-state">
-                  Click any payment row to inspect it here.
+                  No payment selected
                 </div>
 
                 <div id="selected-payment-content" class="selection-content" hidden>
-                  <div class="hero-card compact-hero-card selected-payment-hero">
-                    <span class="eyebrow">Payment</span>
+                  <div class="hero-card compact-hero-card selected-payment-hero inspector-header">
                     <div class="hero-card-title-row">
                       <strong id="selected-payment-title">-</strong>
                     </div>
                     <span id="selected-payment-created-by" class="selected-invoice-created-by">Created by -</span>
+                    <strong id="selected-payment-hero-amount" class="inspector-amount">-</strong>
+                    <span id="selected-payment-hero-meta" class="inspector-meta">-</span>
                   </div>
 
                   <div class="inline-actions selected-payment-actions">
@@ -1509,7 +1536,7 @@
 
                     <section class="detail-subsection selected-payment-counts-panel">
                       <div class="section-heading compact-section-heading">
-                        <h3>Related counts</h3>
+                        <h3>Related</h3>
                       </div>
 
                       <div class="activity-stats-grid selected-payment-counts-grid">
@@ -1533,15 +1560,14 @@
                     </section>
 
                     <div class="inline-actions selected-payment-actions selected-payment-secondary-actions">
+                      <button id="selected-payment-send-letter" class="button button-accent-alt compact-action-button" type="button">Send payment letter</button>
                       <button id="selected-payment-export-bank" class="button secondary compact-action-button" type="button">Export bank file</button>
                       <button id="selected-payment-export-bank-invoices" class="button secondary compact-action-button" type="button">Export bank file by invoice</button>
-                      <button id="selected-payment-send-letter" class="button button-accent-alt compact-action-button" type="button">Send payment letter</button>
                     </div>
 
                     <section id="selected-payment-letter-panel" class="detail-subsection payment-letter-panel widget-popup-panel" role="dialog" aria-modal="true" aria-labelledby="selected-payment-letter-title" hidden>
                       <div class="section-heading compact-section-heading">
                         <h3 id="selected-payment-letter-title">Send payment letter</h3>
-                        <p>Select the suppliers to include in this payment communication.</p>
                       </div>
 
                       <div id="selected-payment-letter-empty" class="empty-state compact-empty" hidden>
@@ -1551,13 +1577,16 @@
                       <div id="selected-payment-letter-warning" class="payment-letter-warning" hidden></div>
 
                       <div class="payment-letter-bulk-action">
-                        <button id="selected-payment-letter-toggle-all" class="button secondary compact-action-button" type="button">Select all</button>
+                        <label class="payment-letter-master-check">
+                          <input id="selected-payment-letter-toggle-all" type="checkbox">
+                          <span>All suppliers</span>
+                        </label>
                       </div>
                       <div id="selected-payment-letter-suppliers" class="payment-letter-supplier-list"></div>
 
                       <div class="actions payment-letter-actions">
-                        <button id="selected-payment-letter-submit" class="button primary compact-action-button" type="button">Send</button>
                         <button id="selected-payment-letter-cancel" class="button secondary compact-action-button" type="button">Cancel</button>
+                        <button id="selected-payment-letter-submit" class="button primary compact-action-button" type="button">Send</button>
                       </div>
                     </section>
                   </div>
@@ -1744,7 +1773,7 @@
                   </div>
                   <div class="inline-actions">
                     <span id="payment-account-create-mode-badge" class="badge subtle">Ready to create</span>
-                    <button id="payment-account-create-close" class="button secondary" type="button">Close</button>
+                    <button id="payment-account-create-close" class="button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
                   </div>
                 </div>
 
@@ -2212,7 +2241,7 @@
                     <h2 id="accounting-account-create-title">Create accounting account</h2>
                   </div>
                   <div class="inline-actions">
-                    <button id="accounting-account-create-close" class="button secondary" type="button">Close</button>
+                    <button id="accounting-account-create-close" class="button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
                   </div>
                 </div>
 

@@ -1,0 +1,292 @@
+form Proforma_Form
+{
+	displayname = "Proforma Form"
+	success message = "Data Added Successfully!"
+	Booking_Information
+	(
+		type = section
+		displayname = "Booking Information"
+		visibility = true
+	 	row = 1
+	 	column = 0   
+		width = medium
+	)
+	must have MFSP_Reference
+	(
+    	type = text
+		displayname = "MFSP Reference"
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	must have Booking_Name
+	(
+    	type = text
+		displayname = "Booking Name"
+	 	row = 1
+	 	column = 1   
+		width = medium
+	)
+	Supplier_Information
+	(
+		type = section
+		displayname = "Supplier Information"
+		visibility = true
+	 	row = 2
+	 	column = 0   
+		width = medium
+	)
+	Supplier_Id
+	(
+    	type = text
+		displayname = "Supplier Id"
+		private = true
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Supplier_Email
+	(
+    	type = email
+		displayname = "Supplier Email"
+		maxchar = 80
+	 	row = 2
+	 	column = 1   
+		width = medium
+		personal data = true
+	)
+	Supplier_Bank_Account
+	(
+    	type = text
+		displayname = "Supplier Bank Account"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	must have Supplier_Reference
+	(
+    	type = text
+		displayname = "Supplier Reference"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	must have Supplier_Name
+	(
+    	type = text
+		displayname = "Supplier Name"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Invoice_Request_Count
+	(
+		type = number
+		displayname = "Invoice Request Count"
+	 	row = 2
+	 	column = 1   
+		width = medium
+	)
+	Service_Information
+	(
+		type = section
+		displayname = "Service Information"
+		visibility = true
+	 	row = 3
+	 	column = 0   
+		width = medium
+	)
+	Service_ID
+	(
+    	type = text
+		displayname = "Service ID"
+		private = true
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	Service_Name
+	(
+    	type = text
+		displayname = "Service Name"
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	Service_Category
+	(
+		type = picklist
+		displayname = "Service Category"
+		maxchar = 100
+		values = {"Accommodation","Activities","Transport"}
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	must have Service_Date
+	(
+    	type = date
+		displayname = "Service Date"
+		alloweddays = 0,1,2,3,4,5,6
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	Check_In_Date
+	(
+    	type = date
+		displayname = "Check In Date"
+		alloweddays = 0,1,2,3,4,5,6
+    	description
+    	[
+    		type = help_text
+    	 	message = "Fill when Service Category is Accommodation"
+    	]
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	Check_Out_Date
+	(
+    	type = date
+		displayname = "Check Out Date"
+		alloweddays = 0,1,2,3,4,5,6
+    	description
+    	[
+    		type = help_text
+    	 	message = "Fill when Service Category is Accommodation"
+    	]
+	 	row = 3
+	 	column = 1   
+		width = medium
+	)
+	Request_Information
+	(
+		type = section
+		displayname = "Request Information"
+		visibility = true
+	 	row = 4
+	 	column = 0   
+		width = medium
+	)
+	Requested_by
+	(
+    	type = email
+		displayname = "Requested by"
+		initial value = "${zoho.loginuserid}"
+		maxchar = 80
+	 	row = 4
+	 	column = 1   
+		width = medium
+		personal data = true
+	)
+	Requested_Date
+	(
+    	type = date
+		displayname = "Requested Date"
+		initial value = "${zoho.currentdate}"
+		alloweddays = 0,1,2,3,4,5,6
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	must have Proforma_Attached
+	(
+    	type = upload file
+		displayname = "Proforma Attached"
+    	file count = 10
+				browse = local_drive
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Invoice_Attached
+	(
+    	type = upload file
+		displayname = "Invoice Attached"
+    	file count = 10
+				browse = local_drive
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Observations
+	(
+    	type = textarea
+		height = 100px
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Transaction_Type
+	(
+		type = picklist
+		displayname = "Transaction Type"
+		maxchar = 100
+		values = {"Full Payment","Partial Payment"}
+		initial value = "Full Payment"
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Total_Proforma_Amount
+	(
+		displayname = "Total Proforma Amount"
+		type = EUR
+		format = dotcomma
+	 	row = 4
+	 	column = 1   
+		width = medium
+	)
+	Payments
+	(
+		type = grid
+		values  = Pre_Payments_Form.ID
+    	bidirectional = Proforma_Associated
+	 	row = 5
+	 	column = 1   
+		width = medium
+	)
+	Attention
+	(
+		type = section
+		displayname = "Notes"
+		visibility = true
+	 	row = 6
+	 	column = 0   
+		width = medium
+	)
+	Notes
+	(
+    	type = plaintext
+		value = "<div><span class=\"colour\" style=\"color: rgb(255, 51, 51)\"><b><span class=\"size\" style=\"font-size: 16px\">ATENCIÓN</span></b><span class=\"size\" style=\"font-size: 16px\">: a partir de las 14h no se pueden registrar pagos para el día en curso. Selecciona el día siguiente para registrarlo.</span></span><br /></div><div><span class=\"colour\" style=\"color: rgb(68, 68, 68)\"><br /></span></div><div><span class=\"colour\" style=\"color: rgb(68, 68, 68)\"><span class=\"highlight\" style=\"background-color: rgb(255, 255, 255)\">En caso de </span><b><span class=\"highlight\" style=\"background-color: rgb(255, 255, 255)\">urgencia</span></b><span class=\"highlight\" style=\"background-color: rgb(255, 255, 255)\">, contactar directamente con Administración.​</span></span> <br /></div>"
+	 	row = 6
+	 	column = 1   
+		width = medium
+	)
+	
+	actions
+	{
+		on add
+		{
+			submit
+			(
+   				type = submit
+   				displayname = "Submit"
+			)
+		}
+		on edit
+		{
+			update
+			(
+   				type = submit
+   				displayname = "Update"
+			)
+			cancel
+			(
+   				type = cancel
+   				displayname = "Cancel"
+			)
+		}
+	}
+}

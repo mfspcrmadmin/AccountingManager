@@ -1,0 +1,49 @@
+string standalone.creator_getRenfePayments(string status, string paymentDateFrom, string paymentDateTo, string searchText)
+{
+result = Map();
+result.put("success",false);
+records = List();
+params = Map();
+params.put("max_records",200);
+params.put("field_config","all");
+
+if(!isnull(searchText) && searchText.trim() != "")
+{
+	searchText = searchText.trim().replaceAll("\"","");
+	params.put("criteria","(MFSP_Reference.contains(\"" + searchText + "\") || Booking_Name.contains(\"" + searchText + "\") || Localizador_Ticket_RENFE.contains(\"" + searchText + "\"))");
+}
+
+try
+{
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/All_Renfe_Payments"
+		type :GET
+		parameters:params
+		connection:"administrationmanager"
+	];
+}
+catch (e)
+{
+	result.put("message","Creator RENFE payments could not be queried.");
+	return result.toString();
+}
+
+for each payment in ifnull(response.get("data"),List())
+{
+	record = Map();
+	record.put("requested_date",ifnull(payment.get("Requested_Date"),""));
+	record.put("requested_by",ifnull(payment.get("Requested_By"),""));
+	record.put("booking_mfsp",ifnull(payment.get("MFSP_Reference"),""));
+	record.put("booking_name",ifnull(payment.get("Booking_Name"),""));
+	record.put("ticket_locator",ifnull(payment.get("Localizador_Ticket_RENFE"),""));
+	record.put("amount",ifnull(payment.get("Total_Tickets_Amount"),0));
+	record.put("observations",ifnull(payment.get("Observations"),""));
+	records.add(record);
+}
+
+result.put("success",true);
+result.put("records",records);
+result.put("message","RENFE payments loaded successfully.");
+return result.toString();
+}

@@ -101,16 +101,52 @@ string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
 			return res;
 		}
 
-		vendorMatches = zoho.crm.searchRecords("Vendors","(Agent_CRM_Contact_ID:equals:" + contactId + ")");
+		agencyLookup = booking.get("Account_Name");
+		if(agencyLookup == null || ifnull(agencyLookup.get("id"),"").toString().trim() == "")
+		{
+			res.put("skipped",true);
+			res.put("message","The Booking has no Agency; no agent commission settlement was created.");
+			return res;
+		}
+
+		agencyId = agencyLookup.get("id").toString().trim();
+		agencyName = ifnull(agencyLookup.get("name"),"").toString().trim();
+		if(agencyName == "")
+		{
+			agencyName = "Agency " + agencyId;
+		}
+
+		agency = zoho.crm.getRecordById("Accounts",agencyId);
+		if(agency == null || !agency.containKey("id"))
+		{
+			res.put("error",true);
+			res.put("message","The Booking Agency could not be loaded.");
+			return res;
+		}
+
+		agencyCode = ifnull(agency.get("Agent_Code"),"").toString().trim();
+		if(agencyCode == "")
+		{
+			res.put("skipped",true);
+			res.put("message","The Booking Agency has no Agent Code; no agent commission settlement was created.");
+			return res;
+		}
+		agencyIata = ifnull(agency.get("IATA_Code"),ifnull(booking.get("IATA_Code"),"")).toString().trim();
+
+		vendorMatches = zoho.crm.searchRecords("Vendors","(TP_Reference:equals:" + agencyCode + ")");
 		vendorId = "";
 		if(vendorMatches != null)
 		{
 			for each vendorMatch in vendorMatches
 			{
-				if(vendorMatch != null && vendorMatch.containKey("id"))
+				if(vendorMatch != null && vendorMatch.containKey("id") && ifnull(vendorMatch.get("Vendor_Type"),"").toString() == "Agency")
 				{
-					vendorId = vendorMatch.get("id").toString();
-					break;
+					vendorAgencyLookup = vendorMatch.get("Agency");
+					if(vendorAgencyLookup != null && ifnull(vendorAgencyLookup.get("id"),"").toString() == agencyId)
+					{
+						vendorId = vendorMatch.get("id").toString();
+						break;
+					}
 				}
 			}
 		}
@@ -118,6 +154,7 @@ string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
 		if(vendorId == "")
 		{
 			defaultAccountingAccountCode = "4109000";
+			sionPaymentAccountName = "SION – Agent commissions";
 
 			defaultAccountingAccountId = "";
 			accountMatches = zoho.crm.searchRecords("Accounting_Accounts","(Name:equals:" + defaultAccountingAccountCode + ")");
@@ -135,21 +172,44 @@ string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
 			if(defaultAccountingAccountId == "")
 			{
 				res.put("error",true);
-				res.put("message","Accounting Account " + defaultAccountingAccountCode + " was not found; the Agent Vendor was not created.");
+				res.put("message","Accounting Account " + defaultAccountingAccountCode + " was not found; the Agency Vendor was not created.");
+				return res;
+			}
+
+			sionPaymentAccountId = "";
+			paymentAccountMatches = zoho.crm.searchRecords("Payment_Accounts","(Name:equals:" + sionPaymentAccountName + ")");
+			if(paymentAccountMatches != null)
+			{
+				for each paymentAccountMatch in paymentAccountMatches
+				{
+					if(paymentAccountMatch != null && paymentAccountMatch.containKey("id"))
+					{
+						sionPaymentAccountId = paymentAccountMatch.get("id").toString();
+						break;
+					}
+				}
+			}
+			if(sionPaymentAccountId == "")
+			{
+				res.put("error",true);
+				res.put("message","Payment Account " + sionPaymentAccountName + " was not found; the Agency Vendor was not created.");
 				return res;
 			}
 
 			vendorMap = Map();
-			vendorMap.put("Vendor_Name",contactName);
-			vendorMap.put("Agent_CRM_Contact_ID",contactId);
-			vendorMap.put("Vendor_Type","Agent");
+			vendorMap.put("Vendor_Name",agencyName);
+			vendorMap.put("Agency",agencyId);
+			vendorMap.put("IATA",agencyIata);
+			vendorMap.put("TP_Reference",agencyCode);
+			vendorMap.put("Vendor_Type","Agency");
 			vendorMap.put("Status","Active");
 			vendorMap.put("Default_Accounting_Account",defaultAccountingAccountId);
+			vendorMap.put("Default_Payment_Account",sionPaymentAccountId);
 			vendorResponse = zoho.crm.createRecord("Vendors",vendorMap);
 			if(vendorResponse == null || !vendorResponse.containKey("id"))
 			{
 				res.put("error",true);
-				res.put("message","Agent Vendor could not be created.");
+				res.put("message","Agency Vendor could not be created.");
 				return res;
 			}
 			vendorId = vendorResponse.get("id").toString();
@@ -162,7 +222,10 @@ string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
 		settlementMap.put("Name",settlementName);
 		settlementMap.put("Booking",bookingId);
 		settlementMap.put("Supplier",vendorId);
-		settlementMap.put("Supplier_Name",contactName);
+		settlementMap.put("Supplier_Name",agencyName);
+		settlementMap.put("Agent",contactId);
+		settlementMap.put("Agency_Name",agencyName);
+		settlementMap.put("IATA",agencyIata);
 		settlementMap.put("Total_Service_Cost",commissionAmount);
 		settlementMap.put("Technical_Key",technicalKey);
 		settlementMap.put("Settlement_Type","Agent Commission");

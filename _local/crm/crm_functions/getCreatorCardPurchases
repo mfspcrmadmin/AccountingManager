@@ -1,0 +1,62 @@
+string standalone.creator_getCardPurchases(string status, string paymentDateFrom, string paymentDateTo, string searchText)
+{
+result = Map();
+result.put("success",false);
+records = List();
+params = Map();
+params.put("max_records",200);
+params.put("field_config","all");
+criteria = "";
+
+if(!isnull(status) && status.trim() != "")
+{
+	criteria = "Status == \"" + status.trim() + "\"";
+}
+if(!isnull(searchText) && searchText.trim() != "")
+{
+	searchText = searchText.trim().replaceAll("\"","");
+	searchCriteria = "(MFSP_Reference.contains(\"" + searchText + "\") || Booking_Name.contains(\"" + searchText + "\") || Supplier_Code.contains(\"" + searchText + "\") || Supplier_Name.contains(\"" + searchText + "\") || Service_Name.contains(\"" + searchText + "\"))";
+	criteria = criteria + if(criteria != ""," && ","") + searchCriteria;
+}
+if(criteria != "")
+{
+	params.put("criteria",criteria);
+}
+
+try
+{
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/All_Card_Purchases"
+		type :GET
+		parameters:params
+		connection:"administrationmanager"
+	];
+}
+catch (e)
+{
+	result.put("message","Creator card purchases could not be queried.");
+	return result.toString();
+}
+
+for each purchase in ifnull(response.get("data"),List())
+{
+	record = Map();
+	record.put("status",ifnull(purchase.get("Status"),""));
+	record.put("amount",ifnull(purchase.get("Amount"),0));
+	record.put("booking_mfsp",ifnull(purchase.get("MFSP_Reference"),""));
+	record.put("booking_name",ifnull(purchase.get("Booking_Name"),""));
+	record.put("supplier_code",ifnull(purchase.get("Supplier_Code"),""));
+	record.put("supplier_name",ifnull(purchase.get("Supplier_Name"),""));
+	record.put("service_name",ifnull(purchase.get("Service_Name"),""));
+	record.put("service_date",ifnull(purchase.get("Service_Date"),""));
+	record.put("observations",ifnull(purchase.get("Observations"),""));
+	record.put("requested_by",ifnull(purchase.get("Requested_By"),""));
+	records.add(record);
+}
+
+result.put("success",true);
+result.put("records",records);
+result.put("message","Card purchases loaded successfully.");
+return result.toString();
+}

@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.MODULES = {
     suppliers: "Vendors",
@@ -116,6 +116,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       mfsp: ["MFSP_Reference", "MFSP Reference"],
       booking: ["Booking"],
       ezusReference: ["Ezus_Supplier_Reference", "Ezus Supplier Reference"],
+      supplierAccounting: ["Cuenta_Contable_Supplier", "Cuenta Contable (Supplier)", "Cuenta_Contable", "Cuenta Contable"],
       accountingStatus: ["Accounting_Status", "Accounting Status"]
     },
     payment: {
@@ -190,7 +191,9 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         booking: null,
         settlements: [],
         invoices: [],
-        soldSalesPrice: null
+        soldSalesPrice: null,
+        filter: "all",
+        sort: { key: "supplier", direction: "asc" }
       },
       invoiceCreation: {
         isOpen: false,
@@ -349,7 +352,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       views: {
         bookings: {
           page: 1,
-          perPage: 25,
+          perPage: 10,
           hasMore: false,
           countLabel: "0 bookings",
           pageSummary: "Page 1",
@@ -391,6 +394,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
             direction: "desc"
           },
           filters: {
+            datePreset: "specific",
             dateFrom: "",
             dateTo: "",
             statusValues: ["Received"],
@@ -399,6 +403,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
             mfsp: ""
           },
           appliedFilters: {
+            datePreset: "specific",
             dateFrom: "",
             dateTo: "",
             statusValues: ["Received"],
@@ -418,6 +423,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
           detailTab: "payment",
           statusDropdownOpen: false,
           filters: {
+            datePreset: "last-7-days",
             dateFrom: "",
             dateTo: "",
             statusValues: ["Paid"],
@@ -425,6 +431,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
             mfsp: ""
           },
           appliedFilters: {
+            datePreset: "last-7-days",
             dateFrom: "",
             dateTo: "",
             statusValues: ["Paid"],

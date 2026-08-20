@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.getElements = function () {
     return {
@@ -28,6 +28,10 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       bookingClosureDetailClose: document.getElementById("booking-closure-detail-close"),
       bookingClosureDetailTitle: document.getElementById("booking-closure-detail-title"),
       bookingClosureDetailContent: document.getElementById("booking-closure-detail-content"),
+      agentCommissionPopup: document.getElementById("agent-commission-popup"),
+      agentCommissionClose: document.getElementById("agent-commission-close"),
+      agentCommissionMessage: document.getElementById("agent-commission-message"),
+      agentCommissionRecalculate: document.getElementById("agent-commission-recalculate"),
       searchPanel: document.getElementById("search-panel"),
       loadingPill: document.getElementById("loading-pill"),
       supplierSearch: document.getElementById("supplier-search"),
@@ -223,6 +227,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
 
       invoiceFilterDateFrom: document.getElementById("invoice-filter-date-from"),
       invoiceFilterDateTo: document.getElementById("invoice-filter-date-to"),
+      invoiceFilterDatePreset: document.getElementById("invoice-filter-date-preset"),
       invoiceFilterStatusField: document.getElementById("invoice-filter-status-field"),
       invoiceFilterStatusToggle: document.getElementById("invoice-filter-status-toggle"),
       invoiceFilterStatusMenu: document.getElementById("invoice-filter-status-menu"),
@@ -330,6 +335,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
 
       paymentFilterDateFrom: document.getElementById("payment-filter-date-from"),
       paymentFilterDateTo: document.getElementById("payment-filter-date-to"),
+      paymentFilterDatePreset: document.getElementById("payment-filter-date-preset"),
       paymentFilterStatusField: document.getElementById("payment-filter-status-field"),
       paymentFilterStatusToggle: document.getElementById("payment-filter-status-toggle"),
       paymentFilterStatusMenu: document.getElementById("payment-filter-status-menu"),
@@ -383,6 +389,8 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       selectedPaymentContent: document.getElementById("selected-payment-content"),
       selectedPaymentTitle: document.getElementById("selected-payment-title"),
       selectedPaymentCreatedBy: document.getElementById("selected-payment-created-by"),
+      selectedPaymentHeroAmount: document.getElementById("selected-payment-hero-amount"),
+      selectedPaymentHeroMeta: document.getElementById("selected-payment-hero-meta"),
       selectedPaymentEdit: document.getElementById("selected-payment-edit"),
       selectedPaymentDelete: document.getElementById("selected-payment-delete"),
       selectedPaymentTabPayment: document.getElementById("selected-payment-tab-payment"),

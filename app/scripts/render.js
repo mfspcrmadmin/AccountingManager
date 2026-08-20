@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createRenderer = function (elements, state, helpers, fieldCandidates) {
     var MESSAGE_AUTO_DISMISS_DELAY = 5000;
@@ -233,6 +233,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
     function showNotice(message, options) {
       var isLoading = Boolean(options && options.isLoading);
       var tone = options && options.tone === "success" ? "success" : "neutral";
+      var persistent = Boolean(options && options.persistent);
 
       if (message) {
         hideError();
@@ -251,7 +252,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         elements.notice.removeAttribute("aria-busy");
       }
 
-      if (message && !isLoading) {
+      if (message && !isLoading && !persistent) {
         scheduleMessageAutoDismiss("notice");
       } else {
         clearMessageAutoDismissTimer("notice");
@@ -1245,7 +1246,11 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
         }
 
         return [
-          '<tr class="booking-closure-trigger" data-booking-closure-mfsp="' + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + '">',
+          '<tr class="booking-row" data-booking-id="' + helpers.escapeHtml(String(record.id || "")) + '" data-booking-closure-mfsp="' + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + '">',
+          '  <td class="booking-row-actions-cell"><details class="booking-row-actions"><summary aria-label="Booking actions" title="Booking actions">&#8942;</summary><div class="booking-row-actions-menu">' +
+          '    <button type="button" data-booking-row-action="trip-closure">Trip Closure</button>' +
+          '    <button type="button" data-booking-row-action="pay-agent-commission">Pay Agent Commission</button>' +
+          "  </div></details></td>",
           '  <td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(closureStatusValue)) + '">' + helpers.escapeHtml(closureStatusValue) + "</span></td>",
           "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + "</td>",
           "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.name)) + "</td>",

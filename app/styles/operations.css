@@ -2,6 +2,26 @@
   align-items: flex-start;
 }
 
+#tab-operations {
+  min-height: calc(100vh - 116px);
+}
+
+.operations-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 116px);
+}
+
+.operations-panel #operations-table-wrap {
+  flex: 1 1 auto;
+  min-height: 180px;
+  overflow: auto;
+}
+
+.operations-panel .operations-empty-state:not([hidden]) {
+  flex: 1 1 auto;
+}
+
 .panel-eyebrow {
   margin: 0 0 4px;
   color: var(--muted);
@@ -14,6 +34,40 @@
 .operations-intro {
   margin: 5px 0 0;
   color: var(--muted);
+}
+
+.operations-report-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8faf9;
+}
+
+.operations-report-option {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.operations-report-option:hover,
+.operations-report-option:focus-visible {
+  color: var(--text);
+}
+
+.operations-report-option.is-active {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(19, 32, 25, 0.14);
+  color: var(--accent-strong);
 }
 
 .operations-type-grid {
@@ -84,6 +138,73 @@
   color: var(--muted);
 }
 
+.operations-results-table th,
+.operations-results-table td {
+  white-space: nowrap;
+}
+
+.operations-observations {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.operations-status,
+.operations-boolean,
+.operations-transaction {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.operations-status.is-paid,
+.operations-boolean.is-yes {
+  background: #e6f6eb;
+  color: #16713c;
+}
+
+.operations-status.is-cancelled,
+.operations-boolean.is-no {
+  background: #fde9e8;
+  color: #b42318;
+}
+
+.operations-status.is-pending {
+  background: #fff5d6;
+  color: #8a5a00;
+}
+
+.operations-transaction.is-full {
+  background: #e8f0ff;
+  color: #2458a6;
+}
+
+.operations-transaction.is-partial {
+  background: #f2eafe;
+  color: #6840a6;
+}
+
+.operations-file-name {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.operations-file-name span {
+  color: var(--muted);
+}
+
+.operations-empty-value {
+  color: var(--muted);
+}
+
 @media (max-width: 1080px) {
   .operations-type-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -95,8 +216,17 @@
 }
 
 @media (max-width: 720px) {
+  #tab-operations,
+  .operations-panel {
+    min-height: auto;
+  }
+
   .operations-type-grid,
   .operations-filters-grid {
     grid-template-columns: 1fr;
+  }
+
+  .operations-header {
+    flex-direction: column;
   }
 }

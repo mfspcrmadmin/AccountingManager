@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createPaymentsModule = function (deps) {
     var FIELD_CANDIDATES = deps.FIELD_CANDIDATES;

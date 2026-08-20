@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createInvoicesRenderer = function (deps) {
     var elements = deps.elements;
@@ -169,7 +169,9 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       elements.selectedInvoiceContent.hidden = false;
       elements.selectedInvoiceTitle.textContent = helpers.getInvoiceDisplayNumber(view.selectedInvoice, fieldCandidates);
       if (elements.selectedInvoiceCreatedBy) {
-        elements.selectedInvoiceCreatedBy.textContent = "Created by " + helpers.textValue(helpers.getLookupName(view.selectedInvoice.Created_By));
+        elements.selectedInvoiceCreatedBy.textContent = "Created by " + helpers.textValue(helpers.getLookupName(
+          view.selectedInvoice.Created_By || view.selectedInvoice.CreatedBy || view.selectedInvoice["Created By"]
+        ));
       }
       elements.selectedInvoiceStatus.textContent = helpers.textValue(view.selectedInvoice.Status);
       elements.selectedInvoiceStatus.className = "status-pill " + helpers.getStatusTone(view.selectedInvoice.Status);
@@ -386,7 +388,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
             selectedPreviewUrl
               ? '      <a class="button secondary compact-action-button attachment-preview-link" href="' + helpers.escapeHtml(selectedPreviewUrl) + '" target="_blank" rel="noopener">Open in new tab</a>'
               : '      <button class="button secondary compact-action-button attachment-preview-link" type="button" disabled>Open in new tab</button>',
-            '      <button class="button secondary compact-action-button" type="button" data-close-selected-invoice-attachment-preview="true">Close</button>',
+            '      <button class="button secondary compact-action-button close-icon-button" type="button" data-close-selected-invoice-attachment-preview="true" aria-label="Close" title="Close">&times;</button>',
             "    </div>",
             "  </div>",
             selectedPreviewMarkup,
@@ -625,6 +627,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
     }
 
     function renderInvoicesWorkspace(view, onInvoiceChecked, onInvoiceSelected, onToggleAll, onSortChange, onInvoiceListTabChange, onInvoiceDetailTabChange, onSelectedInvoiceAttachmentPreview, onInvoiceAttachmentFallbackOpen, getInvoiceAttachmentsForField, getAttachmentKey, getAttachmentFileName, getAttachmentCategory, getAttachmentDateValue, getAttachmentPreviewUrl) {
+      var isSpecificDateRange = (view.filters.datePreset || "specific") === "specific";
       var listState = {
         sortKey: view.sort && view.sort.key ? view.sort.key : "",
         sortDirection: view.sort && view.sort.direction ? view.sort.direction : "asc",
@@ -653,6 +656,18 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       }
       if (elements.invoiceFilterType) {
         elements.invoiceFilterType.value = view.filters.invoiceType || "";
+      }
+      if (elements.invoiceFilterDatePreset) {
+        elements.invoiceFilterDatePreset.value = view.filters.datePreset || "specific";
+        elements.invoiceFilterDatePreset.closest(".filters-grid").classList.toggle("is-custom-date-range", isSpecificDateRange);
+      }
+      if (elements.invoiceFilterDateFrom) {
+        elements.invoiceFilterDateFrom.value = view.filters.dateFrom || "";
+        elements.invoiceFilterDateFrom.disabled = !isSpecificDateRange;
+      }
+      if (elements.invoiceFilterDateTo) {
+        elements.invoiceFilterDateTo.value = view.filters.dateTo || "";
+        elements.invoiceFilterDateTo.disabled = !isSpecificDateRange;
       }
 
       elements.invoicesCount.textContent = view.countLabel;

@@ -1,5 +1,5 @@
 (function (global) {
-  var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+  var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createSupplierActivityModule = function (deps) {
     var MODULES = deps.MODULES;
@@ -564,6 +564,160 @@
       }) || null;
     }
 
+    function getPaymentLetterAllocationsForSupplier(paymentId, supplierId) {
+      return state.records.payAllocations.filter(function (allocation) {
+        return helpers.getLookupId(allocation.Supplier_Payment) === String(paymentId || "") &&
+          helpers.getLookupId(allocation.Supplier) === String(supplierId || "");
+      }).sort(function (left, right) {
+        return String(left.Invoice_Date || "").localeCompare(String(right.Invoice_Date || ""));
+      });
+    }
+
+    function normalizePdfText(value) {
+      var text = String(value === null || value === undefined ? "" : value);
+
+      if (text.normalize) {
+        text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      }
+
+      return text.replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function escapePdfText(value) {
+      return normalizePdfText(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    }
+
+    function truncatePdfText(value, maxLength) {
+      var text = normalizePdfText(value);
+
+      if (text.length <= maxLength) {
+        return text;
+      }
+
+      return text.slice(0, Math.max(0, maxLength - 3)) + "...";
+    }
+
+    function addPdfTextLine(operations, x, y, size, text) {
+      operations.push("0.06 0.09 0.16 rg BT /F1 " + size + " Tf " + x + " " + y + " Td (" + escapePdfText(text) + ") Tj ET");
+    }
+
+    function buildPaymentLetterPdfOperations(payment, supplier, allocations, pageIndex, pageCount) {
+      var operations = [];
+      var paymentReference = helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.reference) || payment.Name || payment.id || "-";
+      var paymentDate = helpers.formatDate(helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.date));
+      var totalAllocated = allocations.reduce(function (sum, allocation) {
+        return sum + (Number(allocation.Allocated_Amount || 0) || 0);
+      }, 0);
+      var startIndex = pageIndex * 26;
+      var pageRows = allocations.slice(startIndex, startIndex + 26);
+      var y = 790;
+
+      operations.push("0.92 0.96 1 rg 0 735 595 72 re f");
+      operations.push("0.86 0.9 0.96 RG 0.5 w 42 92 511 640 re S");
+      addPdfTextLine(operations, 58, y - 18, 10, "PAYMENT LETTER");
+      addPdfTextLine(operations, 400, y - 18, 10, "Made for Spain and Portugal");
+      y -= 40;
+      addPdfTextLine(operations, 58, y, 18, supplier.name);
+      y -= 20;
+      addPdfTextLine(operations, 58, y, 10, "Summary of the invoices included in payment " + paymentReference + ".");
+      y -= 42;
+      addPdfTextLine(operations, 58, y, 10, "Payment reference: " + paymentReference);
+      addPdfTextLine(operations, 330, y, 10, "Payment date: " + paymentDate);
+      y -= 18;
+      addPdfTextLine(operations, 58, y, 10, "Invoices paid: " + allocations.length);
+      addPdfTextLine(operations, 330, y, 10, "Allocated amount: " + helpers.formatCurrency(totalAllocated));
+      y -= 38;
+      addPdfTextLine(operations, 58, y, 9, "Invoice");
+      addPdfTextLine(operations, 205, y, 9, "Invoice date");
+      addPdfTextLine(operations, 305, y, 9, "MFSP");
+      addPdfTextLine(operations, 460, y, 9, "Paid amount");
+      y -= 14;
+      operations.push("0.89 0.91 0.94 RG 0.5 w 58 " + (y + 6) + " 480 1 re f");
+      y -= 10;
+      pageRows.forEach(function (allocation) {
+        var invoiceReference = helpers.getLookupName(allocation.Supplier_Invoice) || allocation.Name || "-";
+        var mfspReference = allocation.MFSP_Reference || "-";
+        var invoiceDate = helpers.formatDate(allocation.Invoice_Date);
+        var amount = helpers.formatCurrency(Number(allocation.Allocated_Amount || 0) || 0);
+
+        addPdfTextLine(operations, 58, y, 8, truncatePdfText(invoiceReference, 24));
+        addPdfTextLine(operations, 205, y, 8, invoiceDate);
+        addPdfTextLine(operations, 305, y, 8, truncatePdfText(mfspReference, 22));
+        addPdfTextLine(operations, 460, y, 8, amount);
+        y -= 17;
+      });
+      addPdfTextLine(operations, 480, 42, 8, "Page " + (pageIndex + 1) + " of " + pageCount);
+
+      return operations.join("\n");
+    }
+
+    function buildPaymentLetterPdf(payment, supplier) {
+      var allocations = getPaymentLetterAllocationsForSupplier(payment.id, supplier.id);
+      var pageCount = Math.max(1, Math.ceil(allocations.length / 26));
+      var objects = [];
+      var pageObjectNumbers = [];
+      var pdf;
+      var offsets = [0];
+      var xrefOffset;
+      var index;
+
+      function addObject(content) {
+        objects.push(content);
+        return objects.length;
+      }
+
+      addObject("<< /Type /Catalog /Pages 2 0 R >>");
+      addObject("");
+      addObject("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+      for (index = 0; index < pageCount; index += 1) {
+        var stream = buildPaymentLetterPdfOperations(payment, supplier, allocations, index, pageCount);
+        var contentObjectNumber = addObject("<< /Length " + stream.length + " >>\nstream\n" + stream + "\nendstream");
+        var pageObjectNumber = addObject("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents " + contentObjectNumber + " 0 R >>");
+        pageObjectNumbers.push(pageObjectNumber + " 0 R");
+      }
+
+      objects[1] = "<< /Type /Pages /Kids [" + pageObjectNumbers.join(" ") + "] /Count " + pageCount + " >>";
+
+      pdf = "%PDF-1.4\n";
+      objects.forEach(function (objectContent, objectIndex) {
+        offsets.push(pdf.length);
+        pdf += (objectIndex + 1) + " 0 obj\n" + objectContent + "\nendobj\n";
+      });
+      xrefOffset = pdf.length;
+      pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
+      for (index = 1; index < offsets.length; index += 1) {
+        pdf += ("0000000000" + String(offsets[index])).slice(-10) + " 00000 n \n";
+      }
+      pdf += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xrefOffset + "\n%%EOF";
+
+      return pdf;
+    }
+
+    function downloadPaymentLetterPdf(payment, supplier) {
+      var paymentReference = helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.reference) || payment.Name || "payment";
+      var fileName = sanitizeDownloadFileName("payment-letter-" + paymentReference + "-" + supplier.name) + ".pdf";
+      var pdf = buildPaymentLetterPdf(payment, supplier);
+
+      downloadFileFromText(fileName, "application/pdf", pdf);
+      renderer.showNotice("Payment letter PDF downloaded.", {
+        tone: "success"
+      });
+    }
+
+    function renderIconSvg(name) {
+      var paths = {
+        check: '<path d="M20 6 9 17l-5-5"></path>',
+        close: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+        download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
+        pencil: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
+        searchClose: '<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path><path d="m8 8 6 6"></path><path d="m14 8-6 6"></path>',
+        search: '<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path>'
+      };
+
+      return '<svg class="payment-letter-action-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + paths[name] + "</svg>";
+    }
+
     function renderSelectedPaymentLetterPanel(payment) {
       var isOpen = Boolean(
         payment &&
@@ -575,6 +729,7 @@
       var selectedCount = getSelectedPaymentLetterSupplierIds().length;
       var missingRecipientNames = isOpen ? getSelectedPaymentLetterSuppliersMissingRecipients(payment) : [];
       var warningMessage = "";
+      var bulkAction = elements.selectedPaymentLetterToggleAll.closest(".payment-letter-bulk-action");
 
       elements.selectedPaymentLetterPanel.hidden = !isOpen;
 
@@ -585,15 +740,22 @@
         elements.selectedPaymentLetterSuppliers.innerHTML = "";
         elements.selectedPaymentLetterSubmit.disabled = false;
         elements.selectedPaymentLetterCancel.disabled = false;
-        elements.selectedPaymentLetterToggleAll.hidden = true;
+        if (bulkAction) {
+          bulkAction.hidden = true;
+        }
+        elements.selectedPaymentLetterToggleAll.checked = false;
+        elements.selectedPaymentLetterToggleAll.indeterminate = false;
         return;
       }
 
-      elements.selectedPaymentLetterToggleAll.hidden = !suppliers.length;
+      if (bulkAction) {
+        bulkAction.hidden = !suppliers.length;
+      }
       elements.selectedPaymentLetterToggleAll.disabled = state.paymentLetter.isBusy || !suppliers.length;
-      elements.selectedPaymentLetterToggleAll.textContent = suppliers.length && suppliers.every(function (supplier) {
+      elements.selectedPaymentLetterToggleAll.checked = suppliers.length && suppliers.every(function (supplier) {
         return Boolean(state.paymentLetter.selectedSupplierIds[supplier.id]);
-      }) ? "Deselect all" : "Select all";
+      });
+      elements.selectedPaymentLetterToggleAll.indeterminate = selectedCount > 0 && selectedCount < suppliers.length;
 
       if (!suppliers.length) {
         elements.selectedPaymentLetterEmpty.hidden = false;
@@ -608,10 +770,10 @@
           var recipient = getEffectivePaymentLetterRecipient(supplier.id);
           var emailClassName = "payment-letter-email";
           var emailText = recipient.email || "No email";
-          var editLabel = recipient.email ? "Edit" : "Add email";
           var isEditingEmail = state.paymentLetter.editingEmailSupplierId === String(supplier.id);
           var contactsState = state.paymentLetter.contactsBySupplierId[supplier.id] || null;
-          var contactsLabel = contactsState ? "Hide contacts" : "See contacts";
+          var contactsTitle = contactsState ? "Hide contacts" : "See contacts";
+          var contactsIconName = contactsState ? "searchClose" : "search";
 
           if (recipient.status === "loading") {
             emailClassName += " is-loading";
@@ -635,9 +797,13 @@
               : '    <span class="' + helpers.escapeHtml(emailClassName) + '">' + helpers.escapeHtml(emailText) + "</span>",
             '    <div class="payment-letter-side-actions">',
             isEditingEmail
-              ? '      <button type="button" class="button primary compact-action-button payment-letter-email-edit" data-payment-letter-update-email="' + helpers.escapeHtml(supplier.id) + '">Update</button><button type="button" class="button secondary compact-action-button payment-letter-email-edit" data-payment-letter-cancel-email="' + helpers.escapeHtml(supplier.id) + '">Cancel</button>'
-              : '      <button type="button" class="button secondary compact-action-button payment-letter-email-edit" data-payment-letter-edit-email="' + helpers.escapeHtml(supplier.id) + '"' + (state.paymentLetter.isBusy ? " disabled" : "") + ">" + helpers.escapeHtml(editLabel) + "</button>",
-            '      <button type="button" class="button secondary compact-action-button payment-letter-email-edit" data-payment-letter-see-contacts="' + helpers.escapeHtml(supplier.id) + '"' + (state.paymentLetter.isBusy ? " disabled" : "") + ">" + contactsLabel + "</button>",
+              ? '      <button type="button" class="button compact-action-button payment-letter-icon-button payment-letter-cancel-button payment-letter-email-edit" data-payment-letter-cancel-email="' + helpers.escapeHtml(supplier.id) + '" aria-label="Cancel email edit" title="Cancel">' + renderIconSvg("close") + '</button><button type="button" class="button compact-action-button payment-letter-icon-button payment-letter-confirm-button payment-letter-email-edit" data-payment-letter-update-email="' + helpers.escapeHtml(supplier.id) + '" aria-label="Update email" title="Update email">' + renderIconSvg("check") + "</button>"
+              : contactsState
+                ? ""
+                : '      <button type="button" class="button secondary compact-action-button payment-letter-icon-button payment-letter-download-button" data-payment-letter-download-pdf="' + helpers.escapeHtml(supplier.id) + '"' + (state.paymentLetter.isBusy ? " disabled" : "") + ' aria-label="Download payment letter PDF" title="Download payment letter PDF">' + renderIconSvg("download") + '</button><button type="button" class="button secondary compact-action-button payment-letter-icon-button payment-letter-email-edit" data-payment-letter-edit-email="' + helpers.escapeHtml(supplier.id) + '"' + (state.paymentLetter.isBusy ? " disabled" : "") + ' aria-label="Edit email" title="Edit email">' + renderIconSvg("pencil") + "</button>",
+            isEditingEmail
+              ? ""
+              : '      <button type="button" class="button secondary compact-action-button payment-letter-icon-button payment-letter-email-edit" data-payment-letter-see-contacts="' + helpers.escapeHtml(supplier.id) + '"' + (state.paymentLetter.isBusy ? " disabled" : "") + ' aria-label="' + helpers.escapeHtml(contactsTitle) + '" title="' + helpers.escapeHtml(contactsTitle) + '">' + renderIconSvg(contactsIconName) + "</button>",
             "    </div>",
             "  </div>",
             renderPaymentLetterContacts(supplier.id, contactsState),
@@ -714,9 +880,7 @@
         return;
       }
 
-      shouldSelectAll = !suppliers.every(function (supplier) {
-        return Boolean(state.paymentLetter.selectedSupplierIds[supplier.id]);
-      });
+      shouldSelectAll = Boolean(elements.selectedPaymentLetterToggleAll.checked);
       suppliers.forEach(function (supplier) {
         state.paymentLetter.selectedSupplierIds[supplier.id] = shouldSelectAll;
       });
@@ -743,20 +907,35 @@
 
     function onSelectedPaymentLetterEmailEditClick(event) {
       var target = event.target;
+      var actionTarget;
       var supplierId;
       var payment;
       var input;
       var email;
 
-      if (!target || !target.getAttribute) {
+      if (!target || !target.closest) {
         return;
       }
 
-      supplierId = target.getAttribute("data-payment-letter-edit-email") ||
-        target.getAttribute("data-payment-letter-update-email") ||
-        target.getAttribute("data-payment-letter-cancel-email") ||
-        target.getAttribute("data-payment-letter-see-contacts") ||
-        target.getAttribute("data-payment-letter-select-contact");
+      actionTarget = target.closest(
+        "[data-payment-letter-edit-email]," +
+        "[data-payment-letter-update-email]," +
+        "[data-payment-letter-cancel-email]," +
+        "[data-payment-letter-see-contacts]," +
+        "[data-payment-letter-select-contact]," +
+        "[data-payment-letter-download-pdf]"
+      );
+
+      if (!actionTarget) {
+        return;
+      }
+
+      supplierId = actionTarget.getAttribute("data-payment-letter-edit-email") ||
+        actionTarget.getAttribute("data-payment-letter-update-email") ||
+        actionTarget.getAttribute("data-payment-letter-cancel-email") ||
+        actionTarget.getAttribute("data-payment-letter-see-contacts") ||
+        actionTarget.getAttribute("data-payment-letter-select-contact") ||
+        actionTarget.getAttribute("data-payment-letter-download-pdf");
 
       if (!supplierId) {
         return;
@@ -769,19 +948,33 @@
         return;
       }
 
-      if (target.getAttribute("data-payment-letter-edit-email")) {
+      if (actionTarget.getAttribute("data-payment-letter-download-pdf")) {
+        var supplier = getPaymentLetterSuppliers(payment).find(function (item) {
+          return String(item && item.id || "") === String(supplierId);
+        });
+
+        if (!supplier) {
+          renderer.showError("Could not find the supplier for this payment letter.");
+          return;
+        }
+
+        downloadPaymentLetterPdf(payment, supplier);
+        return;
+      }
+
+      if (actionTarget.getAttribute("data-payment-letter-edit-email")) {
         state.paymentLetter.editingEmailSupplierId = String(supplierId);
         renderSelectedPaymentLetterPanel(payment);
         return;
       }
 
-      if (target.getAttribute("data-payment-letter-cancel-email")) {
+      if (actionTarget.getAttribute("data-payment-letter-cancel-email")) {
         state.paymentLetter.editingEmailSupplierId = "";
         renderSelectedPaymentLetterPanel(payment);
         return;
       }
 
-      if (target.getAttribute("data-payment-letter-update-email")) {
+      if (actionTarget.getAttribute("data-payment-letter-update-email")) {
         input = Array.prototype.slice.call(elements.selectedPaymentLetterSuppliers.querySelectorAll("[data-payment-letter-email-input]")).find(function (item) {
           return item.getAttribute("data-payment-letter-email-input") === String(supplierId);
         });
@@ -802,7 +995,7 @@
         return;
       }
 
-      if (target.getAttribute("data-payment-letter-see-contacts")) {
+      if (actionTarget.getAttribute("data-payment-letter-see-contacts")) {
         if (state.paymentLetter.contactsBySupplierId[supplierId]) {
           delete state.paymentLetter.contactsBySupplierId[supplierId];
           renderSelectedPaymentLetterPanel(payment);
@@ -812,7 +1005,7 @@
         return;
       }
 
-      email = String(target.getAttribute("data-payment-letter-contact-email") || "").trim();
+      email = String(actionTarget.getAttribute("data-payment-letter-contact-email") || "").trim();
       if (!hasValidEmailAddress(email)) {
         renderer.showError("The selected contact does not have a valid email address.");
         return;
@@ -820,6 +1013,7 @@
 
       state.paymentLetter.manualEmailBySupplierId[supplierId] = email;
       state.paymentLetter.editingEmailSupplierId = "";
+      delete state.paymentLetter.contactsBySupplierId[supplierId];
       renderer.showError("");
       renderSelectedPaymentLetterPanel(payment);
     }

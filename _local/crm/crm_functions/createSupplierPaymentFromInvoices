@@ -245,11 +245,33 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 
 					if(supplierRecord != null && supplierRecord.containKey("id"))
 					{
+						defaultSupplierPaymentAccountId = "";
+						defaultSupplierPaymentAccountLookup = supplierRecord.get("Default_Payment_Account");
+						if(defaultSupplierPaymentAccountLookup != null)
+						{
+							defaultSupplierPaymentAccountId = ifnull(defaultSupplierPaymentAccountLookup.get("id"),"").toString().trim();
+						}
+
+						if(defaultSupplierPaymentAccountId != "")
+						{
+							defaultSupplierPaymentAccount = zoho.crm.getRecordById("Payment_Accounts",defaultSupplierPaymentAccountId);
+							if(defaultSupplierPaymentAccount != null && defaultSupplierPaymentAccount.containKey("id"))
+							{
+								defaultSupplierPaymentAccountStatus = ifnull(defaultSupplierPaymentAccount.get("Status"),"").toString().trim().toLowerCase();
+								defaultSupplierPaymentAccountAllowed = ifnull(defaultSupplierPaymentAccount.get("Allowed_For_Supplier_Payments"),false).toString().trim().toLowerCase();
+
+								if(defaultSupplierPaymentAccountStatus != "inactive" && defaultSupplierPaymentAccountAllowed == "true")
+								{
+									resolvedPaymentAccountsBySupplier.put(supplierIdForAccount,defaultSupplierPaymentAccountId);
+								}
+							}
+						}
+
 						supplierAccountingCode = ifnull(supplierRecord.get("Cuenta_Contable"),"").toString().trim();
 						supplierAccountNumber = ifnull(supplierRecord.get("Account_Number"),"").toString().trim();
 						supplierCifNif = ifnull(supplierRecord.get("CIF_NIF"),"").toString().trim();
 
-						if(supplierAccountingCode != "" && supplierAccountNumber != "" && supplierCifNif != "")
+						if(!resolvedPaymentAccountsBySupplier.containKey(supplierIdForAccount) && supplierAccountingCode != "" && supplierAccountNumber != "" && supplierCifNif != "")
 						{
 							autoAccountingAccountId = "";
 							autoPaymentAccountId = "";

@@ -1,5 +1,5 @@
 (function (global) {
-var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
+var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createInvoicesModule = function (deps) {
     var MODULES = deps.MODULES;
@@ -43,6 +43,40 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
     var onInvoicesLoaded = deps.onInvoicesLoaded;
     var invoiceAttachmentPrefetchPromise = null;
     var invoiceAttachmentPrefetchSignature = "";
+
+    function getCreatedByValue(record) {
+      if (!record) {
+        return null;
+      }
+
+      return record.Created_By || record.CreatedBy || record["Created By"] || null;
+    }
+
+    function ensureInvoiceCreatedByLoaded(invoiceId) {
+      var invoice = (state.records.invoices || []).find(function (record) {
+        return record.id === invoiceId;
+      });
+
+      // COQL can omit this system field for Supplier Invoices, while the
+      // record endpoint returns it. Fetch it only when the list response did
+      // not include a creator.
+      if (!invoice || helpers.getLookupName(getCreatedByValue(invoice))) {
+        return;
+      }
+
+      crm.getRecord(MODULES.invoices, invoiceId).then(function (detail) {
+        var createdBy = getCreatedByValue(detail);
+
+        if (createdBy) {
+          invoice.Created_By = createdBy;
+          renderAll();
+        }
+      }).catch(function (error) {
+        debugError("ensureInvoiceCreatedByLoaded failed", error, {
+          invoiceId: invoiceId
+        });
+      });
+    }
 
     async function loadPayAllocationsForInvoice(invoiceId) {
       var escapedId = invoiceId.replace(/'/g, "\\'");
@@ -884,6 +918,7 @@ var ns = global.PurchasesManagerApp = global.PurchasesManagerApp || {};
       renderAll();
 
       if (invoiceId) {
+        ensureInvoiceCreatedByLoaded(invoiceId);
         ensureInvoiceLinesLoaded(invoiceId);
         ensureInvoiceAllocationsLoaded(invoiceId);
         ensureInvoiceAttachmentsLoaded(invoiceId, {

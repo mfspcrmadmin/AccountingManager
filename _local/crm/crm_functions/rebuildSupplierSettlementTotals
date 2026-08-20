@@ -180,9 +180,27 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 					}
 				}
 
+				hasPaymentMismatch = totalPaidFromAllocations != totalPaidFromInvoices;
+				isOverpaid = false;
+				if(totalInvoiceFromInvoices > 0)
+				{
+					isOverpaid = totalPaidFromInvoices > totalInvoiceFromInvoices || totalPaidFromAllocations > totalInvoiceFromInvoices;
+				}
+				else if(totalPaidFromInvoices > 0 || totalPaidFromAllocations > 0)
+				{
+					isOverpaid = true;
+				}
 				nextStatus = currentStatus;
 
-				if(totalInvoiceFromInvoices > 0)
+				if(hasPaymentMismatch)
+				{
+					nextStatus = "Payment Mismatch";
+				}
+				else if(isOverpaid)
+				{
+					nextStatus = "Overpaid";
+				}
+				else if(totalInvoiceFromInvoices > 0)
 				{
 					if(totalPaidFromInvoices >= totalInvoiceFromInvoices)
 					{
@@ -194,7 +212,10 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 					}
 					else
 					{
-						nextStatus = "To Be Paid";
+						// Admin_Status is a CRM picklist. "To Be Paid" is not one of
+						// its valid values, which makes CRM reject the whole updateMap
+						// (including Total_Paid and the other recalculated totals).
+						nextStatus = "Pending Invoice";
 					}
 				}
 
@@ -217,6 +238,8 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 				detail.put("allocation_total_paid",totalPaidFromAllocations);
 				detail.put("current_status",currentStatus);
 				detail.put("new_status",nextStatus);
+				detail.put("has_payment_mismatch",hasPaymentMismatch);
+				detail.put("is_overpaid",isOverpaid);
 				detail.put("needs_update",needsUpdate);
 
 				detailsList = res.get("details");
@@ -225,10 +248,17 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 
 				res.put("processed_count",res.get("processed_count") + 1);
 
-				if(totalPaidFromAllocations != totalPaidFromInvoices)
+				if(hasPaymentMismatch)
 				{
 					warningsList = res.get("warnings");
 					warningsList.add("Settlement " + settlementName + " (" + settlementId + ") has a paid mismatch: invoices = " + totalPaidFromInvoices + ", allocations = " + totalPaidFromAllocations + ".");
+					res.put("warnings",warningsList);
+				}
+
+				if(isOverpaid)
+				{
+					warningsList = res.get("warnings");
+					warningsList.add("Settlement " + settlementName + " (" + settlementId + ") is overpaid: invoice total = " + totalInvoiceFromInvoices + ", invoice paid = " + totalPaidFromInvoices + ", allocations = " + totalPaidFromAllocations + ".");
 					res.put("warnings",warningsList);
 				}
 

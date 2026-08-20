@@ -1,16 +1,69 @@
-string standalone.sync_syncFullProjectFromEzus(String bookingId,String ezusProjectRef,String bookingStage,String bookingOwnerId,String layout,Map options)
+string standalone.sync_syncFullProjectFromEzus(String bookingId,String args)
 {
 res = Map();
+projectData = Map();
+projectGetRes = Map();
+// -------- API fields --------
 syncAuditAtField = "Last_Ezus_Sync_At";
 syncAuditByField = "Last_Ezus_Sync_By";
 bookingAlternativeField = "Ezus_Alternative_Id";
 bookingServiceStatusField = "Status_EZUS";
-projectData = Map();
-projectGetRes = Map();
+// -------- Variables --------
+syncActionUserEmail = zoho.loginuserid;
 currentAlternativeId = "";
 storedAlternativeId = "";
+ezusProjectAPI = "";
+bookingStage = "";
+bookingOwnerId = "";
 shouldPersistAlternativeAfterServices = false;
+// -------- Validate inputs --------
+if(isnull(bookingId) || bookingId == "")
+{
+	res.put("error",true);
+	res.put("message","CRM Booking ID is null or empty.");
+	return res;
+}
+// -------- Sync data --------
+argsMap = Map();
+if(!isnull(args) && args.trim() != "")
+{
+	try 
+	{
+		argsMap = args.toMap();
+	}
+	catch (eArgs)
+	{
+		res.put("error",true);
+		res.put("message","The sync arguments must be a valid JSON object. Details: " + eArgs.toString());
+		return res;
+	}
+}
+syncMap = argsMap.get("sync");
+if(syncMap != null && !syncMap.isEmpty())
+{
+	syncActionUserEmail = ifnull(syncMap.get("syncActionUserEmail"),zoho.loginuserid);
+}
+else if(!isnull(argsMap.get("syncActionUserEmail")))
+{
+	syncActionUserEmail = ifnull(argsMap.get("syncActionUserEmail"),zoho.loginuserid);
+}
+// -------- Booking data --------
+booking = zoho.crm.getRecordById("Deals",bookingId);
+if(booking == null || booking.isEmpty())
+{
+	res.put("error",true);
+	res.put("message","CRM Booking could not be found.");
+	return res;
+}
+ezusProjectAPI = ifnull(booking.get("Ezus_Project_ID"),"");
+bookingStage = ifnull(booking.get("Stage"),"");
+bookingOwner = booking.get("Owner");
+if(!isnull(bookingOwner))
+{
+	bookingOwnerId = ifnull(bookingOwner.get("id"),"");
+}
 // -------- Defaults --------
+options = argsMap.get("options");
 if(isnull(options))
 {
 	options = Map();
@@ -20,14 +73,7 @@ syncTravellers = ifnull(options.get("syncTravellers"),true);
 syncServices = ifnull(options.get("syncServices"),true);
 dryRun = ifnull(options.get("dryRun"),false);
 skipDeletes = ifnull(options.get("skipDeletes"),false);
-// -------- Validate inputs --------
-if(isnull(bookingId) || bookingId == "")
-{
-	res.put("error",true);
-	res.put("message","CRM Booking ID is null or empty.");
-	return res;
-}
-if(isnull(ezusProjectRef) || ezusProjectRef == "")
+if(isnull(ezusProjectAPI) || ezusProjectAPI == "")
 {
 	res.put("error",true);
 	res.put("message","Ezus Project ID in CRM is null or empty.");
@@ -35,7 +81,7 @@ if(isnull(ezusProjectRef) || ezusProjectRef == "")
 }
 try 
 {
-	bookingRecord = zoho.crm.getRecordById("Deals",bookingId);
+	bookingRecord = booking;
 	if(!isnull(bookingRecord))
 	{
 		storedAlternativeId = ifnull(bookingRecord.get(bookingAlternativeField),"").toString().trim();
@@ -55,7 +101,7 @@ if(token == "")
 }
 if(syncProject || syncServices)
 {
-	projectGetRes = standalone.getEZUSProjectByIdWithToken(ezusProjectRef,token);
+	projectGetRes = standalone.getEZUSProjectByIdWithToken(ezusProjectAPI,token);
 	if(projectGetRes.get("error") == true || projectGetRes.get("error") == "true")
 	{
 		res.put("error",true);
@@ -122,7 +168,7 @@ if(syncServices && storedAlternativeId != "" && currentAlternativeId != "" && !s
 	{
 		res.put("error",true);
 		res.put("alternativeChangeBlocked",true);
-		res.put("message","La alternativa principal de EZUS ha cambiado de " + storedAlternativeId + " a " + currentAlternativeId + " y la booking tiene Booking Services con Status_EZUS distinto de Unassigned. No se va a sincronizar para evitar borrar estados existentes.");
+		res.put("message","Ezus main alternative has changed " + storedAlternativeId + " a " + currentAlternativeId + " and the Booking has Booking Services with Unassigned status. No se va a sincronizar para evitar borrar estados existentes.");
 		return res;
 	}
 }
@@ -156,7 +202,7 @@ if(syncProject)
 if(syncTravellers)
 {
 	// ideally use WithToken version
-	travellersSyncRes = standalone.syncTravellersFromEzusWithToken(bookingId,ezusProjectRef,token,skipDeletes);
+	travellersSyncRes = standalone.syncTravellersFromEzusWithToken(bookingId,ezusProjectAPI,token,skipDeletes);
 	if(travellersSyncRes.get("error") == true)
 	{
 		res.put("error",true);
@@ -168,7 +214,7 @@ if(syncTravellers)
 if(syncServices)
 {
 	// use your new optimized one + token + skipDeletes
-	servicesSyncRes = standalone.sync_syncServicesFromEzusWithToken(bookingId,ezusProjectRef,bookingStage,bookingOwnerId,token,skipDeletes);
+	servicesSyncRes = standalone.sync_syncServicesFromEzusWithToken(bookingId,ezusProjectAPI,bookingStage,bookingOwnerId,token,skipDeletes);
 	if(servicesSyncRes.get("error") == true)
 	{
 		res.put("error",true);
@@ -195,7 +241,7 @@ if(!dryRun)
 	syncUserEmail = "";
 	try 
 	{
-		syncUserEmail = ifnull(zoho.loginuserid,"").toString().trim();
+		syncUserEmail = ifnull(syncActionUserEmail,"").toString().trim();
 	}
 	catch (eSyncUserEmail)
 	{
