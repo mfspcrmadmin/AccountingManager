@@ -217,14 +217,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         return true;
       });
-      var totalPages = Math.max(1, Math.ceil(filteredRecords.length / state.views.payments.perPage));
-      var page = Math.min(Math.max(1, Number(state.views.payments.page) || 1), totalPages);
-      var hasMore = page < totalPages;
+      var totalPages = 1;
+      var page = 1;
+      var hasMore = false;
       var selectedId = state.views.payments.selectedId;
-      var visibleRecords = filteredRecords.slice(
-        (page - 1) * state.views.payments.perPage,
-        page * state.views.payments.perPage
-      );
+      var visibleRecords = filteredRecords;
       var selectedRecord;
       var selectedAllocations = [];
 
@@ -256,7 +253,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         selectedPaymentDetailTab: selectedPaymentDetailTab,
         page: page,
         hasMore: hasMore,
-        pageSummary: buildLocalPageSummary(page, totalPages),
+        pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " payment" : " payments"),
         countLabel: state.views.payments.hasLoaded
           ? filteredRecords.length + (filteredRecords.length === 1 ? " payment" : " payments")
           : "0 payments",

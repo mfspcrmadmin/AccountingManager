@@ -34,15 +34,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var INVOICE_LINE_FIELDS = deps.INVOICE_LINE_FIELDS;
     var loadRecordsByCoql = deps.loadRecordsByCoql;
     var buildCoqlOrEqualsClause = deps.buildCoqlOrEqualsClause;
-    var INVOICE_ATTACHMENT_FIELDS = deps.INVOICE_ATTACHMENT_FIELDS;
     var buildZohoRecordViewUrl = deps.buildZohoRecordViewUrl;
     var getFriendlyLoadErrorMessage = deps.getFriendlyLoadErrorMessage;
     var ensureInvoicesLoaded = deps.ensureInvoicesLoaded;
     var paymentSelectionIsOpen = deps.paymentSelectionIsOpen;
     var onSelectInvoiceDuringPaymentCreation = deps.onSelectInvoiceDuringPaymentCreation;
     var onInvoicesLoaded = deps.onInvoicesLoaded;
-    var invoiceAttachmentPrefetchPromise = null;
-    var invoiceAttachmentPrefetchSignature = "";
+    var invoiceFileLoadQueue = [];
+    var invoiceFileLoadQueueIsRunning = false;
 
     function getCreatedByValue(record) {
       if (!record) {
@@ -75,6 +74,67 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         debugError("ensureInvoiceCreatedByLoaded failed", error, {
           invoiceId: invoiceId
         });
+      });
+    }
+
+    function ensureInvoiceFileLoaded(invoiceId) {
+      var invoice = (state.records.invoices || []).find(function (record) {
+        return record.id === invoiceId;
+      });
+
+      if (!invoice || Object.prototype.hasOwnProperty.call(invoice, "Invoice_File") || invoice._invoiceFileLoading) {
+        return Promise.resolve();
+      }
+
+      invoice._invoiceFileLoading = true;
+      renderAll();
+      return crm.getRecord(MODULES.invoices, invoiceId).then(function (detail) {
+        invoice.Invoice_File = detail && Object.prototype.hasOwnProperty.call(detail, "Invoice_File")
+          ? detail.Invoice_File
+          : null;
+      }).catch(function () {
+        invoice.Invoice_File = null;
+      }).finally(function () {
+        invoice._invoiceFileLoading = false;
+        renderAll();
+      });
+    }
+
+    function queueInvoiceFileLoad(invoiceId) {
+      var invoice = (state.records.invoices || []).find(function (record) {
+        return record.id === invoiceId;
+      });
+
+      if (!invoice || Object.prototype.hasOwnProperty.call(invoice, "Invoice_File") || invoice._invoiceFileLoading || invoice._invoiceFileQueued) {
+        return;
+      }
+
+      invoice._invoiceFileQueued = true;
+      invoiceFileLoadQueue.push(invoiceId);
+
+      if (invoiceFileLoadQueueIsRunning) {
+        return;
+      }
+
+      invoiceFileLoadQueueIsRunning = true;
+      (async function () {
+        var nextInvoiceId;
+        var nextInvoice;
+
+        while (invoiceFileLoadQueue.length) {
+          nextInvoiceId = invoiceFileLoadQueue.shift();
+          nextInvoice = (state.records.invoices || []).find(function (record) {
+            return record.id === nextInvoiceId;
+          });
+
+          if (nextInvoice) {
+            nextInvoice._invoiceFileQueued = false;
+          }
+
+          await ensureInvoiceFileLoaded(nextInvoiceId);
+        }
+      }()).finally(function () {
+        invoiceFileLoadQueueIsRunning = false;
       });
     }
 
@@ -271,22 +331,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         }
         renderAll();
       }
-    }
-
-    function getInvoiceAttachmentFileName(attachment) {
-      return String(
-        attachment && (
-          attachment.Display_Name ||
-          attachment.display_name ||
-          attachment.File_Name ||
-          attachment.file_name ||
-          attachment.file_Name ||
-          attachment.fileName ||
-          attachment.FileName ||
-          attachment.Name ||
-          attachment.name
-        ) || ""
-      ).trim();
     }
 
     function getInvoiceAttachmentCategory(attachment) {
@@ -615,6 +659,177 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       ).trim();
     }
 
+    function getInvoiceAttachmentMimeType(attachment) {
+      return String(attachment && (
+        attachment.type ||
+        attachment.mime_type ||
+        attachment.content_type ||
+        attachment.Content_Type ||
+        ""
+      ) || "").trim();
+    }
+
+    function logInvoiceAttachmentPreview(label, payload, isError) {
+      if (!global.console) {
+        return;
+      }
+
+      if (isError && typeof global.console.error === "function") {
+        global.console.error("[AccountingManager][Invoice preview] " + label, payload || {});
+      } else if (typeof global.console.info === "function") {
+        global.console.info("[AccountingManager][Invoice preview] " + label, payload || {});
+      }
+    }
+
+    function getInvoiceAttachmentPreviewDebugData(attachment, fileId) {
+      return {
+        name: getInvoiceAttachmentFileName(attachment),
+        sourceField: attachment && (attachment.Source_Field || attachment.source_field || ""),
+        attachmentId: attachment && (attachment.id || ""),
+        fileId: fileId || "",
+        dollarFileId: attachment && (attachment.$file_id || ""),
+        rawFileId: attachment && (attachment.file_id || attachment.File_ID || attachment.fileId || ""),
+        previewUrlPresent: Boolean(getInvoiceAttachmentPreviewUrl(attachment)),
+        availableKeys: attachment && typeof attachment === "object" ? Object.keys(attachment) : []
+      };
+    }
+
+    function toInvoiceAttachmentBlob(source, mimeType) {
+      if (source instanceof Blob) {
+        return source;
+      }
+
+      if (source instanceof ArrayBuffer || (source && ArrayBuffer.isView(source))) {
+        return new Blob([source], { type: mimeType || "application/octet-stream" });
+      }
+
+      return new Blob([source], { type: mimeType || "application/octet-stream" });
+    }
+
+    function revokeInvoiceAttachmentPreviewUrl(attachment) {
+      var objectUrl = attachment && attachment._previewObjectUrl;
+
+      if (!objectUrl) {
+        return;
+      }
+
+      if (global.URL && typeof global.URL.revokeObjectURL === "function") {
+        global.URL.revokeObjectURL(objectUrl);
+      }
+
+      if (attachment.Preview_Url === objectUrl) {
+        delete attachment.Preview_Url;
+      }
+      if (attachment.Download_Url === objectUrl) {
+        delete attachment.Download_Url;
+      }
+      delete attachment._previewObjectUrl;
+    }
+
+    function clearSelectedInvoiceAttachmentPreview() {
+      var invoiceId = state.views.invoices.selectedDetailId;
+      var previewKey = state.views.invoices.selectedAttachmentPreviewKey;
+      var attachments = state.invoiceAttachmentsByInvoiceId[invoiceId] || [];
+
+      attachments.forEach(function (attachment, index) {
+        if (getInvoiceAttachmentKey(attachment, index) === previewKey) {
+          revokeInvoiceAttachmentPreviewUrl(attachment);
+        }
+      });
+
+      state.views.invoices.selectedAttachmentPreviewKey = "";
+      state.invoiceAttachmentPreviewLoadingKey = "";
+    }
+
+    function clearInvoiceAttachmentPreviewUrls() {
+      Object.keys(state.invoiceAttachmentsByInvoiceId || {}).forEach(function (invoiceId) {
+        (state.invoiceAttachmentsByInvoiceId[invoiceId] || []).forEach(revokeInvoiceAttachmentPreviewUrl);
+      });
+      state.invoiceAttachmentPreviewLoadingKey = "";
+    }
+
+    async function ensureSelectedInvoiceAttachmentPreviewUrl(previewKey) {
+      var invoiceId = state.views.invoices.selectedDetailId;
+      var attachments = state.invoiceAttachmentsByInvoiceId[invoiceId] || [];
+      var attachment = null;
+      var fileId;
+      var source;
+      var objectUrl;
+
+      attachments.some(function (candidate, index) {
+        if (getInvoiceAttachmentKey(candidate, index) === previewKey) {
+          attachment = candidate;
+          return true;
+        }
+        return false;
+      });
+
+      if (!attachment || getInvoiceAttachmentPreviewUrl(attachment)) {
+        return;
+      }
+
+      fileId = getInvoiceAttachmentSdkFileId(attachment);
+      logInvoiceAttachmentPreview("attachment selected", {
+        invoiceId: invoiceId,
+        previewKey: previewKey,
+        attachment: getInvoiceAttachmentPreviewDebugData(attachment, fileId)
+      });
+      if (!fileId) {
+        logInvoiceAttachmentPreview("no usable file ID was returned by Zoho", {
+          invoiceId: invoiceId,
+          previewKey: previewKey,
+          attachment: getInvoiceAttachmentPreviewDebugData(attachment, fileId)
+        }, true);
+        return;
+      }
+
+      state.invoiceAttachmentPreviewLoadingKey = previewKey;
+      renderAll();
+
+      try {
+        source = await crm.getFile(fileId);
+        logInvoiceAttachmentPreview("getFile response received", {
+          invoiceId: invoiceId,
+          fileId: fileId,
+          valueType: typeof source,
+          isBlob: source instanceof Blob,
+          isArrayBuffer: source instanceof ArrayBuffer,
+          byteLength: source && (source.size || source.byteLength || 0),
+          mimeType: source && source.type || getInvoiceAttachmentMimeType(attachment)
+        });
+        if (typeof source === "string" && /^(https?:|data:|blob:)/i.test(source)) {
+          objectUrl = source;
+        } else {
+          objectUrl = global.URL.createObjectURL(toInvoiceAttachmentBlob(source, getInvoiceAttachmentMimeType(attachment)));
+          attachment._previewObjectUrl = objectUrl;
+        }
+
+        if (state.views.invoices.selectedDetailId !== invoiceId || state.views.invoices.selectedAttachmentPreviewKey !== previewKey) {
+          revokeInvoiceAttachmentPreviewUrl(attachment);
+          return;
+        }
+
+        attachment.Preview_Url = objectUrl;
+        attachment.Download_Url = attachment.Download_Url || objectUrl;
+      } catch (error) {
+        logInvoiceAttachmentPreview("getFile or preview conversion failed", {
+          invoiceId: invoiceId,
+          fileId: fileId,
+          message: error && error.message || String(error || ""),
+          name: error && error.name || ""
+        }, true);
+        debugError("ensureSelectedInvoiceAttachmentPreviewUrl failed", error, {
+          invoiceId: invoiceId,
+          fileId: fileId
+        });
+      } finally {
+        if (state.invoiceAttachmentPreviewLoadingKey === previewKey) {
+          state.invoiceAttachmentPreviewLoadingKey = "";
+        }
+        renderAll();
+      }
+    }
+
     function summarizeInvoiceFieldRawValue(rawValue) {
       if (rawValue == null) {
         return "empty";
@@ -765,14 +980,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           );
         }
 
-        if (sort.key === "invoiceFile") {
-          return compareValues(
-            getInvoiceAttachmentSummarySortValue(left, "Invoice_File"),
-            getInvoiceAttachmentSummarySortValue(right, "Invoice_File"),
-            sort.direction
-          );
-        }
-
         return compareValues(
           Date.parse(left.Invoice_Date || "") || 0,
           Date.parse(right.Invoice_Date || "") || 0,
@@ -782,9 +989,22 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var filteredTotalAmount = filteredRecords.reduce(function (sum, invoice) {
         return sum + helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES) * (getInvoiceType(invoice) === "Credit Note" ? -1 : 1);
       }, 0);
-      var selectedFilteredRecords = filteredRecords.filter(function (invoice) {
-        return Boolean(state.views.invoices.selectedIds[invoice.id]);
+      var selectedRecordsById = state.views.invoices.selectedRecordsById || {};
+      var recordsById = {};
+      var selectedFilteredRecords;
+
+      records.forEach(function (invoice) {
+        if (invoice && invoice.id) {
+          recordsById[String(invoice.id)] = invoice;
+          if (state.views.invoices.selectedIds[invoice.id]) {
+            selectedRecordsById[String(invoice.id)] = invoice;
+          }
+        }
       });
+      state.views.invoices.selectedRecordsById = selectedRecordsById;
+      selectedFilteredRecords = Object.keys(state.views.invoices.selectedIds).map(function (invoiceId) {
+        return recordsById[String(invoiceId)] || selectedRecordsById[String(invoiceId)] || null;
+      }).filter(Boolean);
       var selectedFilteredAmount = selectedFilteredRecords.reduce(function (sum, invoice) {
         var amount = (
           Number(helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.totalPayableAmount)) ||
@@ -793,13 +1013,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         );
         return sum + amount * (getInvoiceType(invoice) === "Credit Note" ? -1 : 1);
       }, 0);
-      var totalPages = Math.max(1, Math.ceil(filteredRecords.length / state.views.invoices.perPage));
-      var page = Math.min(Math.max(1, Number(state.views.invoices.page) || 1), totalPages);
-      var hasMore = page < totalPages;
-      var visibleRecords = filteredRecords.slice(
-        (page - 1) * state.views.invoices.perPage,
-        page * state.views.invoices.perPage
-      );
+      // Invoice records are already loaded as a complete filtered dataset.
+      // Keep one scrollable list instead of dividing it into local pages.
+      var totalPages = 1;
+      var page = 1;
+      var hasMore = false;
+      var visibleRecords = filteredRecords;
       var selectedVisibleCount = visibleRecords.filter(function (invoice) {
         return Boolean(state.views.invoices.selectedIds[invoice.id]);
       }).length;
@@ -809,9 +1028,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var selectedInvoiceLinesLoading = false;
       var selectedInvoiceAllocations = [];
       var selectedInvoiceAllocationsLoading = false;
-      var selectedInvoiceAttachments = [];
-      var selectedInvoiceAttachmentsLoading = false;
-      var selectedInvoiceAttachmentPreview = null;
       var selectedInvoiceDeleteImpact = null;
 
       if (selectedDetailId && !filteredRecords.some(function (invoice) { return invoice.id === selectedDetailId; })) {
@@ -828,14 +1044,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         selectedInvoiceLinesLoading = state.invoiceLineLoadingId === selectedDetailId;
         selectedInvoiceAllocations = state.invoiceAllocationsByInvoiceId[selectedDetailId] || [];
         selectedInvoiceAllocationsLoading = state.invoiceAllocationLoadingId === selectedDetailId;
-        selectedInvoiceAttachments = state.invoiceAttachmentsByInvoiceId[selectedDetailId] || [];
-        selectedInvoiceAttachmentsLoading = state.invoiceAttachmentLoadingId === selectedDetailId;
-
-        if (state.views.invoices.selectedAttachmentPreviewKey) {
-          selectedInvoiceAttachmentPreview = selectedInvoiceAttachments.find(function (attachment, index) {
-            return getInvoiceAttachmentKey(attachment, index) === state.views.invoices.selectedAttachmentPreviewKey;
-          }) || null;
-        }
       }
 
       if (selectedInvoice) {
@@ -856,6 +1064,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           ? filteredRecords.length + (filteredRecords.length === 1 ? " invoice" : " invoices")
           : "0 invoices",
         listTab: state.views.invoices.listTab || "basic",
+        showAttachments: Boolean(state.views.invoices.showAttachments),
         selectedDetailId: selectedDetailId,
         selectedInvoice: selectedInvoice,
         selectedInvoiceDetailTab: normalizeInvoiceDetailTab(state.views.invoices.detailTab || "basic"),
@@ -863,15 +1072,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         selectedInvoiceLinesLoading: selectedInvoiceLinesLoading,
         selectedInvoiceAllocations: selectedInvoiceAllocations,
         selectedInvoiceAllocationsLoading: selectedInvoiceAllocationsLoading,
-        selectedInvoiceAttachments: selectedInvoiceAttachments,
-        selectedInvoiceAttachmentsLoading: selectedInvoiceAttachmentsLoading,
-        selectedInvoiceAttachmentPreview: selectedInvoiceAttachmentPreview,
         selectedInvoiceDeleteImpact: selectedInvoiceDeleteImpact,
         visibleRecords: visibleRecords,
         selectedVisibleCount: selectedVisibleCount,
         page: page,
         hasMore: hasMore,
-        pageSummary: buildLocalPageSummary(page, totalPages),
+        pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " invoice" : " invoices"),
         statusOptions: buildCombinedStatusOptions(INVOICE_STATUS_FILTER_OPTIONS, records, "Status"),
         emptyMessage: state.currentTab === "invoices" && state.isLoading
           ? "Loading invoices..."
@@ -885,10 +1091,18 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function toggleInvoiceSelection(invoiceId, isSelected) {
+      var invoice = state.records.invoices.find(function (record) {
+        return String(record && record.id || "") === String(invoiceId || "");
+      });
+
       if (isSelected) {
         state.views.invoices.selectedIds[invoiceId] = true;
+        if (invoice) {
+          state.views.invoices.selectedRecordsById[invoiceId] = invoice;
+        }
       } else {
         delete state.views.invoices.selectedIds[invoiceId];
+        delete state.views.invoices.selectedRecordsById[invoiceId];
       }
 
       renderAll();
@@ -898,8 +1112,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       visibleRecords.forEach(function (invoice) {
         if (isSelected) {
           state.views.invoices.selectedIds[invoice.id] = true;
+          state.views.invoices.selectedRecordsById[invoice.id] = invoice;
         } else {
           delete state.views.invoices.selectedIds[invoice.id];
+          delete state.views.invoices.selectedRecordsById[invoice.id];
         }
       });
 
@@ -911,7 +1127,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       closeSelectedInvoiceDeletePanel(false);
       state.views.invoices.selectedDetailId = invoiceId || "";
-      state.views.invoices.selectedAttachmentPreviewKey = "";
       state.invoiceLineLoadingId = invoiceId || "";
       state.invoiceAllocationLoadingId = invoiceId || "";
       state.views.invoices.detailTab = activeDetailTab;
@@ -919,11 +1134,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       if (invoiceId) {
         ensureInvoiceCreatedByLoaded(invoiceId);
+        ensureInvoiceFileLoaded(invoiceId);
         ensureInvoiceLinesLoaded(invoiceId);
         ensureInvoiceAllocationsLoaded(invoiceId);
-        ensureInvoiceAttachmentsLoaded(invoiceId, {
-          relatedMode: "full"
-        });
       }
     }
 
@@ -934,75 +1147,18 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       state.views.invoices.detailTab = normalizedTab;
       renderAll();
 
-      if (normalizedTab === "basic" && selectedInvoiceId) {
-        ensureInvoiceAttachmentsLoaded(selectedInvoiceId, {
-          relatedMode: "full"
-        });
-      } else if (normalizedTab === "payment" && selectedInvoiceId) {
+      if (normalizedTab === "payment" && selectedInvoiceId) {
         ensureInvoiceLinesLoaded(selectedInvoiceId);
         ensureInvoiceAllocationsLoaded(selectedInvoiceId);
       }
     }
 
-    function prefetchVisibleInvoiceAttachments(visibleRecords) {
-      var records = (visibleRecords || []).filter(function (invoice) {
-        return Boolean(invoice && invoice.id);
-      });
-      var signature = records.map(function (invoice) {
-        return String(invoice.id);
-      }).join("|");
-
-      if (!signature || invoiceAttachmentPrefetchSignature === signature || invoiceAttachmentPrefetchPromise) {
-        return;
-      }
-
-      invoiceAttachmentPrefetchSignature = signature;
-      invoiceAttachmentPrefetchPromise = (async function () {
-        var index;
-        var invoice;
-
-        for (index = 0; index < records.length; index += 1) {
-          invoice = records[index];
-
-          if (!invoice || !invoice.id) {
-            continue;
-          }
-
-          if (state.currentTab !== "invoices" || (state.views.invoices.listTab || "basic") !== "attachments") {
-            break;
-          }
-
-          if (Object.prototype.hasOwnProperty.call(state.invoiceAttachmentsByInvoiceId, invoice.id)) {
-            continue;
-          }
-
-          await ensureInvoiceAttachmentsLoaded(invoice.id, {
-            relatedMode: "summary"
-          });
-        }
-      }()).finally(function () {
-        invoiceAttachmentPrefetchPromise = null;
-        if (invoiceAttachmentPrefetchSignature === signature) {
-          invoiceAttachmentPrefetchSignature = "";
-        }
-      });
-    }
-
-    function setInvoiceListTab(tabName) {
-      var normalizedTab = tabName === "attachments" ? "attachments" : "basic";
-
-      state.views.invoices.listTab = normalizedTab;
+    function setShowInvoiceAttachments(showAttachments) {
+      state.views.invoices.showAttachments = Boolean(showAttachments);
       renderAll();
     }
 
-    function setSelectedInvoiceAttachmentPreview(previewKey) {
-      state.views.invoices.selectedAttachmentPreviewKey = String(previewKey || "") === String(state.views.invoices.selectedAttachmentPreviewKey || "")
-        ? ""
-        : String(previewKey || "");
-      renderAll();
-    }
-
-    async function openInvoiceAttachmentFallback(invoiceId) {
+    async function openInvoiceInCrm(invoiceId) {
       var viewUrl;
       var openedWindow;
 
@@ -1049,8 +1205,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     async function refreshInvoicesTabData() {
       var options = arguments[0] || {};
 
-      invoiceAttachmentPrefetchPromise = null;
-      invoiceAttachmentPrefetchSignature = "";
       renderer.showError("");
       renderer.showNotice(options.loadingLabel || "Loading invoices...", {
         isLoading: true
@@ -1062,8 +1216,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         state.loaded.invoices = false;
         state.views.invoices.hasMore = false;
         state.records.invoices = [];
-        state.invoiceAttachmentsByInvoiceId = {};
-        state.invoiceAttachmentLoadingId = "";
         await ensureInvoicesLoaded();
         state.views.invoices.hasLoaded = options.loadedFlag !== false;
         if (typeof onInvoicesLoaded === "function") {
@@ -1088,24 +1240,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       selectDetail: selectInvoiceDetail,
       normalizeDetailTab: normalizeInvoiceDetailTab,
       setDetailTab: setInvoiceDetailTab,
-      prefetchVisibleAttachments: prefetchVisibleInvoiceAttachments,
-      setListTab: setInvoiceListTab,
-      setAttachmentPreview: setSelectedInvoiceAttachmentPreview,
-      openAttachmentFallback: openInvoiceAttachmentFallback,
+      setShowAttachments: setShowInvoiceAttachments,
+      openInCrm: openInvoiceInCrm,
       loadTabData: loadInvoicesTabData,
       refreshTabData: refreshInvoicesTabData,
       ensureAllocationsLoaded: ensureInvoiceAllocationsLoaded,
       ensureLinesLoaded: ensureInvoiceLinesLoaded,
-      ensureAttachmentsLoaded: ensureInvoiceAttachmentsLoaded,
-      getAttachmentFileName: getInvoiceAttachmentFileName,
-      getAttachmentCategory: getInvoiceAttachmentCategory,
-      getAttachmentPreviewUrl: getInvoiceAttachmentPreviewUrl,
-      getAttachmentDateValue: getInvoiceAttachmentDateValue,
-      getAttachmentKey: getInvoiceAttachmentKey,
-      getAttachmentsForField: getInvoiceAttachmentsForField,
-      getAttachmentSdkFileId: getInvoiceAttachmentSdkFileId,
-      getFieldAttachmentsSummary: getInvoiceFieldAttachmentsSummary,
-      syncLoadedInvoiceAttachmentFields: syncLoadedInvoiceAttachmentFields
+      queueFileLoad: queueInvoiceFileLoad,
     };
   };
 }(window));

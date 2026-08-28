@@ -54,6 +54,7 @@ var ns = global.AccountingManagerApp;
   var RESOLVE_SUPPLIER_PAYMENT_ACCOUNTING_ENTRY_FUNCTION = "accent_resolvesupplierpaymentaccountingentry";
   var REBUILD_ACCOUNTING_ENTRY_TOTALS_FUNCTION = "accent_rebuildaccountingentrytotals";
   var REBUILD_SUPPLIER_SETTLEMENT_TOTALS_FUNCTION = "rebuildsuppliersettlementtotals";
+  var MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION = "managesupplierpaymentallocations";
   var SYNC_SUPPLIER_FROM_EZUS_FUNCTION = "createsupplierinezus";
   var SYNC_PROJECT_FROM_EZUS_FUNCTION = "syncprojectfromezus";
   var RECALCULATE_SUPPLIER_SETTLEMENTS_FOR_BOOKING_FUNCTION = "recalculatesuppliersettlementsforbooking";
@@ -105,15 +106,11 @@ var ns = global.AccountingManagerApp;
   };
 
   function debugLog(label, payload) {
-    if (global.console && typeof global.console.log === "function") {
-      global.console.log("[AccountingManager] " + label, payload || "");
-    }
+    // Routine diagnostics are intentionally silent; errors still use debugError.
   }
 
   function debugWarn(label, payload) {
-    if (global.console && typeof global.console.warn === "function") {
-      global.console.warn("[AccountingManager] " + label, payload || "");
-    }
+    // Routine diagnostics are intentionally silent; errors still use debugError.
   }
 
   function debugError(label, error, payload) {
@@ -317,20 +314,9 @@ var ns = global.AccountingManagerApp;
     "Booking",
     "Supplier_Settlement",
     "Accounting_Status",
-    "Accounting_Posted_At",
-    "Invoice_File"
+    "Accounting_Posted_At"
   ];
-  var INVOICE_COQL_FIELDS = INVOICE_FIELDS.filter(function (fieldApi) {
-    return fieldApi !== "Invoice_File";
-  });
-
-  var INVOICE_ATTACHMENT_FIELDS = [
-    {
-      apiName: "Invoice_File",
-      label: "Invoice File",
-      category: "Final"
-    }
-  ];
+  var INVOICE_COQL_FIELDS = INVOICE_FIELDS.slice();
 
   var PAYMENT_FIELDS = [
     "id",
@@ -489,13 +475,10 @@ var ns = global.AccountingManagerApp;
     INVOICE_LINE_FIELDS: INVOICE_LINE_FIELDS,
     loadRecordsByCoql: loadRecordsByCoql,
     buildCoqlOrEqualsClause: buildCoqlOrEqualsClause,
-    INVOICE_ATTACHMENT_FIELDS: INVOICE_ATTACHMENT_FIELDS,
     buildZohoRecordViewUrl: buildZohoRecordViewUrl,
     getFriendlyLoadErrorMessage: getFriendlyLoadErrorMessage,
     ensureInvoicesLoaded: ensureInvoicesLoaded,
-    onInvoicesLoaded: function () {
-      state.views.invoices.selectedAttachmentPreviewKey = "";
-    }
+    onInvoicesLoaded: function () {}
   });
   var buildInvoicesView = invoicesModule.buildView;
   var toggleInvoiceSelection = invoicesModule.toggleSelection;
@@ -503,24 +486,13 @@ var ns = global.AccountingManagerApp;
   var selectInvoiceDetail = invoicesModule.selectDetail;
   var normalizeInvoiceDetailTab = invoicesModule.normalizeDetailTab;
   var setInvoiceDetailTab = invoicesModule.setDetailTab;
-  var prefetchVisibleInvoiceAttachments = invoicesModule.prefetchVisibleAttachments;
-  var setInvoiceListTab = invoicesModule.setListTab;
-  var setSelectedInvoiceAttachmentPreview = invoicesModule.setAttachmentPreview;
-  var openInvoiceAttachmentFallback = invoicesModule.openAttachmentFallback;
+  var setShowInvoiceAttachments = invoicesModule.setShowAttachments;
+  var openInvoiceInCrm = invoicesModule.openInCrm;
   var loadInvoicesTabData = invoicesModule.loadTabData;
   var refreshInvoicesTabData = invoicesModule.refreshTabData;
   var ensureInvoiceAllocationsLoaded = invoicesModule.ensureAllocationsLoaded;
   var ensureInvoiceLinesLoaded = invoicesModule.ensureLinesLoaded;
-  var ensureInvoiceAttachmentsLoaded = invoicesModule.ensureAttachmentsLoaded;
-  var getInvoiceAttachmentFileName = invoicesModule.getAttachmentFileName;
-  var getInvoiceAttachmentCategory = invoicesModule.getAttachmentCategory;
-  var getInvoiceAttachmentPreviewUrl = invoicesModule.getAttachmentPreviewUrl;
-  var getInvoiceAttachmentDateValue = invoicesModule.getAttachmentDateValue;
-  var getInvoiceAttachmentKey = invoicesModule.getAttachmentKey;
-  var getInvoiceAttachmentsForField = invoicesModule.getAttachmentsForField;
-  var getInvoiceAttachmentSdkFileId = invoicesModule.getAttachmentSdkFileId;
-  var getInvoiceFieldAttachmentsSummary = invoicesModule.getFieldAttachmentsSummary;
-  var syncLoadedInvoiceAttachmentFields = invoicesModule.syncLoadedInvoiceAttachmentFields;
+  var queueInvoiceFileLoad = invoicesModule.queueFileLoad;
   var remoteDataModule = ns.createRemoteDataModule({
     MODULES: MODULES,
     INVOICE_STATUS_FILTER_OPTIONS: INVOICE_STATUS_FILTER_OPTIONS,
@@ -779,11 +751,10 @@ var ns = global.AccountingManagerApp;
     getFunctionOutputObject: getFunctionOutputObject,
     getFunctionResponseResult: getFunctionResponseResult,
     recalculateSettlementTotalsForSettlementIds: recalculateSettlementTotalsForSettlementIds,
-    syncAccountingEntriesForInvoices: syncAccountingEntriesForInvoices,
-    syncAccountingEntryForPayment: syncAccountingEntryForPayment,
     getUniqueSettlementIdsFromInvoices: getUniqueSettlementIdsFromInvoices,
     invalidateInvoiceCreateSettlementCache: invalidateInvoiceCreateSettlementCache,
-    ensureInvoiceAllocationsLoaded: ensureInvoiceAllocationsLoaded
+    ensureInvoiceAllocationsLoaded: ensureInvoiceAllocationsLoaded,
+    openNativeEditForModule: openNativeEditForModule
   });
   var resetInvoicePaymentForm = paymentCreateModule.resetInvoicePaymentForm;
   var renderInvoicePaymentPanel = paymentCreateModule.renderInvoicePaymentPanel;
@@ -791,6 +762,10 @@ var ns = global.AccountingManagerApp;
   var openCreatePaymentPanel = paymentCreateModule.openCreatePaymentPanel;
   var onInvoicePaymentAllocationChange = paymentCreateModule.onInvoicePaymentAllocationChange;
   var onInvoicePaymentSupplierAccountChange = paymentCreateModule.onInvoicePaymentSupplierAccountChange;
+  var onInvoicePaymentSupplierAccountFocus = paymentCreateModule.onInvoicePaymentSupplierAccountFocus;
+  var onInvoicePaymentSupplierAccountInput = paymentCreateModule.onInvoicePaymentSupplierAccountInput;
+  var onInvoicePaymentSupplierAccountBlur = paymentCreateModule.onInvoicePaymentSupplierAccountBlur;
+  var onInvoicePaymentSupplierAccountOptionPointerDown = paymentCreateModule.onInvoicePaymentSupplierAccountOptionPointerDown;
   var onInvoicePaymentHeaderAccountFocus = paymentCreateModule.onInvoicePaymentHeaderAccountFocus;
   var onInvoicePaymentHeaderAccountInput = paymentCreateModule.onInvoicePaymentHeaderAccountInput;
   var onInvoicePaymentHeaderAccountKeydown = paymentCreateModule.onInvoicePaymentHeaderAccountKeydown;
@@ -798,7 +773,9 @@ var ns = global.AccountingManagerApp;
   var onInvoicePaymentHeaderAccountToggleClick = paymentCreateModule.onInvoicePaymentHeaderAccountToggleClick;
   var onInvoicePaymentHeaderAccountDropdownPointerDown = paymentCreateModule.onInvoicePaymentHeaderAccountDropdownPointerDown;
   var onInvoicePaymentHeaderAccountDropdownClick = paymentCreateModule.onInvoicePaymentHeaderAccountDropdownClick;
+  var onInvoicePaymentHeaderAccountDocumentPointerDown = paymentCreateModule.onInvoicePaymentHeaderAccountDocumentPointerDown;
   var onCreateSupplierPaymentSubmit = paymentCreateModule.onCreateSupplierPaymentSubmit;
+  var closePaymentCreateFeedback = paymentCreateModule.closePaymentCreateFeedback;
   var refreshInvoicesAndPaymentsAfterSupplierPayment = paymentCreateModule.refreshInvoicesAndPaymentsAfterSupplierPayment;
   var accountingModule = ns.createAccountingModule({
     state: state,
@@ -1095,6 +1072,9 @@ var ns = global.AccountingManagerApp;
         if (actionButton) {
           event.preventDefault();
           event.stopPropagation();
+          if (actionMenu) {
+            actionMenu.open = false;
+          }
           actionRow = actionButton.closest("[data-booking-id]");
           onBookingRowActionClick(
             actionButton.getAttribute("data-booking-row-action"),
@@ -1105,6 +1085,11 @@ var ns = global.AccountingManagerApp;
         }
 
         if (actionMenu) {
+          Array.prototype.forEach.call(global.document.querySelectorAll(".booking-row-actions[open]"), function (openActionMenu) {
+            if (openActionMenu !== actionMenu) {
+              openActionMenu.open = false;
+            }
+          });
           global.setTimeout(function () {
             var summary = actionMenu.querySelector("summary");
             var menu = actionMenu.querySelector(".booking-row-actions-menu");
@@ -1132,6 +1117,19 @@ var ns = global.AccountingManagerApp;
         }
       });
     }
+    global.document.addEventListener("click", function (event) {
+      var clickedActionMenu = event.target && event.target.closest && event.target.closest(".booking-row-actions");
+      var openActionMenus;
+
+      if (clickedActionMenu) {
+        return;
+      }
+
+      openActionMenus = global.document.querySelectorAll(".booking-row-actions[open]");
+      Array.prototype.forEach.call(openActionMenus, function (actionMenu) {
+        actionMenu.open = false;
+      });
+    });
     global.document.addEventListener("click", onDocumentClickCloseBookingActionsPopup);
     global.document.addEventListener("keydown", onDocumentKeydownCloseBookingActionsPopup);
     if (elements.dashboardRefresh) {
@@ -1276,6 +1274,7 @@ var ns = global.AccountingManagerApp;
     elements.invoicePaymentClose.addEventListener("click", closeCreatePaymentPanel);
     elements.invoicePaymentCancel.addEventListener("click", closeCreatePaymentPanel);
     elements.invoicePaymentForm.addEventListener("submit", onCreateSupplierPaymentSubmit);
+    elements.paymentCreateFeedbackClose.addEventListener("click", closePaymentCreateFeedback);
     elements.invoicePaymentName.addEventListener("input", function () {
       state.paymentCreation.form.name = elements.invoicePaymentName.value;
     });
@@ -1291,7 +1290,34 @@ var ns = global.AccountingManagerApp;
     elements.invoicePaymentAccountToggle.addEventListener("click", onInvoicePaymentHeaderAccountToggleClick);
     elements.invoicePaymentAccountDropdown.addEventListener("pointerdown", onInvoicePaymentHeaderAccountDropdownPointerDown);
     elements.invoicePaymentAccountDropdown.addEventListener("click", onInvoicePaymentHeaderAccountDropdownClick);
+    elements.invoicePaymentAccountDropdown.addEventListener("input", function (event) {
+      if (event.target && event.target.classList.contains("payment-account-dropdown-search")) {
+        onInvoicePaymentHeaderAccountInput(event);
+      }
+    });
+    elements.invoicePaymentAccountDropdown.addEventListener("keydown", function (event) {
+      if (event.target && event.target.classList.contains("payment-account-dropdown-search")) {
+        onInvoicePaymentHeaderAccountKeydown(event);
+      }
+    });
+    document.addEventListener("pointerdown", onInvoicePaymentHeaderAccountDocumentPointerDown);
     elements.invoicePaymentSupplierAccountsList.addEventListener("change", onInvoicePaymentSupplierAccountChange);
+    elements.invoicePaymentSupplierAccountsList.addEventListener("focusin", function (event) {
+      if (event.target && event.target.classList.contains("payment-supplier-account-input")) {
+        onInvoicePaymentSupplierAccountFocus(event);
+      }
+    });
+    elements.invoicePaymentSupplierAccountsList.addEventListener("input", function (event) {
+      if (event.target && event.target.classList.contains("payment-supplier-account-input")) {
+        onInvoicePaymentSupplierAccountInput(event);
+      }
+    });
+    elements.invoicePaymentSupplierAccountsList.addEventListener("focusout", function (event) {
+      if (event.target && event.target.classList.contains("payment-supplier-account-input")) {
+        onInvoicePaymentSupplierAccountBlur(event);
+      }
+    });
+    elements.invoicePaymentSupplierAccountsList.addEventListener("pointerdown", onInvoicePaymentSupplierAccountOptionPointerDown);
     elements.invoicePaymentAllocationsList.addEventListener("change", onInvoicePaymentAllocationChange);
 
     elements.paymentsPrevPage.addEventListener("click", function () {
@@ -1340,25 +1366,21 @@ var ns = global.AccountingManagerApp;
       state.views.paymentAllocations.page += 1;
       renderAll();
     });
-    elements.selectedPaymentEdit.addEventListener("click", onSelectedPaymentEditClick);
-    elements.selectedPaymentDelete.addEventListener("click", onSelectedPaymentDeleteClick);
-    elements.selectedPaymentEditAllocations.addEventListener("click", openPaymentAllocationEditor);
-    elements.paymentAllocationEditorClose.addEventListener("click", closePaymentAllocationEditor);
-    elements.paymentAllocationEditorCancel.addEventListener("click", closePaymentAllocationEditor);
-    elements.paymentAllocationEditorSave.addEventListener("click", savePaymentAllocationEditor);
-    elements.paymentAllocationEditorList.addEventListener("change", onPaymentAllocationEditorChange);
-    elements.paymentAllocationEditorList.addEventListener("click", onPaymentAllocationEditorActionClick);
-    elements.paymentAllocationEditorAddButton.addEventListener("click", function () {
-      elements.paymentAllocationEditorSearch.focus();
-    });
-    elements.paymentAllocationEditorSearchButton.addEventListener("click", searchInvoicesForPaymentAllocationEditor);
-    elements.paymentAllocationEditorSearch.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        searchInvoicesForPaymentAllocationEditor();
-      }
-    });
-    elements.paymentAllocationEditorSearchResults.addEventListener("click", onPaymentAllocationEditorAddInvoiceClick);
+    elements.selectedPaymentDelete.addEventListener("click", openPaymentUndoConfirmation);
+    elements.selectedPaymentManageAllocations.addEventListener("click", openPaymentAllocationManager);
+    elements.paymentAllocationManagerClose.addEventListener("click", closePaymentAllocationManager);
+    elements.paymentAllocationManagerSave.addEventListener("click", savePaymentAllocationManager);
+    elements.paymentAllocationManagerList.addEventListener("change", onPaymentAllocationManagerAmountChange);
+    elements.paymentAllocationManagerList.addEventListener("click", onPaymentAllocationManagerRemoveClick);
+    elements.paymentAllocationManagerFilter.addEventListener("input", filterPaymentAllocationManagerTable);
+    elements.paymentAllocationManagerAdd.addEventListener("click", openPaymentAllocationInvoicePicker);
+    elements.paymentAllocationManagerSearch.addEventListener("input", searchPaymentAllocationManagerInvoices);
+    elements.paymentAllocationManagerResults.addEventListener("click", addPaymentAllocationManagerInvoice);
+    elements.paymentAllocationInvoicePickerClose.addEventListener("click", closePaymentAllocationInvoicePicker);
+    elements.paymentAllocationFeedbackClose.addEventListener("click", closePaymentAllocationFeedback);
+    elements.paymentUndoConfirmationCancel.addEventListener("click", closePaymentUndoConfirmation);
+    elements.paymentUndoConfirmationConfirm.addEventListener("click", onSelectedPaymentDeleteClick);
+    elements.paymentUndoConfirmationClose.addEventListener("click", closePaymentUndoConfirmation);
     elements.selectedPaymentSyncAccounting.addEventListener("click", onSelectedPaymentSyncAccountingClick);
     elements.selectedPaymentRebuildAccountingTotals.addEventListener("click", onSelectedPaymentRebuildAccountingTotalsClick);
     elements.selectedPaymentExportBank.addEventListener("click", onSelectedPaymentExportBankClick);
@@ -1621,7 +1643,16 @@ var ns = global.AccountingManagerApp;
 
   function bindInvoicesLoadFilterControl(element, filterKey) {
     function updateValue() {
-      state.views.invoices.filters[filterKey] = element.value;
+      var nextValue = element.value;
+
+      /* Text inputs emit `change` again when they lose focus. Without this
+       * guard, clicking an invoice checkbox reloaded the same results and
+       * swallowed the first selection. */
+      if (state.views.invoices.filters[filterKey] === nextValue &&
+        (filterKey !== "dateFrom" && filterKey !== "dateTo" || state.views.invoices.filters.datePreset === "specific")) {
+        return;
+      }
+      state.views.invoices.filters[filterKey] = nextValue;
       if (filterKey === "dateFrom" || filterKey === "dateTo") {
         state.views.invoices.filters.datePreset = "specific";
         elements.invoiceFilterDatePreset.value = "specific";
@@ -3086,6 +3117,20 @@ var ns = global.AccountingManagerApp;
     return record;
   }
 
+  function isPendingDashboardSettlement(settlement) {
+    var status = String(settlement && settlement.Admin_Status || "").toLowerCase();
+    var remainingToPay;
+    var remainingToInvoice;
+
+    if (status.indexOf("paid") !== -1 || status.indexOf("cancel") !== -1 || status.indexOf("no services") !== -1) {
+      return false;
+    }
+
+    remainingToPay = Math.max(0, getInvoiceCreateSettlementUnpaidInvoicedAmount(settlement));
+    remainingToInvoice = Math.max(0, getInvoiceCreateSettlementRemainingToInvoice(settlement));
+    return remainingToPay > 0 || remainingToInvoice > 0;
+  }
+
   function syncSettlementStateFromRebuildDetail(detail) {
     var settlementId = String(detail && detail.settlement_id || "");
     var updatedSettlementRecord;
@@ -3110,7 +3155,7 @@ var ns = global.AccountingManagerApp;
 
     if (state.dashboard && Array.isArray(state.dashboard.pendingSettlements)) {
       state.dashboard.pendingSettlements = upsertRecordById(state.dashboard.pendingSettlements, updatedSettlementRecord)
-        .filter(isDashboardSettlementPending);
+        .filter(isPendingDashboardSettlement);
     }
 
     syncInvoiceCreateSettlementRecord(updatedSettlementRecord);
@@ -3172,8 +3217,6 @@ var ns = global.AccountingManagerApp;
     var variant;
     var updateResult;
     var refreshedInvoice;
-    var fieldState;
-    var matchedAttachment;
 
     uploadRecord = assertCrmMutationSucceeded(
       await crm.uploadFile(selectedFile),
@@ -3221,36 +3264,23 @@ var ns = global.AccountingManagerApp;
       );
 
       refreshedInvoice = await crm.getRecord(MODULES.invoices, invoiceId);
-      syncLoadedInvoiceAttachmentFields(refreshedInvoice);
-      fieldState = getInvoiceFieldAttachmentsSummary(refreshedInvoice, fieldApiName);
-      matchedAttachment = fieldState.fieldAttachments.find(function (attachment) {
-        return getInvoiceAttachmentFileName(attachment) === selectedFile.name ||
-          getInvoiceAttachmentSdkFileId(attachment) === uploadedFileId;
-      }) || null;
 
-      if (matchedAttachment || fieldState.fieldAttachments.length || fieldState.rawValue) {
+      if (refreshedInvoice && refreshedInvoice[fieldApiName]) {
         return {
           uploadedFileId: uploadedFileId,
           updateResult: updateResult,
           variantLabel: variant.label,
-          refreshedInvoice: refreshedInvoice,
-          fieldState: fieldState,
-          matchedAttachment: matchedAttachment
+          refreshedInvoice: refreshedInvoice
         };
       }
     }
 
     refreshedInvoice = await crm.getRecord(MODULES.invoices, invoiceId);
-    syncLoadedInvoiceAttachmentFields(refreshedInvoice);
-    fieldState = getInvoiceFieldAttachmentsSummary(refreshedInvoice, fieldApiName);
-
     return {
       uploadedFileId: uploadedFileId,
       updateResult: updateResult,
       variantLabel: payloadVariants[payloadVariants.length - 1].label,
-      refreshedInvoice: refreshedInvoice,
-      fieldState: fieldState,
-      matchedAttachment: null
+      refreshedInvoice: refreshedInvoice
     };
   }
 
@@ -4782,7 +4812,6 @@ var ns = global.AccountingManagerApp;
       delete state.views.invoices.selectedIds[deletedInvoice.id];
       delete state.invoiceLinesByInvoiceId[deletedInvoice.id];
       delete state.invoiceAllocationsByInvoiceId[deletedInvoice.id];
-      delete state.invoiceAttachmentsByInvoiceId[deletedInvoice.id];
     }
 
     state.views.invoices.selectedDetailId = "";
@@ -5012,19 +5041,6 @@ var ns = global.AccountingManagerApp;
     }
   }
 
-  async function onSelectedPaymentEditClick() {
-    var paymentId = state.views.payments.selectedId;
-
-    if (!paymentId) {
-      renderer.showError("Select a payment first.");
-      return;
-    }
-
-    await openNativeEditForModule(MODULES.payments, paymentId, "payment", refreshPaymentsTabData, {
-      preferNewTab: true
-    });
-  }
-
   function getSelectedPaymentAllocations(paymentId) {
     return state.records.payAllocations.filter(function (allocation) {
       return String(helpers.getLookupId(allocation.Supplier_Payment) || "") === String(paymentId || "");
@@ -5050,607 +5066,329 @@ var ns = global.AccountingManagerApp;
     return booksStatus === "posted" || booksStatus === "reconciled" || accountingStatus === "posted";
   }
 
-  function closePaymentAllocationEditor() {
-    state.paymentAllocationEditor.isOpen = false;
-    state.paymentAllocationEditor.isLoading = false;
-    state.paymentAllocationEditor.isSaving = false;
-    state.paymentAllocationEditor.paymentId = "";
-    state.paymentAllocationEditor.sourcePaymentId = "";
-    state.paymentAllocationEditor.sourceAllocations = [];
-    state.paymentAllocationEditor.allocations = [];
-    state.paymentAllocationEditor.invoices = [];
-    state.paymentAllocationEditor.allocationAmounts = {};
-    state.paymentAllocationEditor.addInvoiceQuery = "";
-    state.paymentAllocationEditor.addInvoiceResults = [];
-    state.paymentAllocationEditor.isSearchingInvoices = false;
-    state.paymentAllocationEditor.error = "";
+  function closePaymentAllocationManager() {
+    state.paymentAllocationManager = { isOpen: false, isLoading: false, isSaving: false, paymentId: "", paymentAmount: 0, invoices: [], amounts: {}, unlinkedAmounts: {}, newInvoiceIds: {}, isPickerOpen: false, tableQuery: "", searchRequestId: 0, searchResults: [], pickerError: "", error: "" };
     renderAll();
   }
 
-  function getAllocationEditorInvoiceLabel(invoice) {
-    return helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.number) || invoice.Name || invoice.id;
-  }
-
-  function getAllocationEditorOtherPaidAmount(invoiceId, paymentId) {
-    return roundCurrency(state.records.payAllocations.filter(function (allocation) {
-      return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === String(invoiceId || "") &&
-        String(helpers.getLookupId(allocation.Supplier_Payment) || "") !== String(paymentId || "");
-    }).reduce(function (total, allocation) {
-      return total + (Number(allocation.Allocated_Amount) || 0);
-    }, 0));
-  }
-
-  async function openPaymentAllocationEditor() {
+  async function openPaymentAllocationManager() {
     var paymentId = String(state.views.payments.selectedId || "");
     var payment = state.records.payments.find(function (record) { return String(record.id) === paymentId; });
     var allocations;
-    var cachedAllocations;
-    var remoteAllocations = [];
-    var supplierIds;
-    var invoicesById = {};
-    var allocationAmounts = {};
-
-    if (!paymentId || !payment) {
-      renderer.showError("Select a payment first.");
-      return;
-    }
-    if (isPaymentAllocationEditingLocked(payment)) {
-      renderer.showError("This payment cannot be edited because it is reconciled, cancelled, or its accounting entry is already posted. Create a reversal instead.");
-      return;
-    }
-
-    cachedAllocations = state.paymentAllocationEditor.sourcePaymentId === paymentId
-      ? state.paymentAllocationEditor.sourceAllocations.slice()
-      : getSelectedPaymentAllocations(paymentId);
-    try {
-      remoteAllocations = await crm.searchRecord(
-        MODULES.payAllocations,
-        "(Supplier_Payment:equals:" + paymentId + ")"
-      );
-    } catch (allocationSearchError) {
-      debugError("load payment allocations for editor failed", allocationSearchError, { paymentId: paymentId });
-    }
-    allocations = remoteAllocations.length ? remoteAllocations : cachedAllocations;
-    debugLog("payment allocation editor source", {
-      paymentId: paymentId,
-      cachedAllocationCount: cachedAllocations.length,
-      remoteAllocationCount: remoteAllocations.length,
-      selectedAllocationCount: allocations.length
-    });
-    supplierIds = helpers.uniqueNonEmpty(allocations.map(function (allocation) {
-      return helpers.getLookupId(allocation.Supplier);
-    }));
-    if (!allocations.length) {
-      renderer.showError("No allocations were found for this payment. Check the browser console for the payment-allocation-editor source trace.");
-      return;
-    }
-
-    allocations.forEach(function (allocation) {
-      var invoiceId = String(helpers.getLookupId(allocation.Supplier_Invoice) || "");
-      if (!invoiceId) {
-        return;
-      }
-      allocationAmounts[invoiceId] = roundCurrency(Number(allocation.Allocated_Amount) || 0);
-      invoicesById[invoiceId] = {
-        id: invoiceId,
-        Name: helpers.getLookupName(allocation.Supplier_Invoice) || allocation.Name || invoiceId,
-        Invoice_Total: roundCurrency((Number(allocation.Allocated_Amount) || 0) + getAllocationEditorOtherPaidAmount(invoiceId, paymentId)),
-        Supplier: allocation.Supplier,
-        Supplier_Name: allocation.Supplier_Name,
-        Supplier_Code: allocation.Supplier_Code || allocation.TP_Reference || allocation.Connection_Reference,
-        Booking: allocation.Booking,
-        Supplier_Settlement: allocation.Supplier_Settlement,
-        MFSP_Reference: allocation.MFSP_Reference,
-        __allocationEditorFallback: true
-      };
-    });
-
-    state.paymentAllocationEditor.isOpen = true;
-    state.paymentAllocationEditor.isLoading = false;
-    state.paymentAllocationEditor.isSaving = false;
-    state.paymentAllocationEditor.paymentId = paymentId;
-    state.paymentAllocationEditor.allocations = allocations.slice();
-    state.paymentAllocationEditor.invoices = Object.keys(invoicesById).map(function (invoiceId) {
-      return invoicesById[invoiceId];
-    });
-    state.paymentAllocationEditor.allocationAmounts = allocationAmounts;
-    state.paymentAllocationEditor.addInvoiceQuery = "";
-    state.paymentAllocationEditor.addInvoiceResults = [];
-    state.paymentAllocationEditor.isSearchingInvoices = false;
-    state.paymentAllocationEditor.error = "";
+    var invoices;
+    if (!paymentId || !payment) { renderer.showError("Select a payment first."); return; }
+    if (isPaymentAllocationEditingLocked(payment) || isPostedAccountingEntry(await getPaymentAccountingEntryForAllocationEdit(paymentId))) { renderer.showError("This payment is locked. Create a reversal instead."); return; }
+    state.paymentAllocationManager.isOpen = true;
+    state.paymentAllocationManager.isLoading = true;
+    state.paymentAllocationManager.paymentId = paymentId;
+    state.paymentAllocationManager.paymentAmount = roundCurrency(Number(payment.Payment_Amount) || 0);
+    state.paymentAllocationManager.error = "";
     renderAll();
-
-    /* Supplier records provide TP_Reference when the invoice has no Supplier_Code. */
-    Promise.all(supplierIds.map(function (supplierId) {
-      return crm.getRecord(MODULES.suppliers, supplierId).catch(function (error) {
-        debugError("load supplier code for allocation editor failed", error, { supplierId: supplierId });
-        return null;
-      });
-    })).then(function (supplierRecords) {
-      supplierRecords.forEach(function (supplier) {
-        if (supplier && supplier.id) {
-          state.supplierIndex[String(supplier.id)] = supplier;
-        }
-      });
-      if (state.paymentAllocationEditor.isOpen && state.paymentAllocationEditor.paymentId === paymentId) {
-        renderAll();
-      }
-    });
-
+    try {
+      allocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
+      invoices = await Promise.all(allocations.map(function (allocation) { return crm.getRecord(MODULES.invoices, helpers.getLookupId(allocation.Supplier_Invoice)); }));
+      state.paymentAllocationManager.invoices = invoices.filter(Boolean);
+      state.paymentAllocationManager.amounts = {};
+      allocations.forEach(function (allocation) { state.paymentAllocationManager.amounts[String(helpers.getLookupId(allocation.Supplier_Invoice))] = roundCurrency(Number(allocation.Allocated_Amount) || 0); });
+    } catch (error) { state.paymentAllocationManager.error = error.message || "Could not load payment allocations."; }
+    state.paymentAllocationManager.isLoading = false;
+    renderAll();
   }
 
-  function renderPaymentAllocationEditor() {
-    var editor = state.paymentAllocationEditor;
-    var paymentId = editor.paymentId;
-    var total = 0;
-    var existingByInvoice = {};
-    var additions = 0;
-    var removals = 0;
-    var updates = 0;
-    var currentAllocationCount = 0;
-    var rows;
-
-    if (!elements.paymentAllocationEditor) {
-      return;
-    }
-    elements.paymentAllocationEditor.hidden = !editor.isOpen;
-    if (!editor.isOpen) {
-      return;
-    }
-    elements.paymentAllocationEditorLoading.hidden = !editor.isLoading;
-    elements.paymentAllocationEditorContent.hidden = editor.isLoading;
-    elements.paymentAllocationEditorError.hidden = !editor.error;
-    elements.paymentAllocationEditorError.textContent = editor.error || "";
-    if (editor.isLoading) {
-      return;
-    }
-
-    elements.paymentAllocationEditorSearch.value = editor.addInvoiceQuery || "";
-    elements.paymentAllocationEditorAddButton.disabled = editor.isSaving;
-    elements.paymentAllocationEditorSearch.disabled = editor.isSaving;
-    elements.paymentAllocationEditorSearchButton.disabled = editor.isSaving || editor.isSearchingInvoices;
-    elements.paymentAllocationEditorSearchButton.textContent = editor.isSearchingInvoices ? "Searching..." : "Search";
-    elements.paymentAllocationEditorSearchResults.hidden = !editor.addInvoiceResults.length && !editor.isSearchingInvoices;
-    elements.paymentAllocationEditorSearchResults.innerHTML = editor.addInvoiceResults.map(function (invoice) {
-      var invoiceId = String(invoice.id || "");
-      var alreadyAdded = (editor.invoices || []).some(function (record) { return String(record.id || "") === invoiceId; });
-      return [
-        '<div class="payment-allocation-editor-search-result">',
-        "<div><strong>" + helpers.escapeHtml(getAllocationEditorInvoiceLabel(invoice)) + "</strong><span>" + helpers.escapeHtml((getSupplierNameFromInvoice(invoice) || "-") + " | " + helpers.formatCurrency(helpers.getInvoicePendingAmount(invoice, FIELD_CANDIDATES))) + "</span></div>",
-        '<button type="button" class="button secondary compact-action-button" data-payment-allocation-editor-add="' + helpers.escapeHtml(invoiceId) + '"' + (alreadyAdded || editor.isSaving ? " disabled" : "") + ">" + (alreadyAdded ? "Added" : "Add") + "</button>",
-        "</div>"
-      ].join("");
-    }).join("") || (editor.isSearchingInvoices ? "Searching invoices..." : "");
-
-    (editor.allocations || []).forEach(function (allocation) {
-      existingByInvoice[String(helpers.getLookupId(allocation.Supplier_Invoice) || "")] = roundCurrency(Number(allocation.Allocated_Amount) || 0);
-      currentAllocationCount += 1;
-    });
-
-    rows = (editor.allocations || []).map(function (allocation) {
-      var linkedInvoiceId = String(helpers.getLookupId(allocation.Supplier_Invoice) || "");
-      var loadedInvoice = editor.invoices.find(function (invoice) { return String(invoice.id || "") === linkedInvoiceId; });
-      return loadedInvoice || {
-        id: linkedInvoiceId,
-        Name: helpers.getLookupName(allocation.Supplier_Invoice) || allocation.Name || linkedInvoiceId,
-        Invoice_Total: Number(allocation.Allocated_Amount) || 0,
-        Supplier: allocation.Supplier,
-        Supplier_Name: allocation.Supplier_Name,
-        Supplier_Code: allocation.Supplier_Code || allocation.TP_Reference || allocation.Connection_Reference,
-        Booking: allocation.Booking,
-        Supplier_Settlement: allocation.Supplier_Settlement,
-        __allocationEditorFallback: true
-      };
-    });
-    (editor.invoices || []).forEach(function (invoice) {
-      var invoiceId = String(invoice && invoice.id || "");
-      var isAlreadyRepresented = rows.some(function (row) { return String(row && row.id || "") === invoiceId; });
-      if (invoiceId && !isAlreadyRepresented) {
-        rows.push(invoice);
-      }
-    });
-
-    elements.paymentAllocationEditorList.innerHTML = rows.map(function (invoice) {
-      var invoiceId = String(invoice.id);
-      var currentValue = roundCurrency(Number(editor.allocationAmounts[invoiceId]) || 0);
-      var totalPayable = roundCurrency(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES));
-      var available = Math.max(0, roundCurrency(totalPayable - getAllocationEditorOtherPaidAmount(invoiceId, paymentId)));
-      var existingAmount = existingByInvoice[invoiceId];
-      var isExisting = existingAmount !== undefined;
-      var isMarkedForRemoval = isExisting && currentValue <= 0;
-      var isAdded = !isExisting && currentValue > 0;
-      var rowClass = isMarkedForRemoval
-        ? " payment-allocation-editor-row-removing"
-        : isAdded
-        ? " payment-allocation-editor-row-adding"
-        : "";
-      var actionLabel = isExisting
-        ? isMarkedForRemoval ? "Restore allocation" : "Unlink allocation"
-        : isAdded ? "Unlink new allocation" : "Add allocation";
-      var actionSymbol = isExisting
-        ? isMarkedForRemoval ? "&#8634; Restore" : "&times; Unlink"
-        : isAdded ? "&times; Unlink" : "+ Add";
-      var actionClass = (isExisting || isAdded ? " is-remove" : "") + (isMarkedForRemoval ? " is-marked" : "");
-      total += currentValue;
-      if (isMarkedForRemoval) {
-        removals += 1;
-      } else if (isAdded) {
-        additions += 1;
-      } else if (isExisting && currentValue !== existingAmount) {
-        updates += 1;
-      }
-      return [
-        '<tr class="' + rowClass.trim() + '">',
-        "<td>" + helpers.escapeHtml(getAllocationEditorInvoiceLabel(invoice)) + "</td>",
-        "<td>" + helpers.escapeHtml(getSupplierConnectionReferenceFromInvoice(invoice) || "-") + "</td>",
-        '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(available)) + "</td>",
-        '<td class="numeric-cell"><input type="number" min="0" max="' + helpers.escapeHtml(String(available)) + '" step="0.01" data-payment-allocation-editor-invoice="' + helpers.escapeHtml(invoiceId) + '" value="' + helpers.escapeHtml(String(currentValue)) + '"' + (editor.isSaving ? " disabled" : "") + "></td>",
-        '<td><button type="button" class="button secondary compact-action-button payment-allocation-editor-action' + actionClass + '" data-payment-allocation-editor-action="' + helpers.escapeHtml(invoiceId) + '" title="' + helpers.escapeHtml(actionLabel) + '" aria-label="' + helpers.escapeHtml(actionLabel) + '"' + (editor.isSaving ? " disabled" : "") + ">" + actionSymbol + "</button></td>",
-        "</tr>"
-      ].join("");
-    }).join("") || '<tr><td colspan="5" class="table-empty">No editable invoices were found for this payment.</td></tr>';
-    elements.paymentAllocationEditorTotal.textContent = "Total: " + helpers.formatCurrency(total);
-    elements.paymentAllocationEditorChanges.textContent = additions || removals || updates
-      ? "On save: " + removals + " invoice" + (removals === 1 ? "" : "s") + " will be removed, " + additions + " added and " + updates + " amount" + (updates === 1 ? "" : "s") + " updated."
-      : currentAllocationCount + " current allocation" + (currentAllocationCount === 1 ? " is" : "s are") + " linked to this payment. No unsaved changes.";
-    elements.paymentAllocationEditorChanges.classList.toggle("has-removals", removals > 0);
-    elements.paymentAllocationEditorSave.disabled = editor.isSaving || !rows.length;
-    elements.paymentAllocationEditorCancel.disabled = editor.isSaving;
-    debugLog("payment allocation editor rendered", {
-      paymentId: paymentId,
-      allocationRows: (editor.allocations || []).length,
-      renderedRows: rows.length,
-      addControlFound: Boolean(elements.paymentAllocationEditorAddButton),
-      removeActions: elements.paymentAllocationEditorList.querySelectorAll("button[data-payment-allocation-editor-action]").length
-    });
+  function renderPaymentAllocationManager() {
+    var manager = state.paymentAllocationManager;
+    var applied = 0;
+    var addedInvoiceCount = 0;
+    var visibleInvoices;
+    if (!elements.paymentAllocationManager) { return; }
+    elements.paymentAllocationManager.hidden = !manager.isOpen;
+    elements.paymentAllocationInvoicePicker.hidden = !manager.isOpen || !manager.isPickerOpen;
+    if (!manager.isOpen) { return; }
+    elements.paymentAllocationManagerError.hidden = !manager.error;
+    elements.paymentAllocationManagerError.textContent = manager.error || "";
+    elements.paymentAllocationInvoicePickerError.hidden = !manager.pickerError;
+    elements.paymentAllocationInvoicePickerError.textContent = manager.pickerError || "";
+    manager.invoices.forEach(function (invoice) { var id = String(invoice.id); var amount = roundCurrency(Number(manager.amounts[id]) || 0); if (!Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id)) { applied += amount; } if (Object.prototype.hasOwnProperty.call(manager.newInvoiceIds, id) && amount > 0) { addedInvoiceCount += 1; } });
+    visibleInvoices = manager.invoices.filter(function (invoice) { return invoiceMatchesPaymentAllocationQuery(invoice, manager.tableQuery); });
+    elements.paymentAllocationManagerList.innerHTML = manager.isLoading ? '<tr><td colspan="3">Loading allocations...</td></tr>' : visibleInvoices.map(function (invoice) {
+      var id = String(invoice.id); var amount = roundCurrency(Number(manager.amounts[id]) || 0); var isPendingUnlink = Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id); var isNewInvoice = Object.prototype.hasOwnProperty.call(manager.newInvoiceIds, id); var rowClass = isPendingUnlink ? 'is-pending-unlink' : isNewInvoice ? 'is-new-allocation' : '';
+      return '<tr class="' + rowClass + '"><td>' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '</td><td class="numeric-cell"><input type="number" min="0" step="0.01" data-payment-manager-amount="' + helpers.escapeHtml(id) + '" value="' + helpers.escapeHtml(String(amount)) + '"' + (isPendingUnlink ? ' disabled' : '') + '></td><td class="payment-allocation-manager-action"><button class="button compact-action-button payment-allocation-manager-unlink' + (isPendingUnlink ? ' is-restore' : isNewInvoice ? ' is-remove-new' : '') + '" type="button" ' + (isPendingUnlink ? 'data-payment-manager-restore' : isNewInvoice ? 'data-payment-manager-remove-new' : 'data-payment-manager-unlink') + '="' + helpers.escapeHtml(id) + '">' + (isPendingUnlink ? 'Restore' : isNewInvoice ? 'Remove' : 'Unlink') + '</button></td></tr>';
+    }).join("") || '<tr><td colspan="3">' + (manager.tableQuery ? 'No allocated invoices match this search.' : 'No invoices allocated. Use Add invoice to add one.') + '</td></tr>';
+    elements.paymentAllocationManagerResults.innerHTML = manager.searchResults.map(function (invoice) { return '<div class="payment-allocation-manager-result"><span title="' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '</span><button class="button secondary compact-action-button" type="button" data-payment-manager-add="' + helpers.escapeHtml(invoice.id) + '">Add</button></div>'; }).join("") || (elements.paymentAllocationManagerSearch.value.trim() ? '<p class="empty-state">No invoices found.</p>' : '<p class="empty-state">Start typing to find an invoice.</p>');
+    elements.paymentAllocationManagerTotal.textContent = "Applied: " + helpers.formatCurrency(applied);
+    elements.paymentAllocationManagerRemaining.textContent = "Unapplied: " + helpers.formatCurrency(Math.max(0, manager.paymentAmount - applied));
+    elements.paymentAllocationManagerAddedCount.textContent = "Invoices to add: " + String(addedInvoiceCount);
+    elements.paymentAllocationManagerSave.disabled = manager.isLoading || manager.isSaving;
   }
 
-  function onPaymentAllocationEditorChange(event) {
-    var target = event.target;
-    var invoiceId;
-    var amount;
-    if (!target || !target.matches("input[data-payment-allocation-editor-invoice]")) {
-      return;
-    }
-    invoiceId = target.getAttribute("data-payment-allocation-editor-invoice");
-    amount = Number(target.value);
-    state.paymentAllocationEditor.allocationAmounts[invoiceId] = Number.isFinite(amount) && amount >= 0 ? roundCurrency(amount) : 0;
-    renderPaymentAllocationEditor();
-  }
+  function onPaymentAllocationManagerAmountChange(event) { var id = event.target.getAttribute("data-payment-manager-amount"); if (id) { state.paymentAllocationManager.amounts[id] = Math.max(0, roundCurrency(Number(event.target.value) || 0)); renderPaymentAllocationManager(); } }
+  function onPaymentAllocationManagerRemoveClick(event) { var id = event.target.getAttribute("data-payment-manager-unlink"); var restoreId = event.target.getAttribute("data-payment-manager-restore"); var removeNewId = event.target.getAttribute("data-payment-manager-remove-new"); var manager = state.paymentAllocationManager; if (id) { manager.unlinkedAmounts[id] = manager.amounts[id]; renderPaymentAllocationManager(); } else if (restoreId) { delete manager.unlinkedAmounts[restoreId]; renderPaymentAllocationManager(); } else if (removeNewId) { manager.invoices = manager.invoices.filter(function (invoice) { return String(invoice.id) !== String(removeNewId); }); delete manager.amounts[removeNewId]; delete manager.newInvoiceIds[removeNewId]; renderPaymentAllocationManager(); } }
+  function invoiceMatchesPaymentAllocationQuery(invoice, query) { var text = [helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES), helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.number), invoice.Name, invoice.Invoice_Number].join(" "); return !String(query || "").trim() || helpers.matchesText(text, query); }
+  function filterPaymentAllocationManagerTable() { state.paymentAllocationManager.tableQuery = String(elements.paymentAllocationManagerFilter.value || "").trim(); renderPaymentAllocationManager(); }
+  function openPaymentAllocationInvoicePicker() { state.paymentAllocationManager.isPickerOpen = true; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; renderPaymentAllocationManager(); window.setTimeout(function () { elements.paymentAllocationManagerSearch.focus(); }, 0); }
+  function closePaymentAllocationInvoicePicker() { state.paymentAllocationManager.isPickerOpen = false; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); }
+  async function searchPaymentAllocationManagerInvoices() { var manager = state.paymentAllocationManager; var query = String(elements.paymentAllocationManagerSearch.value || "").trim(); var localMatches; var remoteBatches; var searchError = null; var requestId = manager.searchRequestId + 1; manager.searchRequestId = requestId; manager.pickerError = ""; if (!query) { manager.searchResults = []; renderPaymentAllocationManager(); return; } localMatches = state.records.invoices.filter(function (invoice) { return invoiceMatchesPaymentAllocationQuery(invoice, query); }); remoteBatches = await Promise.all([crm.searchRecord(MODULES.invoices, "(Name:starts_with:" + helpers.escapeCriteriaValue(query) + ")").catch(function (error) { searchError = error; return []; }), crm.searchWord(MODULES.invoices, query).catch(function (error) { searchError = searchError || error; return []; })]); if (requestId !== manager.searchRequestId) { return; } manager.searchResults = localMatches.concat(remoteBatches[0], remoteBatches[1]).filter(function (invoice, index, records) { return records.findIndex(function (record) { return String(record.id) === String(invoice.id); }) === index; }).filter(function (invoice) { return !manager.invoices.some(function (allocated) { return String(allocated.id) === String(invoice.id); }); }); if (!manager.searchResults.length && searchError) { manager.pickerError = "Could not search invoices. Try a different invoice number or name."; } renderPaymentAllocationManager(); }
+  function addPaymentAllocationManagerInvoice(event) { var id = event.target.getAttribute("data-payment-manager-add"); var manager = state.paymentAllocationManager; var invoice = manager.searchResults.find(function (record) { return String(record.id) === String(id); }); if (invoice && !manager.invoices.some(function (record) { return String(record.id) === String(id); })) { manager.invoices.push(invoice); manager.amounts[id] = Math.max(0, roundCurrency(helpers.getInvoicePendingAmount(invoice, FIELD_CANDIDATES))); manager.newInvoiceIds[id] = true; manager.searchResults = []; manager.isPickerOpen = false; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); } }
+  function renderPaymentAllocationFeedback() { var feedback = state.paymentAllocationFeedback; if (!elements.paymentAllocationFeedbackPopup) { return; } elements.paymentAllocationFeedbackPopup.hidden = !feedback.isOpen; if (!feedback.isOpen) { return; } elements.paymentAllocationFeedbackPopup.classList.toggle("is-success", feedback.mode === "success"); elements.paymentAllocationFeedbackPopup.classList.toggle("is-error", feedback.mode === "error"); elements.paymentAllocationFeedbackSpinner.hidden = feedback.mode !== "loading"; elements.paymentAllocationFeedbackEyebrow.textContent = feedback.mode === "success" ? "Completed" : feedback.mode === "error" ? "Could not save" : "Saving allocations"; elements.paymentAllocationFeedbackTitle.textContent = feedback.mode === "success" ? "Allocations saved" : feedback.mode === "error" ? "Allocations were not saved" : "Saving changes..."; elements.paymentAllocationFeedbackMessage.textContent = feedback.message; elements.paymentAllocationFeedbackClose.hidden = feedback.mode === "loading"; }
+  function showPaymentAllocationFeedback(mode, message) { state.paymentAllocationFeedback.isOpen = true; state.paymentAllocationFeedback.mode = mode; state.paymentAllocationFeedback.message = message; renderPaymentAllocationFeedback(); }
+  function closePaymentAllocationFeedback() { if (state.paymentAllocationFeedback.mode === "loading") { return; } state.paymentAllocationFeedback = { isOpen: false, mode: "loading", message: "" }; renderPaymentAllocationFeedback(); }
+  async function savePaymentAllocationManager() { var manager = state.paymentAllocationManager; var allocations = {}; var pendingUnlinkInvoiceIds = Object.keys(manager.unlinkedAmounts); var result; var liveAllocations; var stillLinkedInvoiceIds; if (manager.isSaving) { return; } manager.invoices.forEach(function (invoice) { var id = String(invoice.id); allocations[invoice.id] = Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id) ? 0 : roundCurrency(Number(manager.amounts[id]) || 0); }); manager.isSaving = true; manager.error = ""; showPaymentAllocationFeedback("loading", "Updating allocations and recalculating related invoices and settlements."); renderPaymentAllocationManager(); try { var response = await crm.executeFunction(MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION, { supplierPaymentId: manager.paymentId, allocationsDataString: JSON.stringify({ allocations: allocations }) }); result = getFunctionOutputObject(response) || getFunctionResponseResult(response); if (result && (result.error || result.success === false)) { throw new Error(result.message || "Could not update allocations."); } if (pendingUnlinkInvoiceIds.length) { liveAllocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + manager.paymentId + ")"); stillLinkedInvoiceIds = (liveAllocations || []).map(function (allocation) { return String(helpers.getLookupId(allocation.Supplier_Invoice) || ""); }).filter(function (invoiceId) { return pendingUnlinkInvoiceIds.indexOf(invoiceId) !== -1; }); if (stillLinkedInvoiceIds.length) { throw new Error("Zoho did not confirm removal of " + String(stillLinkedInvoiceIds.length) + " allocation(s). The changes were not treated as saved."); } } await refreshInvoicesAndPaymentsAfterSupplierPayment(); renderer.showNotice("Payment allocations and balances were recalculated.", { tone: "success" }); closePaymentAllocationManager(); showPaymentAllocationFeedback("success", result && result.message || "Allocations, invoice balances and settlement totals were updated successfully."); } catch (error) { debugError("savePaymentAllocationManager failed", error, { paymentId: manager.paymentId, requestedAllocations: allocations, pendingUnlinkInvoiceIds: pendingUnlinkInvoiceIds, functionResult: result || null }); manager.isSaving = false; manager.error = ""; renderPaymentAllocationManager(); showPaymentAllocationFeedback("error", error.message || "Could not update allocations."); } }
 
-  function onPaymentAllocationEditorActionClick(event) {
-    var target = event.target.closest("button[data-payment-allocation-editor-action]");
-    var invoiceId;
-    var invoice;
-    var paymentId;
-    var totalPayable;
-    var available;
+  function renderPaymentUndoConfirmation() {
+    var undo = state.paymentUndo;
+    var invoiceNames;
+    var isResult = undo.mode === "success" || undo.mode === "error";
 
-    if (!target || state.paymentAllocationEditor.isSaving) {
+    if (!elements.paymentUndoConfirmationPopup) {
       return;
     }
-    invoiceId = target.getAttribute("data-payment-allocation-editor-action");
-    invoice = state.paymentAllocationEditor.invoices.find(function (record) { return String(record.id) === invoiceId; });
-    paymentId = state.paymentAllocationEditor.paymentId;
-    if (!invoice) {
+
+    elements.paymentUndoConfirmationPopup.hidden = !undo.isOpen;
+    if (!undo.isOpen) {
       return;
     }
-    if (Number(state.paymentAllocationEditor.allocationAmounts[invoiceId]) > 0) {
-      state.paymentAllocationEditor.allocationAmounts[invoiceId] = 0;
+
+    elements.paymentUndoConfirmationPopup.classList.toggle("is-loading", undo.mode === "loading");
+    elements.paymentUndoConfirmationPopup.classList.toggle("is-success", undo.mode === "success");
+    elements.paymentUndoConfirmationPopup.classList.toggle("is-error", undo.mode === "error");
+    elements.paymentUndoConfirmationEyebrow.textContent = undo.mode === "success"
+      ? "Completed"
+      : undo.mode === "error"
+      ? "Undo failed"
+      : undo.mode === "loading"
+      ? "Processing"
+      : "Destructive action";
+    elements.paymentUndoConfirmationTitle.textContent = undo.mode === "success"
+      ? "Payment undone"
+      : undo.mode === "error"
+      ? "Payment could not be fully undone"
+      : undo.mode === "loading"
+      ? "Undoing payment..."
+      : "Undo payment?";
+
+    if (isResult) {
+      elements.paymentUndoConfirmationCopy.textContent = undo.resultMessage;
+      elements.paymentUndoConfirmationList.innerHTML = "";
+    } else if (undo.mode === "loading") {
+      elements.paymentUndoConfirmationCopy.innerHTML = '<span class="payment-undo-spinner" aria-hidden="true"></span>Undoing payment and recalculating related invoices...';
+      elements.paymentUndoConfirmationList.innerHTML = "";
+    } else if (undo.isLoading) {
+      elements.paymentUndoConfirmationCopy.textContent = "Checking the payment allocations and affected invoices...";
+      elements.paymentUndoConfirmationList.innerHTML = "";
+    } else if (!undo.allocations.length) {
+      elements.paymentUndoConfirmationCopy.textContent = "No payment allocations are currently linked to this payment. Confirming will permanently remove only the payment record.";
+      elements.paymentUndoConfirmationList.innerHTML = "";
     } else {
-      var existingAllocation = getSelectedPaymentAllocations(paymentId).find(function (allocation) {
-        return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === invoiceId;
-      });
-      if (existingAllocation) {
-        state.paymentAllocationEditor.allocationAmounts[invoiceId] = roundCurrency(Number(existingAllocation.Allocated_Amount) || 0);
-      } else {
-        totalPayable = roundCurrency(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES));
-        available = Math.max(0, roundCurrency(totalPayable - getAllocationEditorOtherPaidAmount(invoiceId, paymentId)));
-        state.paymentAllocationEditor.allocationAmounts[invoiceId] = available;
-      }
+      invoiceNames = helpers.uniqueNonEmpty(undo.allocations.map(function (allocation) {
+        return helpers.getLookupName(allocation.Supplier_Invoice) || allocation.Name || "Related invoice";
+      }));
+      elements.paymentUndoConfirmationCopy.textContent = "This permanently removes " + String(undo.allocations.length) + " payment allocation(s), restores the balances and payment status of " + String(invoiceNames.length) + " related invoice(s), and recalculates the affected settlement totals.";
+      elements.paymentUndoConfirmationList.innerHTML = invoiceNames.map(function (invoiceName) {
+        return '<span>' + helpers.escapeHtml(invoiceName) + "</span>";
+      }).join("");
     }
-    renderPaymentAllocationEditor();
+
+    elements.paymentUndoConfirmationCancel.hidden = Boolean(isResult || undo.mode === "loading");
+    elements.paymentUndoConfirmationConfirm.hidden = Boolean(isResult || undo.mode === "loading");
+    elements.paymentUndoConfirmationClose.hidden = !isResult;
+    elements.paymentUndoConfirmationCancel.disabled = Boolean(undo.isBusy);
+    elements.paymentUndoConfirmationConfirm.disabled = Boolean(undo.isLoading || undo.isBusy);
+    elements.paymentUndoConfirmationConfirm.textContent = "Confirm undo";
   }
 
-  async function searchInvoicesForPaymentAllocationEditor() {
-    var editor = state.paymentAllocationEditor;
-    var query = String(elements.paymentAllocationEditorSearch.value || "").trim();
-
-    if (!editor.isOpen || editor.isSaving) {
-      return;
-    }
-    editor.addInvoiceQuery = query;
-    editor.addInvoiceResults = [];
-    if (!query) {
-      renderPaymentAllocationEditor();
+  function closePaymentUndoConfirmation() {
+    if (state.paymentUndo.isBusy) {
       return;
     }
 
-    editor.isSearchingInvoices = true;
-    renderPaymentAllocationEditor();
-    try {
-      editor.addInvoiceResults = await crm.searchRecord(
-        MODULES.invoices,
-        "(Name:contains:" + helpers.escapeCriteriaValue(query) + ")"
-      );
-    } catch (error) {
-      debugError("search invoices for payment allocation editor failed", error, { query: query });
-      editor.error = error.message || "Could not search invoices.";
-    } finally {
-      editor.isSearchingInvoices = false;
-      renderPaymentAllocationEditor();
-    }
+    state.paymentUndo.isOpen = false;
+    state.paymentUndo.isLoading = false;
+    state.paymentUndo.paymentId = "";
+    state.paymentUndo.allocations = [];
+    state.paymentUndo.mode = "confirmation";
+    state.paymentUndo.resultMessage = "";
+    renderPaymentUndoConfirmation();
   }
 
-  async function onPaymentAllocationEditorAddInvoiceClick(event) {
-    var target = event.target.closest("button[data-payment-allocation-editor-add]");
-    var invoiceId;
-    var selectedInvoice;
-    var paymentId;
-    var totalPayable;
-    var available;
-
-    if (!target || state.paymentAllocationEditor.isSaving) {
-      return;
-    }
-    invoiceId = target.getAttribute("data-payment-allocation-editor-add");
-    selectedInvoice = state.paymentAllocationEditor.addInvoiceResults.find(function (invoice) {
-      return String(invoice && invoice.id || "") === invoiceId;
-    });
-    if (!selectedInvoice) {
-      return;
-    }
-
-    try {
-      selectedInvoice = await crm.getRecord(MODULES.invoices, invoiceId) || selectedInvoice;
-      paymentId = state.paymentAllocationEditor.paymentId;
-      totalPayable = roundCurrency(helpers.getInvoiceTotalAmount(selectedInvoice, FIELD_CANDIDATES));
-      available = Math.max(0, roundCurrency(totalPayable - getAllocationEditorOtherPaidAmount(invoiceId, paymentId)));
-      if (available <= 0) {
-        state.paymentAllocationEditor.error = "This invoice has no remaining amount available for allocation.";
-        renderPaymentAllocationEditor();
-        return;
-      }
-      state.paymentAllocationEditor.invoices.push(selectedInvoice);
-      state.paymentAllocationEditor.allocationAmounts[invoiceId] = available;
-      state.paymentAllocationEditor.addInvoiceResults = [];
-      state.paymentAllocationEditor.addInvoiceQuery = "";
-      state.paymentAllocationEditor.error = "";
-    } catch (error) {
-      debugError("add invoice to payment allocation editor failed", error, { invoiceId: invoiceId });
-      state.paymentAllocationEditor.error = error.message || "Could not add this invoice.";
-    }
-    renderPaymentAllocationEditor();
-  }
-
-  function buildAllocationPayloadForEditor(payment, invoice, amount) {
-    var payload = {
-      Name: (payment.Name || payment.id) + " - " + getAllocationEditorInvoiceLabel(invoice),
-      Supplier_Payment: { id: payment.id },
-      Supplier_Invoice: { id: invoice.id },
-      Allocated_Amount: amount,
-      Allocation_Date: payment.Payment_Date,
-      Payment_Date: payment.Payment_Date,
-      Payment_Status: payment.Status,
-      Payment_Accounting_Status: payment.Accounting_Status,
-      Movement_Type: payment.Movement_Type,
-      Supplier: invoice.Supplier,
-      Supplier_Name: getSupplierNameFromInvoice(invoice),
-      Booking: invoice.Booking,
-      Supplier_Settlement: invoice.Supplier_Settlement,
-      Ezus_Supplier_Reference: invoice.Ezus_Supplier_Reference,
-      MFSP_Reference: invoice.MFSP_Reference,
-      Invoice_Date: invoice.Invoice_Date,
-      Invoice_Status: invoice.Status
-    };
-    Object.keys(payload).forEach(function (key) {
-      if (payload[key] === "" || payload[key] === null || payload[key] === undefined) {
-        delete payload[key];
-      }
-    });
-    return payload;
-  }
-
-  async function savePaymentAllocationEditor() {
-    var editor = state.paymentAllocationEditor;
-    var paymentId = editor.paymentId;
-    var payment = state.records.payments.find(function (record) { return String(record.id) === paymentId; });
-    var existingAllocations;
-    var existingByInvoice = {};
-    var invoicesById = {};
-    var desiredEntries = [];
-    var affectedInvoiceIds = [];
-    var affectedSettlementIds = [];
-    var finalAllocations;
-    var saveSucceeded = false;
-
-    if (!payment || !editor.isOpen || editor.isSaving) {
-      return;
-    }
-    if (isPaymentAllocationEditingLocked(payment)) {
-      editor.error = "This payment was locked while you were editing it. Reload it before making changes.";
-      renderAll();
-      return;
-    }
-
-    try {
-      if (isPostedAccountingEntry(await getPaymentAccountingEntryForAllocationEdit(paymentId))) {
-        editor.error = "The accounting entry for this payment has already been posted. Create a reversal instead of changing its allocations.";
-        renderAll();
-        return;
-      }
-    } catch (accountingCheckError) {
-      debugError("payment allocation accounting preflight failed", accountingCheckError, { paymentId: paymentId });
-      editor.error = "The accounting status could not be verified, so no changes were made. Please try again.";
-      renderAll();
-      return;
-    }
-
-    existingAllocations = getSelectedPaymentAllocations(paymentId);
-    existingAllocations.forEach(function (allocation) {
-      existingByInvoice[String(helpers.getLookupId(allocation.Supplier_Invoice) || "")] = allocation;
-    });
-    editor.invoices.forEach(function (invoice) { invoicesById[String(invoice.id)] = invoice; });
-
-    for (var invoiceIndex = 0; invoiceIndex < editor.invoices.length; invoiceIndex += 1) {
-      var invoice = editor.invoices[invoiceIndex];
-      var invoiceId = String(invoice.id);
-      var desiredAmount = roundCurrency(Number(editor.allocationAmounts[invoiceId]) || 0);
-      var totalPayable = roundCurrency(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES));
-      var available = Math.max(0, roundCurrency(totalPayable - getAllocationEditorOtherPaidAmount(invoiceId, paymentId)));
-      var existingAmount = existingByInvoice[invoiceId] ? roundCurrency(Number(existingByInvoice[invoiceId].Allocated_Amount) || 0) : 0;
-
-      if (desiredAmount > available) {
-        editor.error = "The allocation for " + getAllocationEditorInvoiceLabel(invoice) + " cannot exceed " + helpers.formatCurrency(available) + ".";
-        renderAll();
-        return;
-      }
-      if (desiredAmount !== existingAmount) {
-        desiredEntries.push({ invoice: invoice, invoiceId: invoiceId, amount: desiredAmount, existing: existingByInvoice[invoiceId] || null });
-        affectedInvoiceIds.push(invoiceId);
-        if (getInvoiceSettlementId(invoice)) {
-          affectedSettlementIds.push(getInvoiceSettlementId(invoice));
-        }
-      }
-    }
-    if (!desiredEntries.length) {
-      closePaymentAllocationEditor();
-      return;
-    }
-
-    editor.isSaving = true;
-    editor.error = "";
-    renderer.showError("");
-    renderer.showNotice("Updating payment allocations and balances...", { isLoading: true });
-    renderer.setLoading(true, "Updating payment allocations...");
-    renderAll();
-
-    try {
-      for (var entryIndex = 0; entryIndex < desiredEntries.length; entryIndex += 1) {
-        var entry = desiredEntries[entryIndex];
-        if (entry.existing && entry.amount <= 0) {
-          assertCrmMutationSucceeded(await crm.deleteRecord(MODULES.payAllocations, entry.existing.id), "Zoho CRM did not confirm the allocation removal.");
-        } else if (entry.existing) {
-          assertCrmMutationSucceeded(await crm.updateRecord(MODULES.payAllocations, entry.existing.id, {
-            Allocated_Amount: entry.amount,
-            Allocation_Date: payment.Payment_Date,
-            Payment_Date: payment.Payment_Date,
-            Payment_Status: payment.Status
-          }), "Zoho CRM did not confirm the allocation update.");
-        } else if (entry.amount > 0) {
-          assertCrmMutationSucceeded(await crm.insertRecord(MODULES.payAllocations, buildAllocationPayloadForEditor(payment, entry.invoice, entry.amount)), "Zoho CRM did not confirm the new allocation.");
-        }
-      }
-
-      state.loaded.payAllocations = false;
-      state.records.payAllocations = [];
-      resetPaymentRelationshipIndexes();
-      await ensurePayAllocationsLoaded();
-      finalAllocations = getSelectedPaymentAllocations(paymentId);
-
-      for (var affectedIndex = 0; affectedIndex < affectedInvoiceIds.length; affectedIndex += 1) {
-        var affectedInvoiceId = affectedInvoiceIds[affectedIndex];
-        var affectedInvoice = invoicesById[affectedInvoiceId] || await crm.getRecord(MODULES.invoices, affectedInvoiceId);
-        var paidAmount = roundCurrency(state.records.payAllocations.filter(function (allocation) {
-          return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === String(affectedInvoiceId || "");
-        }).reduce(function (total, allocation) { return total + (Number(allocation.Allocated_Amount) || 0); }, 0));
-        var invoiceTotal = roundCurrency(helpers.getInvoiceTotalAmount(affectedInvoice, FIELD_CANDIDATES));
-        var unpaidAmount = Math.max(0, roundCurrency(invoiceTotal - paidAmount));
-        var invoicePayload = { Amount_Paid: paidAmount, Unpaid_Invoiced_Amount: unpaidAmount };
-        if (paidAmount >= invoiceTotal && invoiceTotal > 0) {
-          invoicePayload.Status = "Paid";
-        } else if (paidAmount > 0) {
-          invoicePayload.Status = "Partially Paid";
-        } else if (String(affectedInvoice.Status || "").toLowerCase() === "paid" || String(affectedInvoice.Status || "").toLowerCase() === "partially paid") {
-          invoicePayload.Status = "Approved";
-        }
-        assertCrmMutationSucceeded(await crm.updateRecord(MODULES.invoices, affectedInvoiceId, invoicePayload), "Zoho CRM did not confirm the invoice balance update.");
-        if (getInvoiceSettlementId(affectedInvoice)) {
-          affectedSettlementIds.push(getInvoiceSettlementId(affectedInvoice));
-        }
-      }
-
-      assertCrmMutationSucceeded(await crm.updateRecord(MODULES.payments, paymentId, {
-        Payment_Amount: roundCurrency(finalAllocations.reduce(function (total, allocation) { return total + (Number(allocation.Allocated_Amount) || 0); }, 0)),
-        Allocation_Count: finalAllocations.length,
-        Supplier_Count: helpers.uniqueNonEmpty(finalAllocations.map(function (allocation) { return helpers.getLookupId(allocation.Supplier); })).length,
-        Booking_Count: helpers.uniqueNonEmpty(finalAllocations.map(function (allocation) { return helpers.getLookupId(allocation.Booking); })).length,
-        Settlement_Count: helpers.uniqueNonEmpty(finalAllocations.map(function (allocation) { return helpers.getLookupId(allocation.Supplier_Settlement); })).length,
-        Context_Mode: helpers.uniqueNonEmpty(finalAllocations.map(function (allocation) { return helpers.getLookupId(allocation.Supplier); })).length > 1 ? "Mixed" : "Single"
-      }), "Zoho CRM did not confirm the payment totals update.");
-
-      invalidateInvoiceCreateSettlementCache();
-      await recalculateSettlementTotalsForSettlementIds(helpers.uniqueNonEmpty(affectedSettlementIds));
-      if (String(payment.Accounting_Status || "").trim() && String(payment.Accounting_Status || "").trim().toLowerCase() !== "pending") {
-        await syncAccountingEntryForPayment(paymentId, { silent: true, skipRender: true });
-      }
-      await refreshInvoicesAndPaymentsAfterSupplierPayment();
-      closePaymentAllocationEditor();
-      saveSucceeded = true;
-      renderer.showNotice("Payment allocations, invoice balances and related settlements were recalculated successfully.", { tone: "success" });
-    } catch (error) {
-      debugError("savePaymentAllocationEditor failed", error, { paymentId: paymentId, affectedInvoiceIds: affectedInvoiceIds });
-      state.loaded.payAllocations = false;
-      editor.isSaving = false;
-      editor.error = "Some changes may have been saved before the error. Reload the payment and review the balances: " + (error.message || "Unknown error");
-      renderer.showError(editor.error);
-      renderAll();
-    } finally {
-      renderer.setLoading(false);
-      if (state.paymentAllocationEditor.isOpen) {
-        state.paymentAllocationEditor.isSaving = false;
-      }
-      if (!saveSucceeded) {
-        renderer.showNotice("");
-      }
-    }
-  }
-
-  async function onSelectedPaymentDeleteClick() {
-    var paymentId = state.views.payments.selectedId;
-    var relatedAllocations;
-    var relatedSettlementIds;
-    var deleted;
+  async function openPaymentUndoConfirmation() {
+    var paymentId = String(state.views.payments.selectedId || "");
+    var allocations = [];
 
     if (!paymentId) {
       renderer.showError("Select a payment first.");
       return;
     }
 
-    relatedAllocations = state.records.payAllocations.filter(function (allocation) {
-      return helpers.getLookupId(allocation.Supplier_Payment) === paymentId;
-    });
-    relatedSettlementIds = getUniqueSettlementIdsFromAllocations(relatedAllocations);
-    state.views.payments.selectedId = "";
-    deleted = await deleteModuleRecord(MODULES.payments, paymentId, "payment");
+    state.paymentUndo.isOpen = true;
+    state.paymentUndo.isLoading = true;
+    state.paymentUndo.isBusy = false;
+    state.paymentUndo.mode = "confirmation";
+    state.paymentUndo.paymentId = paymentId;
+    state.paymentUndo.allocations = [];
+    state.paymentUndo.resultMessage = "";
+    renderPaymentUndoConfirmation();
 
-    if (!deleted) {
-      state.views.payments.selectedId = paymentId;
-      renderAll();
+    try {
+      allocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
+    } catch (error) {
+      debugError("load payment allocations for undo confirmation failed", error, { paymentId: paymentId });
+      allocations = getSelectedPaymentAllocations(paymentId);
+    }
+
+    if (state.paymentUndo.paymentId !== paymentId) {
+      return;
+    }
+
+    state.paymentUndo.allocations = allocations;
+    state.paymentUndo.isLoading = false;
+    renderPaymentUndoConfirmation();
+  }
+
+  async function onSelectedPaymentDeleteClick() {
+    var paymentId = state.views.payments.selectedId;
+    var relatedAllocations;
+    var liveAllocations;
+    var allocationsToDelete;
+    var relatedSettlementIds = [];
+    var relatedInvoiceIds = [];
+    var payment;
+    var accountingEntry;
+    var deletedAllocationCount = 0;
+    var undo = state.paymentUndo;
+
+    if (!paymentId || !undo.isOpen || undo.paymentId !== String(paymentId) || undo.isLoading || undo.isBusy) {
+      renderer.showError("Select a payment first.");
       return;
     }
 
     try {
-      renderer.showNotice("Refreshing related records...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, "Refreshing related records...");
-      await refreshInvoicesAndPaymentsAfterSupplierPayment();
+      payment = state.records.payments.find(function (record) {
+        return String(record.id) === String(paymentId);
+      }) || await crm.getRecord(MODULES.payments, paymentId);
+
+      if (isPaymentAllocationEditingLocked(payment)) {
+        throw new Error("This payment cannot be undone because it is reconciled, cancelled, or already exported to accounting. Create a reversal instead.");
+      }
+
+      accountingEntry = await getPaymentAccountingEntryForAllocationEdit(paymentId);
+      if (isPostedAccountingEntry(accountingEntry)) {
+        throw new Error("This payment cannot be undone because its accounting entry is posted or reconciled. Create a reversal instead.");
+      }
+
+      // Keep the allocation snapshot from when the warning was opened.  An
+      // earlier attempt can have removed allocations before failing later in
+      // the rollback; the snapshot is still needed to restore those invoices.
+      relatedAllocations = undo.allocations.slice();
+      try {
+        liveAllocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
+      } catch (allocationReloadError) {
+        debugError("reload payment allocations before undo failed", allocationReloadError, { paymentId: paymentId });
+        liveAllocations = getSelectedPaymentAllocations(paymentId);
+      }
+      liveAllocations = Array.isArray(liveAllocations) ? liveAllocations : [];
+      if (!relatedAllocations.length) {
+        relatedAllocations = liveAllocations.slice();
+      }
+      allocationsToDelete = liveAllocations;
+
+      relatedInvoiceIds = helpers.uniqueNonEmpty(relatedAllocations.map(function (allocation) {
+        return helpers.getLookupId(allocation.Supplier_Invoice);
+      }));
+      relatedSettlementIds = getUniqueSettlementIdsFromAllocations(relatedAllocations);
+      undo.isBusy = true;
+      undo.mode = "loading";
+      renderPaymentUndoConfirmation();
+      renderer.showError("");
+      renderAll();
+
+      for (var allocationIndex = 0; allocationIndex < allocationsToDelete.length; allocationIndex += 1) {
+        var allocation = allocationsToDelete[allocationIndex];
+        var allocationId = String(allocation && allocation.id || "");
+
+        if (!allocationId) {
+          throw new Error("A payment allocation did not include a Zoho record ID, so it could not be removed safely.");
+        }
+        assertCrmMutationSucceeded(
+          await crm.deleteRecord(MODULES.payAllocations, allocationId),
+          "Zoho CRM did not confirm removal of payment allocation " + (allocation.Name || allocationId) + "."
+        );
+        deletedAllocationCount += 1;
+      }
+
+      state.loaded.payAllocations = false;
+      state.records.payAllocations = [];
+      resetPaymentRelationshipIndexes();
+      await ensurePayAllocationsLoaded();
+
+      for (var invoiceIndex = 0; invoiceIndex < relatedInvoiceIds.length; invoiceIndex += 1) {
+        var invoiceId = String(relatedInvoiceIds[invoiceIndex]);
+        var invoice = await crm.getRecord(MODULES.invoices, invoiceId);
+        var previousStatus = relatedAllocations.map(function (allocation) {
+          return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === invoiceId
+            ? String(allocation.Invoice_Status || "").trim()
+            : "";
+        }).find(function (status) {
+          return status && status.toLowerCase() !== "paid" && status.toLowerCase() !== "partially paid";
+        }) || "Approved";
+        var remainingPaidAmount = roundCurrency(state.records.payAllocations.filter(function (allocation) {
+          return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === invoiceId;
+        }).reduce(function (total, allocation) {
+          return total + (Number(allocation.Allocated_Amount) || 0);
+        }, 0));
+        var invoiceTotal = roundCurrency(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES));
+        var invoicePayload = {
+          Amount_Paid: remainingPaidAmount,
+          Unpaid_Invoiced_Amount: Math.max(0, roundCurrency(invoiceTotal - remainingPaidAmount))
+        };
+
+        if (remainingPaidAmount >= invoiceTotal && invoiceTotal > 0) {
+          invoicePayload.Status = "Paid";
+        } else if (remainingPaidAmount > 0) {
+          invoicePayload.Status = "Partially Paid";
+        } else {
+          invoicePayload.Status = previousStatus;
+        }
+
+        assertCrmMutationSucceeded(
+          await crm.updateRecord(MODULES.invoices, invoiceId, invoicePayload),
+          "Zoho CRM did not confirm the invoice balance rollback."
+        );
+        if (getInvoiceSettlementId(invoice)) {
+          relatedSettlementIds.push(getInvoiceSettlementId(invoice));
+        }
+        delete state.invoiceAllocationsByInvoiceId[invoiceId];
+      }
+
+      assertCrmMutationSucceeded(
+        await crm.deleteRecord(MODULES.payments, paymentId),
+        "Zoho CRM did not confirm deletion of payment " + paymentId + "."
+      );
+
       invalidateInvoiceCreateSettlementCache();
-      await recalculateSettlementTotalsForSettlementIds(relatedSettlementIds);
+      await recalculateSettlementTotalsForSettlementIds(helpers.uniqueNonEmpty(relatedSettlementIds));
+      state.views.payments.selectedId = "";
+      await refreshInvoicesAndPaymentsAfterSupplierPayment();
+      undo.isBusy = false;
+      undo.mode = "success";
+      undo.resultMessage = "Payment undone successfully. " + String(deletedAllocationCount) + " allocation(s) were removed and the related invoice balances were restored.";
+      renderPaymentUndoConfirmation();
       renderAll();
-      renderer.showNotice("Payment deleted successfully.", {
-        tone: "success"
-      });
     } catch (error) {
-      debugError("onSelectedPaymentDeleteClick settlement refresh failed", error, {
+      debugError("onSelectedPaymentDeleteClick failed", error, {
         paymentId: paymentId,
-        settlementIds: relatedSettlementIds
+        settlementIds: relatedSettlementIds,
+        invoiceIds: relatedInvoiceIds,
+        deletedAllocationCount: deletedAllocationCount
       });
+      state.views.payments.selectedId = paymentId;
+      undo.isBusy = false;
+      undo.mode = "error";
+      undo.resultMessage = "The payment could not be fully undone" +
+        (deletedAllocationCount ? " after removing " + String(deletedAllocationCount) + " allocation(s)" : "") +
+        ". " + (error.message || "Review its allocations and related invoice balances before trying again.");
+      renderPaymentUndoConfirmation();
       renderAll();
-      renderer.showNotice("Payment deleted successfully, but related settlement totals could not be refreshed automatically.", {
-        tone: "neutral"
-      });
+      renderer.showNotice("");
     } finally {
       renderer.setLoading(false);
     }
@@ -6484,7 +6222,6 @@ var ns = global.AccountingManagerApp;
 
     paymentsLoadPromise = (async function () {
       var appliedFilters = cloneFilterState(state.views.payments.appliedFilters || state.views.payments.filters);
-      var filteredPaymentIds = [];
       var records;
 
       if (!hasAnyLoadFilterValue(appliedFilters)) {
@@ -6498,21 +6235,10 @@ var ns = global.AccountingManagerApp;
       }
 
       await ensurePayAllocationsLoaded();
-      filteredPaymentIds = await getFilteredPaymentIdsFromAllocations(appliedFilters);
-      try {
-        records = await loadModuleRecords(MODULES.payments, PAYMENT_FIELDS, {
-          whereClause: await buildPaymentRemoteWhereClause(appliedFilters, filteredPaymentIds),
-          orderByClause: await buildPaymentRemoteOrderByClause()
-        });
-      } catch (filteredLoadError) {
-        debugWarn("ensurePaymentsLoaded filtered coql fallback", {
-          filters: appliedFilters,
-          errorMessage: filteredLoadError && filteredLoadError.message ? filteredLoadError.message : String(filteredLoadError || "")
-        });
-        records = await loadModuleRecords(MODULES.payments, PAYMENT_FIELDS, {
-          orderByClause: await buildPaymentRemoteOrderByClause()
-        });
-      }
+      // The widget connector rejects COQL for Supplier_Payments in this CRM.
+      // Load the same complete dataset through the supported paginated endpoint;
+      // buildPaymentsView applies the active filters locally.
+      records = await loadRecordsByPagination(MODULES.payments);
       state.records.payments = sortRecordsByDateDesc(records, "Payment_Date");
       state.views.payments.hasMore = false;
       state.loaded.payments = true;
@@ -6539,9 +6265,7 @@ var ns = global.AccountingManagerApp;
 
     paymentsDatasetLoadPromise = (async function () {
       state.records.payments = sortRecordsByDateDesc(
-        await loadModuleRecords(MODULES.payments, PAYMENT_FIELDS, {
-          orderByClause: await buildPaymentRemoteOrderByClause()
-        }),
+        await loadRecordsByPagination(MODULES.payments),
         "Payment_Date"
       );
       state.loaded.payments = true;
@@ -6566,7 +6290,9 @@ var ns = global.AccountingManagerApp;
 
     payAllocationsLoadPromise = (async function () {
       state.records.payAllocations = sortRecordsByDateDesc(
-        await loadModuleRecords(MODULES.payAllocations, PAY_ALLOCATION_FIELDS),
+        // COQL for this custom module returns a syntax error in the widget
+        // context, while pagination is supported and returns the full dataset.
+        await loadRecordsByPagination(MODULES.payAllocations),
         "Allocation_Date"
       );
       state.loaded.payAllocations = true;
@@ -7767,9 +7493,6 @@ var ns = global.AccountingManagerApp;
     renderInvoicePaymentPanel();
     renderPaymentAccountCreatePanel();
     renderAccountingAccountCreatePanel();
-    if ((invoicesView.listTab || "basic") === "attachments") {
-      prefetchVisibleInvoiceAttachments(invoicesView.visibleRecords);
-    }
     renderer.renderBookingsWorkspace(bookingsView);
     renderStatusFilterControl("invoices", invoicesView.statusOptions);
     renderer.renderInvoiceWorkspace(
@@ -7778,23 +7501,15 @@ var ns = global.AccountingManagerApp;
       selectInvoiceDetail,
       toggleVisibleInvoices,
       onInvoiceSortChange,
-      setInvoiceListTab,
       setInvoiceDetailTab,
-      setSelectedInvoiceAttachmentPreview,
-      openInvoiceAttachmentFallback,
-      getInvoiceAttachmentsForField,
-      getInvoiceAttachmentKey,
-      getInvoiceAttachmentFileName,
-      getInvoiceAttachmentCategory,
-      getInvoiceAttachmentDateValue,
-      getInvoiceAttachmentPreviewUrl
+      openInvoiceInCrm,
+      queueInvoiceFileLoad,
+      setShowInvoiceAttachments
     );
     renderer.renderPaymentsWorkspaceSections(normalizePaymentsSection(state.views.payments.section));
     renderStatusFilterControl("payments", paymentsView.statusOptions);
     renderer.renderPaymentsWorkspace(paymentsView, selectPayment);
     renderer.renderPaymentAllocationsWorkspace(paymentAllocationsView, selectPaymentAllocation);
-    state.paymentAllocationEditor.sourcePaymentId = String(paymentsView.selectedRecord && paymentsView.selectedRecord.id || "");
-    state.paymentAllocationEditor.sourceAllocations = (paymentsView.selectedAllocations || []).slice();
     renderer.renderSelectedPayment(paymentsView.selectedRecord, {
       getPaymentReference: paymentsView.getPaymentReference,
       getSupplierName: paymentsView.getSupplierName,
@@ -7805,14 +7520,11 @@ var ns = global.AccountingManagerApp;
       getSettlementName: getPaymentSettlementName,
       getContextSummary: getPaymentContextSummary
     }, setPaymentDetailTab);
-    if (elements.selectedPaymentEditAllocations) {
-      elements.selectedPaymentEditAllocations.hidden = !paymentsView.selectedRecord;
-      elements.selectedPaymentEditAllocations.disabled = !paymentsView.selectedRecord || isPaymentAllocationEditingLocked(paymentsView.selectedRecord);
-      elements.selectedPaymentEditAllocations.title = paymentsView.selectedRecord && isPaymentAllocationEditingLocked(paymentsView.selectedRecord)
-        ? "Reconciled, cancelled or posted payments cannot have allocations edited."
-        : "";
+    if (elements.selectedPaymentManageAllocations) {
+      elements.selectedPaymentManageAllocations.hidden = !paymentsView.selectedRecord;
+      elements.selectedPaymentManageAllocations.disabled = !paymentsView.selectedRecord || isPaymentAllocationEditingLocked(paymentsView.selectedRecord);
     }
-    renderPaymentAllocationEditor();
+    renderPaymentAllocationManager();
     renderSelectedPaymentLetterPanel(paymentsView.selectedRecord);
     renderer.renderPaymentAccountsWorkspace(paymentAccountsView, selectPaymentAccount);
     renderer.renderSelectedPaymentAccount(paymentAccountsView.selectedRecord, {

@@ -52,11 +52,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var getFunctionOutputObject = deps.getFunctionOutputObject;
     var getFunctionResponseResult = deps.getFunctionResponseResult;
     var recalculateSettlementTotalsForSettlementIds = deps.recalculateSettlementTotalsForSettlementIds;
-    var syncAccountingEntriesForInvoices = deps.syncAccountingEntriesForInvoices;
-    var syncAccountingEntryForPayment = deps.syncAccountingEntryForPayment;
     var getUniqueSettlementIdsFromInvoices = deps.getUniqueSettlementIdsFromInvoices;
     var invalidateInvoiceCreateSettlementCache = deps.invalidateInvoiceCreateSettlementCache;
     var ensureInvoiceAllocationsLoaded = deps.ensureInvoiceAllocationsLoaded;
+    var supplierAccountRefocusId = "";
 
     function resetInvoicePaymentForm() {
       var paymentDate = "";
@@ -74,8 +73,37 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         status: "Paid",
         accountingStatus: "Pending",
         paymentAccountsBySupplier: {},
+        supplierAccountQueries: {},
+        supplierAccountDropdownSupplierId: "",
         allocations: {}
       };
+    }
+
+    function renderPaymentCreateFeedback() {
+      var feedback = state.paymentCreation.feedback || {};
+      var isError = feedback.status === "error";
+
+      if (!elements.paymentCreateFeedbackPopup) {
+        return;
+      }
+      elements.paymentCreateFeedbackPopup.hidden = !feedback.isOpen;
+      elements.paymentCreateFeedbackPopup.classList.toggle("is-error", isError);
+      if (!feedback.isOpen) {
+        return;
+      }
+      elements.paymentCreateFeedbackEyebrow.textContent = isError ? "Payment not created" : "Creating payment";
+      elements.paymentCreateFeedbackTitle.textContent = isError ? "Payment could not be created" : "Creating supplier payment...";
+      elements.paymentCreateFeedbackMessage.textContent = feedback.message || (isError ? "Review the error and try again." : "Preparing payment, allocations and related accounts.");
+      elements.paymentCreateFeedbackSpinner.hidden = isError;
+      elements.paymentCreateFeedbackClose.hidden = !isError;
+    }
+
+    function closePaymentCreateFeedback() {
+      if (state.paymentCreation.feedback && state.paymentCreation.feedback.status === "loading") {
+        return;
+      }
+      state.paymentCreation.feedback = { isOpen: false, status: "", message: "" };
+      renderPaymentCreateFeedback();
     }
 
     function buildInvoicePaymentContext(selectedInvoices) {
@@ -303,6 +331,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         status: "Paid",
         accountingStatus: "Pending",
         paymentAccountsBySupplier: paymentAccountsBySupplier,
+        supplierAccountQueries: {},
+        supplierAccountDropdownSupplierId: "",
         allocations: allocations
       };
     }
@@ -357,8 +387,19 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var name = helpers.getCandidateValue(account, FIELD_CANDIDATES.paymentAccount.name) || account.Name || account.id;
       var email = helpers.textValue(account && account.Email, "");
       var iban = getPaymentAccountIbanValue(account);
+      var bank = helpers.textValue(account && account.Bank_Name, "");
+      var beneficiary = getPaymentAccountBeneficiaryName(account);
 
-      return [name, email, iban].filter(Boolean).join(" | ");
+      return [name, bank, beneficiary, email, iban].filter(Boolean).join(" | ");
+    }
+
+    function getPaymentAccountOptionMeta(account) {
+      return [
+        helpers.textValue(account && account.Bank_Name, ""),
+        getPaymentAccountBeneficiaryName(account),
+        getPaymentAccountIbanValue(account),
+        helpers.textValue(account && account.Email, "")
+      ].filter(Boolean).join(" · ");
     }
 
     function getSelectedHeaderPaymentAccountRecord() {
@@ -368,7 +409,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function getSelectedHeaderPaymentAccountLabel() {
       var selectedAccount = getSelectedHeaderPaymentAccountRecord();
 
-      return selectedAccount ? getHeaderPaymentAccountOptionLabel(selectedAccount) : "";
+      return selectedAccount
+        ? helpers.getCandidateValue(selectedAccount, FIELD_CANDIDATES.paymentAccount.name) || selectedAccount.Name || selectedAccount.id
+        : "";
     }
 
     function closeInvoicePaymentHeaderAccountDropdown() {
@@ -391,22 +434,16 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function syncInvoicePaymentHeaderAccountInputValue() {
-      var query = String(state.paymentCreation.form.headerPaymentAccountQuery || "");
       var selectedLabel = getSelectedHeaderPaymentAccountLabel();
 
-      if (!query && selectedLabel) {
-        elements.invoicePaymentAccount.value = selectedLabel;
-        return;
-      }
-
-      elements.invoicePaymentAccount.value = query;
+      elements.invoicePaymentAccount.value = selectedLabel;
     }
 
     function selectInvoicePaymentHeaderAccount(accountId) {
       var selectedAccount = getPaymentAccountRecordById(accountId);
 
       state.paymentCreation.form.headerPaymentAccountId = selectedAccount ? accountId : "";
-      state.paymentCreation.form.headerPaymentAccountQuery = selectedAccount ? getHeaderPaymentAccountOptionLabel(selectedAccount) : "";
+      state.paymentCreation.form.headerPaymentAccountQuery = "";
       closeInvoicePaymentHeaderAccountDropdown();
       renderInvoicePaymentPanel();
     }
@@ -414,13 +451,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function onInvoicePaymentHeaderAccountFocus() {
       state.paymentCreation.form.headerPaymentAccountDropdownOpen = true;
       renderInvoicePaymentPanel();
+      focusInvoicePaymentHeaderAccountSearch();
     }
 
-    function onInvoicePaymentHeaderAccountInput() {
-      state.paymentCreation.form.headerPaymentAccountQuery = elements.invoicePaymentAccount.value || "";
+    function onInvoicePaymentHeaderAccountInput(event) {
+      state.paymentCreation.form.headerPaymentAccountQuery = event && event.target ? event.target.value || "" : "";
       state.paymentCreation.form.headerPaymentAccountDropdownOpen = true;
       state.paymentCreation.form.headerPaymentAccountId = "";
-      renderInvoicePaymentPanel();
+      filterInvoicePaymentHeaderAccountOptions();
     }
 
     function onInvoicePaymentHeaderAccountKeydown(event) {
@@ -453,6 +491,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function onInvoicePaymentHeaderAccountBlur() {
       global.setTimeout(function () {
+        if (elements.invoicePaymentAccountCombobox && elements.invoicePaymentAccountCombobox.contains(document.activeElement)) {
+          return;
+        }
         closeInvoicePaymentHeaderAccountDropdown();
         renderInvoicePaymentPanel();
       }, 120);
@@ -460,10 +501,47 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function onInvoicePaymentHeaderAccountToggleClick() {
       state.paymentCreation.form.headerPaymentAccountDropdownOpen = !state.paymentCreation.form.headerPaymentAccountDropdownOpen;
-      if (state.paymentCreation.form.headerPaymentAccountDropdownOpen && !state.paymentCreation.form.headerPaymentAccountQuery) {
-        state.paymentCreation.form.headerPaymentAccountQuery = elements.invoicePaymentAccount.value || "";
-      }
       renderInvoicePaymentPanel();
+    }
+
+    function onInvoicePaymentHeaderAccountDocumentPointerDown(event) {
+      var combobox = elements.invoicePaymentAccountCombobox;
+
+      if (!state.paymentCreation.form.headerPaymentAccountDropdownOpen || !combobox || combobox.contains(event.target)) {
+        return;
+      }
+      closeInvoicePaymentHeaderAccountDropdown();
+      renderInvoicePaymentPanel();
+    }
+
+    function focusInvoicePaymentHeaderAccountSearch() {
+      global.setTimeout(function () {
+        var searchInput = elements.invoicePaymentAccountDropdown.querySelector(".payment-account-dropdown-search");
+
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        }
+      }, 0);
+    }
+
+    function filterInvoicePaymentHeaderAccountOptions() {
+      var query = state.paymentCreation.form.headerPaymentAccountQuery || "";
+      var options = elements.invoicePaymentAccountDropdown.querySelectorAll("[data-payment-header-account-id]");
+      var visibleCount = 0;
+      var emptyState = elements.invoicePaymentAccountDropdown.querySelector(".payment-account-dropdown-empty-search");
+
+      Array.prototype.forEach.call(options, function (option) {
+        var matches = !query || helpers.matchesText(option.getAttribute("data-payment-account-search") || "", query);
+
+        option.hidden = !matches;
+        if (matches) {
+          visibleCount += 1;
+        }
+      });
+      if (emptyState) {
+        emptyState.hidden = visibleCount > 0;
+      }
     }
 
     function getInvoicePaymentHeaderAccountIdFromEvent(event) {
@@ -589,6 +667,106 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return "Auto-create supplier payment account";
     }
 
+    function getSupplierPaymentAccountLabel(account) {
+      return helpers.getCandidateValue(account, FIELD_CANDIDATES.paymentAccount.name) || account.Name || account.id;
+    }
+
+    function getSupplierPaymentAccountInputValue(supplierId) {
+      var form = state.paymentCreation.form;
+      var query = String(form.supplierAccountQueries && form.supplierAccountQueries[supplierId] || "");
+      var selectedId = String(form.paymentAccountsBySupplier && form.paymentAccountsBySupplier[supplierId] || "");
+      var selectedAccount = selectedId ? getPaymentAccountRecordById(selectedId) : null;
+
+      return query || (selectedAccount ? getSupplierPaymentAccountLabel(selectedAccount) : "");
+    }
+
+    function getSupplierAccountIdFromEvent(event) {
+      var target = event && event.target;
+      var supplierId = target && target.getAttribute ? target.getAttribute("data-payment-account-supplier") : "";
+
+      if (!supplierId && target && target.closest) {
+        target = target.closest("[data-payment-account-supplier]");
+        supplierId = target ? target.getAttribute("data-payment-account-supplier") : "";
+      }
+
+      return supplierId || "";
+    }
+
+    function selectSupplierPaymentAccount(supplierId, accountId) {
+      var form = state.paymentCreation.form;
+
+      form.supplierAccountQueries = form.supplierAccountQueries || {};
+      form.paymentAccountsBySupplier[supplierId] = accountId || "";
+      form.supplierAccountQueries[supplierId] = "";
+      form.supplierAccountDropdownSupplierId = "";
+      renderInvoicePaymentPanel();
+    }
+
+    function onInvoicePaymentSupplierAccountFocus(event) {
+      var supplierId = getSupplierAccountIdFromEvent(event);
+
+      if (!supplierId) {
+        return;
+      }
+      if (supplierAccountRefocusId === supplierId) {
+        supplierAccountRefocusId = "";
+        return;
+      }
+      state.paymentCreation.form.supplierAccountDropdownSupplierId = supplierId;
+      renderInvoicePaymentPanel();
+      refocusSupplierPaymentAccountInput(supplierId);
+    }
+
+    function onInvoicePaymentSupplierAccountInput(event) {
+      var supplierId = getSupplierAccountIdFromEvent(event);
+
+      if (!supplierId) {
+        return;
+      }
+      state.paymentCreation.form.supplierAccountQueries = state.paymentCreation.form.supplierAccountQueries || {};
+      state.paymentCreation.form.supplierAccountQueries[supplierId] = event.target.value || "";
+      state.paymentCreation.form.paymentAccountsBySupplier[supplierId] = "";
+      state.paymentCreation.form.supplierAccountDropdownSupplierId = supplierId;
+      renderInvoicePaymentPanel();
+      refocusSupplierPaymentAccountInput(supplierId);
+    }
+
+    function onInvoicePaymentSupplierAccountBlur(event) {
+      var supplierId = getSupplierAccountIdFromEvent(event);
+
+      global.setTimeout(function () {
+        var activeSupplierId = getSupplierAccountIdFromEvent({ target: document.activeElement });
+
+        if (supplierId && activeSupplierId === supplierId) {
+          return;
+        }
+        state.paymentCreation.form.supplierAccountDropdownSupplierId = "";
+        renderInvoicePaymentPanel();
+      }, 120);
+    }
+
+    function onInvoicePaymentSupplierAccountOptionPointerDown(event) {
+      var target = event.target && event.target.closest ? event.target.closest("[data-payment-supplier-account-option]") : null;
+
+      if (!target) {
+        return;
+      }
+      event.preventDefault();
+      selectSupplierPaymentAccount(target.getAttribute("data-payment-account-supplier"), target.getAttribute("data-payment-supplier-account-option") || "");
+    }
+
+    function refocusSupplierPaymentAccountInput(supplierId) {
+      supplierAccountRefocusId = supplierId;
+      global.setTimeout(function () {
+        var input = elements.invoicePaymentSupplierAccountsList.querySelector('[data-payment-account-supplier="' + supplierId + '"]');
+
+        if (input) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      }, 0);
+    }
+
     function renderInvoicePaymentPanel() {
       var isOpen = state.paymentCreation.isOpen;
       var context = state.paymentCreation.context;
@@ -603,6 +781,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var headerPaymentAccountDropdownMarkup = "";
 
       elements.invoicePaymentPanel.hidden = !isOpen;
+      renderPaymentCreateFeedback();
 
       if (!isOpen) {
         return;
@@ -620,8 +799,17 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.invoicePaymentSelectedList.textContent = context && context.invoices.length
         ? context.invoices.map(function (invoice) {
           return invoice.number;
-        }).join(", ")
+        }).slice(0, 3).join(" · ") + (context.invoices.length > 3 ? " · +" + String(context.invoices.length - 3) + " more" : "")
         : "-";
+      elements.invoicePaymentContextSupplierCount.textContent = context && context.supplierIds.length
+        ? String(context.supplierIds.length) + (context.supplierIds.length === 1 ? " supplier" : " suppliers")
+        : "";
+      elements.invoicePaymentContextMeta.textContent = context
+        ? [context.supplierDisplay, context.bookingDisplay, context.settlementDisplay].filter(function (value) {
+          return value && value !== "-" && value.indexOf("Mixed") === -1;
+        }).join(" · ")
+        : "";
+      elements.invoicePaymentContextMeta.hidden = !elements.invoicePaymentContextMeta.textContent;
       elements.invoicePaymentTotalAmount.textContent = helpers.formatCurrency(context && context.hasMixedInvoiceTypes ? Math.abs(netAmount) : totalAmount);
       elements.invoicePaymentName.value = form.name || "";
       elements.invoicePaymentDate.value = form.paymentDate || "";
@@ -638,74 +826,94 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         form.movementType = context.movementType;
       }
       elements.invoicePaymentAccount.placeholder = headerPaymentAccounts.length
-        ? "Search payment account"
+        ? "Select payment account..."
         : "No Own payment accounts available";
       elements.invoicePaymentAccount.setAttribute(
         "aria-expanded",
         form.headerPaymentAccountDropdownOpen && headerPaymentAccounts.length ? "true" : "false"
       );
+      elements.invoicePaymentAccountCombobox.classList.toggle("is-open", Boolean(form.headerPaymentAccountDropdownOpen && headerPaymentAccounts.length));
       if (!headerPaymentAccounts.length) {
         headerPaymentAccountDropdownMarkup = '<div class="settlement-dropdown-empty">No Own payment accounts available.</div>';
       } else if (!filteredHeaderPaymentAccounts.length) {
-        headerPaymentAccountDropdownMarkup = '<div class="settlement-dropdown-empty">No payment accounts match this search.</div>';
+        headerPaymentAccountDropdownMarkup = "";
       } else {
         headerPaymentAccountDropdownMarkup = filteredHeaderPaymentAccounts.map(function (account) {
           var isSelected = String(account && account.id || "") === selectedHeaderPaymentAccountId;
 
           return [
-            '<button class="settlement-option' + (isSelected ? " is-selected" : "") + '" type="button" role="option" aria-selected="' + (isSelected ? "true" : "false") + '" data-payment-header-account-id="' + helpers.escapeHtml(account.id) + '">',
+            '<button class="settlement-option' + (isSelected ? " is-selected" : "") + '" type="button" role="option" aria-selected="' + (isSelected ? "true" : "false") + '" data-payment-header-account-id="' + helpers.escapeHtml(account.id) + '" data-payment-account-search="' + helpers.escapeHtml(getHeaderPaymentAccountOptionLabel(account)) + '" title="' + helpers.escapeHtml(getHeaderPaymentAccountOptionLabel(account)) + '">',
             '  <span class="settlement-option-title">' + helpers.escapeHtml(helpers.getCandidateValue(account, FIELD_CANDIDATES.paymentAccount.name) || account.Name || account.id) + "</span>",
-            '  <span class="settlement-option-meta">' + helpers.escapeHtml([
-              helpers.textValue(account && account.Bank_Name, ""),
-              helpers.textValue(account && account.Email, ""),
-              getPaymentAccountIbanValue(account)
-            ].filter(Boolean).join(" | ") || "-") + "</span>",
+            '  <span class="settlement-option-meta" title="' + helpers.escapeHtml(getPaymentAccountOptionMeta(account)) + '">' + helpers.escapeHtml(getPaymentAccountOptionMeta(account) || "-") + "</span>",
             "</button>"
           ].join("");
         }).join("");
       }
-      elements.invoicePaymentAccountDropdown.innerHTML = headerPaymentAccountDropdownMarkup;
+      elements.invoicePaymentAccountDropdown.innerHTML = [
+        '<div class="payment-account-dropdown-search-shell">',
+        '  <span class="payment-account-search-icon" aria-hidden="true"></span>',
+        '  <input class="payment-account-dropdown-search" type="search" autocomplete="off" placeholder="Search payment accounts..." value="' + helpers.escapeHtml(form.headerPaymentAccountQuery || "") + '" aria-label="Search payment accounts">',
+        '</div>',
+        '<div class="payment-account-dropdown-options">',
+        headerPaymentAccountDropdownMarkup,
+        '<div class="settlement-dropdown-empty payment-account-dropdown-empty-search"' + (filteredHeaderPaymentAccounts.length ? " hidden" : "") + '><strong>No payment accounts found</strong><span>Try another name, bank or account number.</span></div>',
+        '</div>'
+      ].join("");
       elements.invoicePaymentAccountDropdown.hidden = !form.headerPaymentAccountDropdownOpen;
       elements.invoicePaymentMovementType.value = context && context.hasMixedInvoiceTypes
         ? "Mixed settlement (net " + (getInvoicePaymentNetAmount(context, form.allocations) < 0 ? "supplier refund" : "outbound payment") + ")"
         : form.movementType || (context ? context.movementType : "") || "";
       elements.invoicePaymentStatus.value = form.status || "Paid";
       elements.invoicePaymentAccountingStatus.value = form.accountingStatus || "Pending";
+      elements.invoicePaymentReadonlyMeta.textContent = [
+        elements.invoicePaymentMovementType.value,
+        elements.invoicePaymentStatus.value ? "Status: " + elements.invoicePaymentStatus.value : "",
+        elements.invoicePaymentAccountingStatus.value ? "Accounting: " + elements.invoicePaymentAccountingStatus.value : ""
+      ].filter(Boolean).join(" · ");
+      elements.invoicePaymentReadonlyMeta.hidden = !elements.invoicePaymentReadonlyMeta.textContent;
       supplierAccountRows = context && context.suppliers.length ? context.suppliers.map(function (supplierContext) {
         var availableAccounts = getAllowedPaymentAccountsForSupplier(supplierContext.id);
         var allocatedAmount = getSupplierPaymentSelectedAmount(supplierContext, form.allocations, context.invoices);
         var selectedAccountId = form.paymentAccountsBySupplier && supplierContext.id
           ? String(form.paymentAccountsBySupplier[supplierContext.id] || "")
           : "";
-        var selectOptions = [
-          '<option value="">' + helpers.escapeHtml(getSupplierPaymentAccountPlaceholder(supplierContext, availableAccounts)) + "</option>"
+        var supplierQuery = String(form.supplierAccountQueries && form.supplierAccountQueries[supplierContext.id] || "");
+        var isDropdownOpen = String(form.supplierAccountDropdownSupplierId || "") === String(supplierContext.id || "");
+        var filteredAvailableAccounts = availableAccounts.filter(function (account) {
+          return !supplierQuery || helpers.matchesText(getHeaderPaymentAccountOptionLabel(account), helpers.normalizeQuery(supplierQuery));
+        });
+        var accountOptions = [
+          '<button class="settlement-option payment-supplier-account-auto" type="button" role="option" data-payment-account-supplier="' + helpers.escapeHtml(supplierContext.id || "") + '" data-payment-supplier-account-option="">',
+          '  <span class="settlement-option-title">Automatic</span>',
+          '  <span class="settlement-option-meta">Auto-create supplier payment account</span>',
+          '</button>'
         ];
+        var contextParts = [supplierContext.mfspDisplay, supplierContext.bookingDisplay, supplierContext.settlementDisplay].filter(function (value) {
+          return value && value !== "-";
+        });
 
-        availableAccounts.forEach(function (account) {
-          var accountLabel = helpers.getCandidateValue(account, FIELD_CANDIDATES.paymentAccount.name) || account.Name || account.id;
-          var email = helpers.textValue(account.Email, "");
-          var ownerLabel = getPaymentAccountOwnerSupplierId(account) === supplierContext.id ? "Supplier" : "Shared";
-
-          selectOptions.push(
-            '<option value="' + helpers.escapeHtml(account.id) + '"' +
-            (String(account.id) === selectedAccountId ? " selected" : "") +
-            ">" + helpers.escapeHtml(email ? ownerLabel + " | " + accountLabel + " | " + email : ownerLabel + " | " + accountLabel) + "</option>"
+        filteredAvailableAccounts.forEach(function (account) {
+          accountOptions.push(
+            '<button class="settlement-option' + (String(account.id) === selectedAccountId ? " is-selected" : "") + '" type="button" role="option" data-payment-account-supplier="' + helpers.escapeHtml(supplierContext.id || "") + '" data-payment-supplier-account-option="' + helpers.escapeHtml(account.id) + '">',
+            '  <span class="settlement-option-title">' + helpers.escapeHtml(getSupplierPaymentAccountLabel(account)) + "</span>",
+            '  <span class="settlement-option-meta" title="' + helpers.escapeHtml(getPaymentAccountOptionMeta(account)) + '">' + helpers.escapeHtml(getPaymentAccountOptionMeta(account) || "-") + "</span>",
+            '</button>'
           );
         });
 
         return [
           "<tr>",
           '  <td><strong>' + helpers.escapeHtml(supplierContext.name || "-") + "</strong></td>",
-          '  <td class="payment-context-cell">' + helpers.escapeHtml(supplierContext.bookingDisplay || "-") + "</td>",
-          '  <td class="payment-context-cell">' + helpers.escapeHtml(supplierContext.mfspDisplay || "-") + "</td>",
-          '  <td class="payment-context-cell">' + helpers.escapeHtml(supplierContext.settlementDisplay || "-") + "</td>",
+          '  <td class="payment-context-cell">' + helpers.escapeHtml(contextParts.join(" · ")) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(String(supplierContext.invoiceCount || 0)) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(allocatedAmount)) + "</td>",
-          '  <td><select class="payment-account-select" data-payment-account-supplier="' + helpers.escapeHtml(supplierContext.id || "") + '"' +
-            (state.paymentCreation.isBusy || !supplierContext.id ? " disabled" : "") + ">" + selectOptions.join("") + "</select></td>",
+          '  <td><div class="settlement-combobox payment-supplier-account-combobox' + (isDropdownOpen ? " is-open" : "") + '">',
+          '    <input class="payment-supplier-account-input" data-payment-account-supplier="' + helpers.escapeHtml(supplierContext.id || "") + '" type="text" autocomplete="off" placeholder="' + helpers.escapeHtml(getSupplierPaymentAccountPlaceholder(supplierContext, availableAccounts)) + '" value="' + helpers.escapeHtml(getSupplierPaymentAccountInputValue(supplierContext.id)) + '" aria-autocomplete="list" aria-expanded="' + (isDropdownOpen ? "true" : "false") + '"' + (state.paymentCreation.isBusy || !supplierContext.id ? " disabled" : "") + '>',
+          '    <div class="settlement-dropdown payment-supplier-account-dropdown" role="listbox"' + (isDropdownOpen ? "" : " hidden") + '>' + (filteredAvailableAccounts.length || !supplierQuery ? accountOptions.join("") : '<div class="settlement-dropdown-empty">No payment accounts match this search.</div>') + '</div>',
+          '  </div></td>',
           "</tr>"
         ].join("");
-      }).join("") : '<tr><td colspan="7" class="table-empty">No supplier context available for this payment.</td></tr>';
+      }).join("") : '<tr><td colspan="5" class="table-empty">No supplier context available for this payment.</td></tr>';
       elements.invoicePaymentSupplierAccountsTableWrap.hidden = !context;
       elements.invoicePaymentSupplierAccountsList.innerHTML = supplierAccountRows;
 
@@ -718,9 +926,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           "<tr>",
           '  <td class="payment-context-cell"><strong>' + helpers.escapeHtml(invoice.number) + "</strong></td>",
           "  <td>" + helpers.escapeHtml(invoice.supplierName || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(invoice.bookingName || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(invoice.mfsp || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(invoice.settlementName || "-") + "</td>",
+          "  <td>" + helpers.escapeHtml([invoice.mfsp, invoice.bookingName, invoice.settlementName].filter(Boolean).join(" · ")) + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.date)) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(invoice.pendingAmount)) + "</td>",
           '  <td class="numeric-cell"><input type="number" min="0" step="0.01" data-payment-allocation="' + helpers.escapeHtml(invoice.id) + '" value="' + helpers.escapeHtml(String(allocatedValue)) + '"></td>',
@@ -738,6 +944,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.invoicePaymentSubmit.textContent = state.paymentCreation.isBusy
         ? (context && context.hasMixedInvoiceTypes ? "Creating payment and refund..." : (context && context.movementType === PAYMENT_MOVEMENT_TYPES.supplierRefund ? "Creating refund..." : "Creating payment..."))
         : (context && context.hasMixedInvoiceTypes ? "Create payment and refund" : (context && context.movementType === PAYMENT_MOVEMENT_TYPES.supplierRefund ? "Create refund" : "Create payment"));
+      elements.invoicePaymentReconciliation.textContent = "Allocated " + helpers.formatCurrency(totalAmount) + " · Remaining " + helpers.formatCurrency(Math.max(0, roundCurrency((context ? context.totalAmount : 0) - totalAmount)));
+      elements.invoicePaymentReconciliation.classList.toggle("is-balanced", Boolean(context && roundCurrency((context.totalAmount || 0) - totalAmount) === 0));
 
       Array.prototype.forEach.call(
         elements.invoicePaymentAllocationsList.querySelectorAll("input[data-payment-allocation]"),
@@ -770,6 +978,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       state.paymentCreation.isOpen = true;
       state.paymentCreation.isBusy = true;
+      state.paymentCreation.feedback = { isOpen: false, status: "", message: "", actionSupplierId: "" };
       renderAll();
       renderer.showNotice("Preparing supplier payment form...", {
         isLoading: true
@@ -822,7 +1031,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var target = event.target;
       var supplierId;
 
-      if (!target || !target.getAttribute) {
+      if (!target || !target.getAttribute || !target.classList || !target.classList.contains("payment-account-select")) {
         return;
       }
 
@@ -986,17 +1195,28 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return "";
       }
 
-      accountingResponse = await crm.executeFunction(ENSURE_SUPPLIER_ACCOUNTING_ACCOUNT_FUNCTION, {
-        supplierId: supplierId
-      });
-      accountingOutput = getFunctionOutputObject(accountingResponse) || {};
-      accountingFallback = getFunctionResponseResult(accountingResponse);
+      /* A payment account can exist without an accounting account. Try to
+       * prepare/link one when possible, but never block the payment for it. */
+      try {
+        accountingResponse = await crm.executeFunction(ENSURE_SUPPLIER_ACCOUNTING_ACCOUNT_FUNCTION, {
+          supplierId: supplierId
+        });
+        accountingOutput = getFunctionOutputObject(accountingResponse) || {};
+        accountingFallback = getFunctionResponseResult(accountingResponse);
+        accountingAccountId = String(accountingOutput.accounting_account_id || "").trim();
 
-      if (accountingOutput.error) {
-        throw new Error(accountingOutput.message || accountingFallback.message || "Supplier accounting account could not be prepared.");
+        if (accountingOutput.error) {
+          debugError("ensureSupplierPaymentAccountForPayment accounting account skipped", new Error(
+            accountingOutput.message || accountingFallback.message || "Supplier accounting account could not be prepared."
+          ), { supplierId: supplierId });
+          accountingAccountId = "";
+        }
+      } catch (accountingError) {
+        debugError("ensureSupplierPaymentAccountForPayment accounting account skipped", accountingError, {
+          supplierId: supplierId
+        });
+        accountingAccountId = "";
       }
-
-      accountingAccountId = String(accountingOutput.accounting_account_id || "").trim();
 
       paymentResponse = await crm.executeFunction(ENSURE_SUPPLIER_PAYMENT_ACCOUNT_FUNCTION, {
         supplierId: supplierId,
@@ -1010,6 +1230,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       paymentAccountId = String(paymentOutput.payment_account_id || "").trim();
+      if (!paymentAccountId) {
+        throw new Error(paymentOutput.message || paymentFallback.message || "Supplier payment account could not be prepared.");
+      }
 
       if (paymentAccountId) {
         try {
@@ -1075,6 +1298,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         if (ensuredAccountId) {
           resolved[supplierId] = ensuredAccountId;
           hasChanges = true;
+        } else {
+          throw new Error("A supplier payment account could not be created for " + (supplierContext.name || supplierId) + ". No payment was created.");
         }
       }
 
@@ -1097,6 +1322,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       state.records.invoices.forEach(function (invoice) {
         if (invoice && invoice.id) {
           invoicesById[String(invoice.id)] = invoice;
+        }
+      });
+      Object.keys(state.views.invoices.selectedRecordsById || {}).forEach(function (invoiceId) {
+        var selectedInvoice = state.views.invoices.selectedRecordsById[invoiceId];
+
+        if (selectedInvoice && selectedInvoice.id && !invoicesById[String(selectedInvoice.id)]) {
+          invoicesById[String(selectedInvoice.id)] = selectedInvoice;
         }
       });
 
@@ -1379,14 +1611,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var paymentRecord;
       var paymentId = "";
       var settlementUpdateMessage = "";
-      var accountingSyncMessage = "";
       var resolvedPaymentAccountsResult;
       var createEntriesResult;
       var allocationResult;
       var allocationWarning = "";
       var paymentAccountsRefreshNeeded = false;
-      var invoiceAccountingSyncResult = null;
-      var invoiceAccountingSyncMessage = "";
 
       event.preventDefault();
       renderer.showError("");
@@ -1412,17 +1641,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       state.paymentCreation.isBusy = true;
+      state.paymentCreation.feedback = {
+        isOpen: true,
+        status: "loading",
+        message: context && context.hasMixedInvoiceTypes
+          ? "Creating the settlement, allocations and related accounts..."
+          : "Creating the payment, allocations and related accounts..."
+      };
       renderAll();
-      renderer.showNotice(
-        context && context.hasMixedInvoiceTypes
-          ? "Creating net supplier settlement..."
-          : paymentData.Movement_Type === PAYMENT_MOVEMENT_TYPES.supplierRefund
-          ? "Creating supplier refund..."
-          : "Creating supplier payment...",
-        {
-          isLoading: true
-        }
-      );
+      renderer.showNotice("");
 
       try {
         resolvedPaymentAccountsResult = await resolvePaymentAccountsForPaymentCreate(context, validation.paymentAccountsBySupplier, validation.allocations);
@@ -1475,6 +1702,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         });
 
         state.views.invoices.selectedIds = {};
+        state.views.invoices.selectedRecordsById = {};
         closeCreatePaymentPanel();
         await refreshInvoicesAndPaymentsAfterSupplierPayment();
         if (paymentAccountsRefreshNeeded) {
@@ -1495,49 +1723,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           settlementUpdateMessage = " The related settlement totals could not be updated automatically.";
         }
 
-        if (!allocationWarning) {
-          try {
-            invoiceAccountingSyncResult = await syncAccountingEntriesForInvoices(
-              allocationResult.successfulEntries.map(function (entry) {
-                return entry.invoiceId;
-              }),
-              {
-                continueOnError: true
-              }
-            );
-
-            if (invoiceAccountingSyncResult.failures.length) {
-              invoiceAccountingSyncMessage = " Some invoice accounting entries could not be synced automatically. Use Sync entry manually on those invoices.";
-            } else if (invoiceAccountingSyncResult.syncedInvoiceIds.length) {
-              invoiceAccountingSyncMessage = " Invoice accounting entries synced automatically.";
-            }
-          } catch (invoiceAccountingSyncError) {
-            debugError("auto sync invoice accounting after payment create failed", invoiceAccountingSyncError, {
-              paymentId: paymentId,
-              invoiceIds: allocationResult.successfulEntries.map(function (entry) {
-                return entry.invoiceId;
-              })
-            });
-            invoiceAccountingSyncMessage = " Invoice accounting entries could not be synced automatically. Use Sync entry manually on the invoices.";
-          }
-
-          try {
-            await syncAccountingEntryForPayment(paymentId, {
-              silent: true,
-              skipRender: true
-            });
-            accountingSyncMessage = " Accounting entry synced automatically.";
-          } catch (accountingSyncError) {
-            debugError("auto sync accounting after payment create failed", accountingSyncError, {
-              paymentId: paymentId
-            });
-            accountingSyncMessage = " Accounting entry could not be synced automatically. Use Sync entry manually.";
-          }
-        } else {
-          invoiceAccountingSyncMessage = " Invoice accounting entries were not auto-synced because some allocations need review. Use Sync entry manually on the invoices.";
-          accountingSyncMessage = " Accounting entry was not auto-synced because some allocations need review. Use Sync entry manually.";
-        }
-
         renderAll();
 
         if (selectedDetailId) {
@@ -1545,33 +1730,21 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         }
 
         created = true;
-        renderer.showNotice(
-          (context && context.hasMixedInvoiceTypes
-            ? "Net supplier settlement created successfully."
-            : paymentData.Movement_Type === PAYMENT_MOVEMENT_TYPES.supplierRefund
-              ? "Supplier refund created successfully."
-              : "Supplier payment created successfully.") + settlementUpdateMessage + invoiceAccountingSyncMessage + accountingSyncMessage + allocationWarning,
-          {
-            tone: allocationWarning ||
-              settlementUpdateMessage ||
-              (invoiceAccountingSyncMessage && invoiceAccountingSyncMessage.indexOf("could not") !== -1) ||
-              (invoiceAccountingSyncMessage && invoiceAccountingSyncMessage.indexOf("were not") !== -1) ||
-              (accountingSyncMessage && accountingSyncMessage.indexOf("could not") !== -1)
-              ? "neutral"
-              : "success"
-          }
-        );
+        state.paymentCreation.feedback = { isOpen: false, status: "", message: "" };
+        renderPaymentCreateFeedback();
       } catch (error) {
         debugError("onCreateSupplierPaymentSubmit failed", error);
         state.paymentCreation.isBusy = false;
         renderer.showNotice("");
-        renderer.showError(
-          error.message || (
+        state.paymentCreation.feedback = {
+          isOpen: true,
+          status: "error",
+          message: error.message || (
             paymentData.Movement_Type === PAYMENT_MOVEMENT_TYPES.supplierRefund
               ? "Could not create the supplier refund."
               : "Could not create the supplier payment."
           )
-        );
+        };
         renderAll();
       } finally {
         if (!created && state.paymentCreation.isBusy) {
@@ -1587,6 +1760,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       openCreatePaymentPanel: openCreatePaymentPanel,
       onInvoicePaymentAllocationChange: onInvoicePaymentAllocationChange,
       onInvoicePaymentSupplierAccountChange: onInvoicePaymentSupplierAccountChange,
+      onInvoicePaymentSupplierAccountFocus: onInvoicePaymentSupplierAccountFocus,
+      onInvoicePaymentSupplierAccountInput: onInvoicePaymentSupplierAccountInput,
+      onInvoicePaymentSupplierAccountBlur: onInvoicePaymentSupplierAccountBlur,
+      onInvoicePaymentSupplierAccountOptionPointerDown: onInvoicePaymentSupplierAccountOptionPointerDown,
       onInvoicePaymentHeaderAccountFocus: onInvoicePaymentHeaderAccountFocus,
       onInvoicePaymentHeaderAccountInput: onInvoicePaymentHeaderAccountInput,
       onInvoicePaymentHeaderAccountKeydown: onInvoicePaymentHeaderAccountKeydown,
@@ -1594,7 +1771,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       onInvoicePaymentHeaderAccountToggleClick: onInvoicePaymentHeaderAccountToggleClick,
       onInvoicePaymentHeaderAccountDropdownPointerDown: onInvoicePaymentHeaderAccountDropdownPointerDown,
       onInvoicePaymentHeaderAccountDropdownClick: onInvoicePaymentHeaderAccountDropdownClick,
+      onInvoicePaymentHeaderAccountDocumentPointerDown: onInvoicePaymentHeaderAccountDocumentPointerDown,
       onCreateSupplierPaymentSubmit: onCreateSupplierPaymentSubmit,
+      closePaymentCreateFeedback: closePaymentCreateFeedback,
       refreshInvoicesAndPaymentsAfterSupplierPayment: refreshInvoicesAndPaymentsAfterSupplierPayment
     };
   };

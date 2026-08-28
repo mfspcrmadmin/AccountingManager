@@ -163,6 +163,28 @@
   pointer-events: auto;
 }
 
+/* Keep the workspace fixed while a dialog is active. Dialogs that need their
+   own scrolling retain it; this only prevents the page behind them from moving.
+   The file preview is created dynamically, so it is included explicitly. */
+html:has(body:has([role="dialog"]:not([hidden]))),
+html:has(body:has(.operations-file-preview)) {
+  overflow: hidden;
+}
+
+body:has([role="dialog"]:not([hidden])),
+body:has(.operations-file-preview) {
+  overflow: hidden;
+}
+
+/* Booking quick actions is the only dialog without its own backdrop. */
+body:has(#booking-actions-popup:not([hidden]))::before {
+  position: fixed;
+  z-index: 999;
+  inset: 0;
+  content: "";
+  background: rgba(16, 24, 40, 0.18);
+}
+
 .booking-actions-toggle {
   min-height: 42px;
   padding: 10px 16px;
@@ -1508,6 +1530,27 @@ input::placeholder {
   color: #8a97a4;
 }
 
+input[type="search"]::-webkit-search-cancel-button {
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 999px;
+  background:
+    linear-gradient(45deg, transparent 45%, #98a2b3 46%, #98a2b3 54%, transparent 55%),
+    linear-gradient(-45deg, transparent 45%, #98a2b3 46%, #98a2b3 54%, transparent 55%),
+    #f2f4f7;
+  cursor: pointer;
+  opacity: 0.82;
+  transition: background-color 0.16s ease, opacity 0.16s ease;
+}
+
+input[type="search"]::-webkit-search-cancel-button:hover {
+  background-color: #e4e7ec;
+  opacity: 1;
+}
+
 input:hover,
 select:hover {
   border-color: rgba(209, 136, 87, 0.2);
@@ -1518,6 +1561,62 @@ select:focus {
   border-color: var(--accent);
   outline: 0;
   box-shadow: var(--focus-ring);
+}
+
+/* Native selects keep their browser behaviour, with a consistent, comfortably
+   inset triangular indicator instead of each browser's edge-hugging arrow. */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), linear-gradient(180deg, #fff 0%, #fbfdff 100%);
+  background-repeat: no-repeat, no-repeat;
+  background-position: right 15px center, center;
+  background-size: 12px 8px, 100% 100%;
+}
+
+select:disabled {
+  cursor: not-allowed;
+}
+
+.bookings-stage-toggle {
+  position: relative;
+  padding-right: 34px;
+}
+
+.bookings-stage-toggle::after {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid currentColor;
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+  content: "";
+  opacity: .62;
+  pointer-events: none;
+  transform: translateY(-35%);
+  transition: transform 140ms ease;
+}
+
+.bookings-stage-toggle[aria-expanded="true"]::after {
+  transform: translateY(-65%) rotate(180deg);
+}
+
+.settlement-combobox-toggle {
+  font-size: 0;
+}
+
+.settlement-combobox-toggle::after {
+  width: 0;
+  height: 0;
+  border-top: 6px solid currentColor;
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+  content: "";
+  pointer-events: none;
 }
 
 .button {
@@ -2442,7 +2541,7 @@ select:focus {
 
 .invoice-create-form-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
   height: 100%;
   min-height: 0;
@@ -2512,8 +2611,7 @@ select:focus {
   align-items: stretch;
   min-height: 0;
   min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .invoice-create-step-main {
@@ -2523,19 +2621,23 @@ select:focus {
   min-height: 0;
   min-width: 0;
   align-content: start;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
   padding-right: 4px;
 }
 
 .invoice-create-step-side {
-  position: static;
   display: grid;
-  align-self: start;
+  align-self: stretch;
   align-content: start;
   gap: 0;
-  max-height: none;
+  min-height: 0;
   min-width: 0;
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .nested-inline-panel {
@@ -2624,7 +2726,7 @@ select:focus {
   display: grid;
   gap: 10px;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   padding-right: 4px;
   align-content: start;
 }
@@ -3177,9 +3279,7 @@ select:focus {
 }
 
 .invoice-create-step-side > .invoice-create-summary-card:first-child {
-  position: sticky;
-  top: 10px;
-  z-index: 2;
+  position: static;
   border-radius: 16px 16px 0 0;
 }
 
@@ -4644,6 +4744,8 @@ select.status-select.status-danger {
 
   .invoice-create-steps-layout {
     grid-template-columns: 1fr;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .invoice-create-step-side {
@@ -4663,6 +4765,7 @@ select.status-select.status-danger {
   }
 
   .invoice-create-step-main {
+    overflow: visible;
     padding-right: 0;
   }
 
@@ -4827,6 +4930,22 @@ select.status-select.status-danger {
   .supplier-info-block {
     padding: 9px;
   }
+}
+
+/* The supplier lookup is the entry point to this workspace, so it always
+   occupies the full top row instead of sharing horizontal space with details. */
+#tab-suppliers .suppliers-workspace {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#tab-suppliers .suppliers-rail {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+
+#tab-suppliers .supplier-main-stack {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 720px) {
@@ -5336,8 +5455,8 @@ textarea:hover {
   border-color: rgba(19, 32, 25, 0.12);
   border-radius: 18px;
   box-shadow:
-    0 24px 60px rgba(22, 48, 39, 0.22),
-    0 0 0 9999px rgba(19, 32, 25, 0.34);
+    0 28px 68px rgba(22, 48, 39, 0.28),
+    0 0 0 9999px rgba(19, 32, 25, 0.42);
 }
 
 .invoice-create-popup,
@@ -6036,6 +6155,65 @@ textarea:hover,
   margin-top: 9px;
 }
 
+/* Keep the supplier lookup contained and the search action beside it at every rail width. */
+#tab-suppliers .suppliers-rail .supplier-rail-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+}
+
+#tab-suppliers .suppliers-rail .supplier-toolbar-field,
+#tab-suppliers .suppliers-rail .supplier-toolbar-field input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#tab-suppliers .suppliers-rail .supplier-toolbar-field input {
+  box-sizing: border-box;
+}
+
+@media (max-width: 520px) {
+  #tab-suppliers .suppliers-rail .supplier-rail-search {
+    display: flex;
+    align-items: end;
+    gap: 6px;
+  }
+
+  #tab-suppliers .suppliers-rail .supplier-toolbar-field {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  #tab-suppliers .suppliers-rail .supplier-toolbar-field input {
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  #tab-suppliers .suppliers-rail .supplier-load-button {
+    flex: 0 0 32px;
+    width: 32px;
+    min-width: 32px;
+    height: 38px;
+    min-height: 38px;
+  }
+}
+
+@media (max-width: 900px) {
+  #tab-suppliers .suppliers-workspace,
+  #tab-suppliers .suppliers-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #tab-suppliers .suppliers-rail .compact-search-panel {
+    grid-column: 1;
+    width: 100%;
+  }
+}
+
 .supplier-last-sync {
   color: #667085;
   font-size: 10px;
@@ -6265,6 +6443,20 @@ textarea:hover,
   .supplier-summary-actions #create-invoice-from-supplier {
     grid-column: auto;
   }
+}
+
+/* Status variants use a background shorthand above; restore the common arrow. */
+select.status-select {
+  padding-right: 42px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  background-size: 12px 8px;
+}
+
+/* Keep text clear of the indicator even in compact form variants. */
+select {
+  padding-right: 42px !important;
 }
 
 /* Supplier lookup: keep the input and search action contained in narrow rails. */

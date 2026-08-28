@@ -121,7 +121,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         elements.paymentsEmpty.hidden = true;
         elements.paymentsTableWrap.hidden = false;
-        elements.paymentsPaginationBar.hidden = view.page <= 1 && !view.hasMore;
+        elements.paymentsPaginationBar.hidden = true;
         elements.paymentsPaginationCopy.textContent = view.pageSummary;
       }
 

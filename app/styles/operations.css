@@ -18,6 +18,38 @@
   overflow: auto;
 }
 
+.operations-panel.is-card-purchases {
+  height: calc(100vh - 116px);
+}
+
+.operations-panel #operations-table-wrap.is-card-purchases {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.operations-panel.is-card-purchases #operations-pagination-bar { flex: 0 0 auto; }
+
+#operations-table-wrap.is-card-purchases .operations-results-table {
+  width: max(100%, 1760px);
+  min-width: 1760px;
+  table-layout: auto;
+}
+
+#operations-table-wrap.is-card-purchases .operations-results-table th:nth-child(9),
+#operations-table-wrap.is-card-purchases .operations-results-table td:nth-child(9) {
+  min-width: 200px;
+}
+
+#operations-table-wrap.is-card-purchases .operations-results-table th:nth-child(10),
+#operations-table-wrap.is-card-purchases .operations-results-table td:nth-child(10) {
+  min-width: 260px;
+  max-width: 360px;
+  white-space: normal;
+}
+
 .operations-panel .operations-empty-state:not([hidden]) {
   flex: 1 1 auto;
 }
@@ -143,6 +175,10 @@
   white-space: nowrap;
 }
 
+.operations-results-table thead th {
+  vertical-align: middle;
+}
+
 .operations-observations {
   max-width: 230px;
   overflow: hidden;
@@ -204,6 +240,165 @@
 .operations-empty-value {
   color: var(--muted);
 }
+
+.card-purchase-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.card-purchase-status.is-paid { background: #eaf7ef; color: #177245; }
+.card-purchase-status.is-refund { background: #fff0f2; color: #b4233c; }
+.card-purchase-status.is-neutral { background: #f2f4f7; color: #667085; }
+.card-purchase-status.is-purchase { background: #e8f0ff; color: #2458a6; }
+.card-purchase-status.is-complete { background: #eaf7ef; color: #177245; }
+.card-purchase-status.is-attention { background: #fde9e8; color: #b42318; }
+.card-purchase-status.is-pending { background: #fff5d6; color: #8a5a00; }
+.card-purchase-status.is-pending-invoice,
+.card-purchase-status.is-pending-credit-note { background: #f27e22; color: #fff; }
+.card-purchase-status.is-pending-payment,
+.card-purchase-status.is-pending-refund { background: #f5c72f; color: #3d3000; }
+.card-purchase-status.is-purchase-recorded,
+.card-purchase-status.is-refund-recorded { background: #25b52a; color: #fff; }
+.card-purchase-status.is-refund-pending { background: #fd8989; color: #5f1111; }
+.card-purchase-status.is-needs-review { background: #af38fa; color: #fff; }
+.card-purchase-status.is-cancelled { background: #eb4d4d; color: #fff; }
+.card-purchase-selection-column { width: 36px; min-width: 36px; text-align: center; }
+.card-purchase-selection-column input { display: block; margin: 0 auto; cursor: pointer; }
+.operations-card-purchase-sort { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; font-weight: inherit; letter-spacing: inherit; text-align: inherit; text-transform: inherit; vertical-align: middle; white-space: nowrap; }
+.operations-card-purchase-sort:hover, .operations-card-purchase-sort:focus-visible, .operations-card-purchase-sort.is-active { color: var(--accent-strong); }
+.card-purchase-files { display: grid; gap: 4px; justify-items: start; }
+.card-purchase-file { max-width: 180px; padding: 0; border: 0; background: transparent; color: #216a9b; font: inherit; font-size: 11px; font-weight: 650; overflow: hidden; text-align: left; text-decoration: underline; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.card-purchase-file:hover { color: #174d72; }
+.card-purchase-file-empty { color: #98a2b3; }
+.card-purchase-note { position: relative; display: inline-flex; align-items: center; justify-content: center; cursor: help; font-size: 1rem; line-height: 1; }
+.card-purchase-note-tooltip { position: absolute; z-index: 4; bottom: calc(100% + 0.45rem); left: 0; width: max-content; max-width: 19rem; padding: 0.55rem 0.65rem; border-radius: 0.4rem; background: #263238; color: #fff; font-size: 0.78rem; line-height: 1.35; text-align: left; white-space: normal; box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.2); opacity: 0; pointer-events: none; transform: translateY(0.2rem); transition: opacity 0.15s ease, transform 0.15s ease; }
+.card-purchase-note:hover .card-purchase-note-tooltip, .card-purchase-note:focus .card-purchase-note-tooltip { opacity: 1; transform: translateY(0); }
+.card-purchase-note-empty { color: #98a2b3; }
+
+.card-purchases-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 14px 0 4px;
+}
+
+.card-purchases-toolbar .field { min-width: 190px; }
+.card-purchases-toolbar .card-purchases-search-field { flex: 1 1 340px; }
+.card-purchases-apply-button { display: inline-grid; width: 38px; min-width: 38px; height: 38px; padding: 0; place-items: center; border-color: #d8792d; background: #e8893a; color: #fff; box-shadow: 0 3px 8px rgba(216, 121, 45, .22); }
+.card-purchases-apply-button:hover, .card-purchases-apply-button:focus-visible { border-color: #bb6421; background: #cf7227; color: #fff; outline: 0; }
+.card-purchases-apply-button svg { width: 18px; height: 18px; }
+.card-purchases-view-switch { display: inline-flex; flex: 0 0 auto; overflow: hidden; min-height: 38px; border: 1px solid var(--line); border-radius: 11px; background: #f8faf9; }
+.card-purchases-view-switch button { min-width: 58px; padding: 8px 12px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.card-purchases-view-switch button:last-child { border-right: 0; }
+.card-purchases-view-switch button:hover, .card-purchases-view-switch button:focus-visible { background: #fff; color: var(--accent-strong); outline: 0; }
+.card-purchases-view-switch button.is-active { background: #fff; color: var(--accent-strong); box-shadow: inset 0 -2px 0 var(--accent); }
+.card-purchases-status-field { position: relative; }
+.card-purchases-status-multiselect { position: relative; }
+.card-purchases-status-toggle { position: relative; width: 100%; min-height: 38px; padding: 9px 42px 9px 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, #fff 0%, #fbfdff 100%); color: var(--text); cursor: pointer; font: inherit; font-size: 13px; text-align: left; text-overflow: ellipsis; white-space: nowrap; transition: border-color 90ms ease, background-color 90ms ease, transform 70ms ease; }
+.card-purchases-status-toggle::after { position: absolute; top: 50%; right: 15px; width: 0; height: 0; border-top: 6px solid currentColor; border-right: 5px solid transparent; border-left: 5px solid transparent; color: #667085; content: ""; transform: translateY(-35%); transition: transform 90ms ease; }
+.card-purchases-status-toggle[aria-expanded="true"]::after { transform: translateY(-60%) rotate(180deg); }
+.card-purchases-status-toggle:hover, .card-purchases-status-toggle:focus-visible { border-color: rgba(209, 136, 87, .42); outline: 0; }
+.card-purchases-status-toggle:active { transform: scale(.985); }
+.card-purchases-status-menu { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; display: grid; width: max-content; min-width: 250px; max-width: min(330px, calc(100vw - 32px)); max-height: 330px; padding: 6px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 16px 30px rgba(16, 24, 40, .16); }
+.service-multi-filter-option { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 8px; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; }
+.service-multi-filter-option { transition: background-color 80ms ease, transform 60ms ease; }
+.service-multi-filter-option:hover { background: #fff8ef; }
+.service-multi-filter-option:active { transform: scale(.99); }
+.service-multi-filter-option--all { margin-bottom: 3px; border-bottom: 1px solid #eaecf0; border-radius: 8px 8px 0 0; color: var(--accent-strong); }
+.service-multi-filter-option input { width: 15px; height: 15px; min-height: 0; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; accent-color: var(--accent-strong); }
+.card-purchase-owner-option { width: 100%; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; }
+.card-purchase-owner-option.is-selected { background: #fff8ef; color: var(--accent-strong); font-weight: 750; }
+.card-purchase-owner-option.is-selected::after { margin-left: auto; color: var(--accent-strong); content: "✓"; font-size: 14px; }
+.card-purchases-toolbar select,
+.card-purchase-workflow-card select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 42px !important;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), linear-gradient(180deg, #fff 0%, #fbfdff 100%) !important;
+  background-repeat: no-repeat, no-repeat !important;
+  background-position: right 15px center, center !important;
+  background-size: 12px 8px, 100% 100% !important;
+}
+.card-purchases-icon-button { min-width: 38px; padding: 5px 9px; font-size: 18px; line-height: 1; }
+.card-purchase-review-button { display: inline-grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: #f2f4f7; color: #344054; cursor: pointer; }
+.card-purchase-review-button svg { width: 17px; height: 17px; }
+.card-purchase-review-button:hover, .card-purchase-review-button:focus-visible { background: #e4e7ec; color: var(--accent-strong); }
+
+.card-purchase-workflow-modal { position: fixed; inset: 0; z-index: 2002; padding: 0; pointer-events: none; }
+.card-purchase-workflow-modal:not([hidden]) { display: block; }
+.card-purchase-workflow-backdrop { position: absolute; inset: 0; background: rgba(16, 24, 40, .36); opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
+.card-purchase-workflow-card { position: absolute; top: 0; right: 0; display: flex; flex-direction: column; width: min(680px, 100vw); height: 100%; max-height: none; overflow: auto; padding: 22px; border-radius: 0; background: #fff; box-shadow: -18px 0 42px rgba(16, 24, 40, .18); opacity: .98; pointer-events: none; transform: translateX(100%); transition: transform 240ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease; }
+.card-purchase-workflow-modal.is-open { pointer-events: auto; }
+.card-purchase-workflow-modal.is-open .card-purchase-workflow-backdrop { opacity: 1; pointer-events: auto; }
+.card-purchase-workflow-modal.is-open .card-purchase-workflow-card { opacity: 1; pointer-events: auto; transform: translateX(0); }
+.card-purchase-workflow-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.card-purchase-workflow-card h3 { margin: 0; }
+.card-purchase-workflow-close { display: inline-grid; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; border-radius: 50%; background: #f2f4f7; color: #344054; cursor: pointer; font-size: 24px; line-height: 1; transform-origin: center; }
+.card-purchase-workflow-close:hover,
+.card-purchase-workflow-close:focus-visible { background: #e4e7ec; color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(209, 136, 87, .16); transform: rotate(90deg); }
+.card-purchase-workflow-context { margin: 16px 0 0; }
+.card-purchase-workflow-context dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; margin: 0; }
+.card-purchase-workflow-context dt { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
+.card-purchase-workflow-context dd { min-width: 0; margin: 3px 0 0; color: var(--text); font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-purchase-workflow-summary { grid-column: 1 / -1; display: flex; align-items: end; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid #eaecf0; }
+.card-purchase-workflow-summary dd { font-size: 16px; font-weight: 750; }
+.card-purchase-workflow-summary .card-purchase-workflow-amount { flex: 0 0 auto; text-align: right; }
+.card-purchase-workflow-summary .card-purchase-workflow-amount dd { font-size: 22px; line-height: 1; }
+.card-purchase-workflow-transaction-type { display: inline-flex; grid-column: 1 / -1; align-items: center; gap: 7px; margin-top: -2px; }
+.card-purchase-workflow-transaction-type dt { display: none; }
+.card-purchase-workflow-transaction-type dd { display: inline-flex; width: auto; padding: 3px 8px; border-radius: 999px; background: #e8f0ff; color: #2458a6; font-size: 11px; font-weight: 700; }
+.card-purchase-workflow-documents { grid-column: 1 / -1; margin-top: 2px; padding-top: 12px; border-top: 1px solid #eaecf0; }
+.card-purchase-workflow-documents dd { display: grid; gap: 6px; margin-top: 6px; overflow: visible; white-space: normal; }
+.card-purchase-workflow-documents .card-purchase-file { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #eaecf0; border-radius: 8px; background: #fff; color: #344054; font-size: 12px; font-weight: 600; text-decoration: none; }
+.card-purchase-workflow-documents .card-purchase-file::before { flex: 0 0 auto; color: #667085; content: "▤"; font-size: 15px; }
+.card-purchase-workflow-documents .card-purchase-file span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-purchase-workflow-documents .card-purchase-file:hover,
+.card-purchase-workflow-documents .card-purchase-file:focus-visible { border-color: rgba(209, 136, 87, .45); background: #fffaf5; color: var(--accent-strong); }
+.card-purchase-workflow-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.card-purchase-payment-account-field { grid-column: 1 / -1; }
+.card-purchase-workflow-message { flex: 1 1 190px; min-width: 0; margin: 0 auto 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.card-purchase-workflow-message.is-error { color: #b42318; font-weight: 650; }
+.card-purchase-workflow-decision-divider { height: 1px; margin: 16px 0 12px; background: #eaecf0; }
+.card-purchase-workflow-card #card-purchase-review-notes { min-height: 66px; padding: 9px 11px; line-height: 1.45; resize: vertical; }
+.card-purchase-workflow-form.is-read-only .card-purchase-workflow-decision-divider { display: none; }
+.card-purchase-workflow-form.is-read-only #card-purchase-review-notes { margin-bottom: 0; border-color: transparent; background: #f8fafc; color: #475467; cursor: default; opacity: 1; resize: none; }
+.card-purchase-workflow-actions { align-items: center; justify-content: flex-end; min-height: 38px; margin-top: 14px; }
+.card-purchase-workflow-spinner { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.card-purchase-workflow-spinner::before { width: 15px; height: 15px; border: 2px solid rgba(102, 112, 133, .25); border-top-color: var(--accent-strong); border-radius: 50%; content: ""; animation: card-purchase-workflow-spin .7s linear infinite; }
+.card-purchase-workflow-modal.is-saving .card-purchase-workflow-actions .button { display: none; }
+#operations-table-wrap.is-card-purchases .operations-results-table tbody tr.is-card-purchase-active > td { background: #fff8ef; }
+#operations-table-wrap.is-card-purchases .operations-results-table tbody tr.is-card-purchase-active > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+@keyframes card-purchase-workflow-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 720px) {
+  .card-purchases-toolbar { align-items: stretch; flex-direction: column; }
+  .card-purchases-toolbar .field { min-width: 0; }
+  .card-purchases-view-switch { align-self: flex-start; }
+  .card-purchase-workflow-context dl,
+  .card-purchase-workflow-fields { grid-template-columns: 1fr; }
+  .card-purchase-workflow-summary { gap: 12px; }
+  .card-purchase-workflow-card { width: 100%; padding: 18px; }
+}
+
+.operations-file-preview { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; }
+.operations-file-preview-backdrop { position: absolute; inset: 0; background: rgba(16, 24, 40, .45); }
+.operations-file-preview-card { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); width: min(1180px, calc(100vw - 40px)); height: min(820px, calc(100vh - 40px)); padding: 16px; border-radius: 14px; background: #fff; box-shadow: 0 20px 50px rgba(16, 24, 40, .25); }
+.operations-file-preview-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.operations-file-preview-card header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.operations-file-preview-card header button { width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f2f4f7; color: #344054; font-size: 24px; line-height: 1; cursor: pointer; }
+.operations-file-preview-content { display: grid; min-height: 0; margin-top: 14px; place-items: center; overflow: hidden; }
+.operations-file-preview-content iframe { width: 100%; height: 100%; border: 1px solid #eaecf0; border-radius: 8px; }
+.operations-file-preview-content img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.operations-file-preview-error { color: #b4233c; }
 
 @media (max-width: 1080px) {
   .operations-type-grid {

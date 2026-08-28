@@ -129,9 +129,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.invoicesLoad.disabled = state.isLoading;
         elements.invoicesLoad.textContent = state.currentTab === "invoices" && state.isLoading ? "Loading..." : "Load";
       }
-      if (elements.invoicesShowAttachments) {
-        elements.invoicesShowAttachments.disabled = state.isLoading;
-      }
       if (elements.bookingsLoad) {
         elements.bookingsLoad.disabled = state.isLoading;
       }
@@ -197,9 +194,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
       if (elements.paymentAccountCreateOpen) {
         elements.paymentAccountCreateOpen.disabled = state.isLoading;
-      }
-      if (elements.selectedPaymentEdit) {
-        elements.selectedPaymentEdit.disabled = state.isLoading || isPaymentLetterBusy || isPaymentAccountingBusy || !hasSelectedPayment;
       }
       if (elements.selectedPaymentDelete) {
         elements.selectedPaymentDelete.disabled = state.isLoading || isPaymentLetterBusy || isPaymentAccountingBusy || !hasSelectedPayment;
@@ -1291,23 +1285,17 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
     }
 
-    function renderInvoicesWorkspace(view, onInvoiceChecked, onInvoiceSelected, onToggleAll, onSortChange, onInvoiceListTabChange, onInvoiceDetailTabChange, onSelectedInvoiceAttachmentPreview, onInvoiceAttachmentFallbackOpen, getInvoiceAttachmentsForField, getAttachmentKey, getAttachmentFileName, getAttachmentCategory, getAttachmentDateValue, getAttachmentPreviewUrl) {
+    function renderInvoicesWorkspace(view, onInvoiceChecked, onInvoiceSelected, onToggleAll, onSortChange, onInvoiceDetailTabChange, onInvoiceOpenNative, onInvoiceFilesNeeded, onShowAttachmentsChange) {
       invoicesRenderer.renderInvoicesWorkspace(
         view,
         onInvoiceChecked,
         onInvoiceSelected,
         onToggleAll,
         onSortChange,
-        onInvoiceListTabChange,
         onInvoiceDetailTabChange,
-        onSelectedInvoiceAttachmentPreview,
-        onInvoiceAttachmentFallbackOpen,
-        getInvoiceAttachmentsForField,
-        getAttachmentKey,
-        getAttachmentFileName,
-        getAttachmentCategory,
-        getAttachmentDateValue,
-        getAttachmentPreviewUrl
+        onInvoiceOpenNative,
+        onInvoiceFilesNeeded,
+        onShowAttachmentsChange
       );
     }
     function renderPaymentsWorkspace(view, onSelected) {

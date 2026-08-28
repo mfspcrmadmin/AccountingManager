@@ -53,6 +53,15 @@
   line-height: 1.25;
 }
 
+.invoice-attachment-files-cell .card-purchase-file {
+  width: 100%;
+  max-width: none;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .invoice-results-table {
   min-width: 860px;
   table-layout: fixed;
@@ -188,6 +197,17 @@
 
 .selected-invoice-attachments-table-wrap {
   overflow-x: auto;
+}
+
+.selected-invoice-attachments-list {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.selected-invoice-attachments-empty {
+  color: #667085;
+  font-size: 12px;
 }
 
 .selected-invoice-attachments-table {

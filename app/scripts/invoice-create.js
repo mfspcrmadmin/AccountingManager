@@ -228,6 +228,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function renderInvoiceCreateContext() {
+      return;
+
       var supplier = state.supplier;
       var selectedSettlement = state.invoiceCreation.selectedSettlement;
       var supplierName = supplier
@@ -1507,8 +1509,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       state.records.settlements = [];
       state.invoiceLinesByInvoiceId = {};
       state.invoiceLineLoadingId = "";
-      state.invoiceAttachmentsByInvoiceId = {};
-      state.invoiceAttachmentLoadingId = "";
 
       if (shouldReloadInvoicesView) {
         await refreshInvoicesTabData({
@@ -1536,7 +1536,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
 
-      renderInvoiceCreateContext();
       renderInvoiceCreateModeState();
       renderInvoiceCreateSettlementFilters();
       renderInvoiceCreateSettlementTable();

@@ -108,7 +108,8 @@ form Card_Purchase
 	(
 		type = picklist
 		maxchar = 100
-		values = {"Pending Accounting Review","Ok"}
+		values = {"Pending invoice","Pending payment record","Purchase recorded","Pending credit note","Refund pending","Pending refund record","Refund recorded","Needs review","Cancelled"}
+		initial value = "Pending invoice"
 	 	row = 4
 	 	column = 1   
 		width = medium

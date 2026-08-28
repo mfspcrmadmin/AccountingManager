@@ -10,28 +10,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var stripSortIndicator = deps.stripSortIndicator;
     var getSortIndicator = deps.getSortIndicator;
 
-    function isImageAttachment(fileName, previewUrl) {
-      var source = String(fileName || previewUrl || "").toLowerCase();
-      return /\.(avif|bmp|gif|jpe?g|png|svg|webp)(?:$|[?#])/.test(source);
-    }
-
-    function isPdfAttachment(fileName, previewUrl) {
-      var source = String(fileName || previewUrl || "").toLowerCase();
-      return /\.pdf(?:$|[?#])/.test(source);
-    }
-
-    function buildAttachmentPreviewBody(fileName, previewUrl) {
-      if (previewUrl && isImageAttachment(fileName, previewUrl)) {
-        return '<div class="selected-invoice-attachment-popup-body"><img class="attachment-preview-image" src="' + helpers.escapeHtml(previewUrl) + '" alt="' + helpers.escapeHtml(fileName) + '"></div>';
-      }
-
-      if (previewUrl && isPdfAttachment(fileName, previewUrl)) {
-        return '<div class="selected-invoice-attachment-popup-body"><iframe class="attachment-preview-frame" src="' + helpers.escapeHtml(previewUrl) + '#toolbar=0&navpanes=0" title="' + helpers.escapeHtml(fileName) + '"></iframe></div>';
-      }
-
-      return '<div class="selected-invoice-attachment-popup-body"><div class="attachment-preview-body-generic">Inline preview is not available for this file type.</div></div>';
-    }
-
     function getCandidateNumber(record, candidates, fallbackCandidates) {
       var value = helpers.getCandidateValue(record, candidates);
 
@@ -90,13 +68,123 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return normalizedPrimary + " | " + normalizedSecondary;
     }
 
-    function renderSelectedInvoice(view, tabState, callbacks, attachmentHelpers) {
+    function formatInvoiceTypeBadge(invoice) {
+      var invoiceType = helpers.textValue(helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType));
+      var normalizedType = String(invoiceType || "").toLowerCase();
+      var tone = "is-final";
+
+      if (normalizedType.indexOf("credit") !== -1) {
+        tone = "is-credit";
+      } else if (normalizedType.indexOf("proforma") !== -1) {
+        tone = "is-proforma";
+      } else if (normalizedType.indexOf("ticket") !== -1) {
+        tone = "is-tickets";
+      } else if (normalizedType.indexOf("commission") !== -1) {
+        tone = "is-commission";
+      }
+
+      return '<span class="invoice-type-badge ' + tone + '">' + helpers.escapeHtml(invoiceType || "-") + "</span>";
+    }
+
+    function normalizeInvoiceFiles(value) {
+      return (Array.isArray(value) ? value : value ? [value] : []).map(function (file, index) {
+        if (typeof file === "string") {
+          return { name: "Invoice file " + String(index + 1), id: file, url: "", type: "" };
+        }
+
+        return {
+          name: String(file && (file.File_Name || file.file_Name || file.file_name || file.filename || file.fileName || file.name) || "Invoice file " + String(index + 1)),
+          id: String(file && (file.$file_id || file.file_id || file.file_Id || file.File_Id || file.id) || ""),
+          url: String(file && (file.url || file.file_url || file.preview_url || file.download_url) || ""),
+          type: String(file && (file.type || file.mime_type || file.content_type) || "")
+        };
+      });
+    }
+
+    function toInvoiceFileBlob(source, type) {
+      if (source instanceof Blob) { return source; }
+      if (source instanceof ArrayBuffer || (source && ArrayBuffer.isView(source))) {
+        return new Blob([source], { type: type || "application/octet-stream" });
+      }
+      return new Blob([source], { type: type || "application/octet-stream" });
+    }
+
+    function showInvoiceFilePreview(file) {
+      var modal = document.createElement("div");
+      var content;
+      var close;
+
+      modal.className = "operations-file-preview";
+      modal.innerHTML = '<div class="operations-file-preview-backdrop"></div><section class="operations-file-preview-card" role="dialog" aria-modal="true" aria-label="File preview"><header><strong>' + helpers.escapeHtml(file.name) + '</strong><button type="button" aria-label="Close">&times;</button></header><div class="operations-file-preview-content">Loading preview...</div></section>';
+      content = modal.querySelector(".operations-file-preview-content");
+      close = function () {
+        if (modal._objectUrl) { global.URL.revokeObjectURL(modal._objectUrl); }
+        modal.remove();
+      };
+      modal.querySelector(".operations-file-preview-backdrop").onclick = close;
+      modal.querySelector("button").onclick = close;
+      document.body.appendChild(modal);
+
+      Promise.resolve(file.url || (file.id && global.ZOHO && global.ZOHO.CRM && global.ZOHO.CRM.API && global.ZOHO.CRM.API.getFile({ id: file.id }))).then(function (source) {
+        var blob;
+        var url;
+        var isImage;
+        var isPdf;
+
+        if (!source) { throw new Error("File is not available for preview."); }
+        blob = toInvoiceFileBlob(source, file.type);
+        url = typeof source === "string" && /^(https?:|data:|blob:)/i.test(source) ? source : global.URL.createObjectURL(blob);
+        isImage = /^image\//i.test(blob.type || file.type) || /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(file.name);
+        isPdf = /^application\/pdf$/i.test(blob.type || file.type) || /\.pdf$/i.test(file.name);
+        if (url.indexOf("blob:") === 0) { modal._objectUrl = url; }
+        content.innerHTML = isImage
+          ? '<img src="' + helpers.escapeHtml(url) + '" alt="' + helpers.escapeHtml(file.name) + '">'
+          : isPdf
+          ? '<iframe src="' + helpers.escapeHtml(url) + '" title="' + helpers.escapeHtml(file.name) + '"></iframe>'
+          : '<p>This file cannot be previewed here.</p><a class="button secondary" href="' + helpers.escapeHtml(url) + '" download="' + helpers.escapeHtml(file.name) + '">Download file</a>';
+      }).catch(function () {
+        content.innerHTML = '<p class="operations-file-preview-error">The file preview could not be loaded.</p>';
+      });
+    }
+
+    function renderSelectedInvoiceAttachments(invoice) {
+      var files = normalizeInvoiceFiles(invoice && invoice.Invoice_File);
+
+      if (!elements.selectedInvoiceAttachmentsList) {
+        return;
+      }
+
+      if (invoice && invoice._invoiceFileLoading) {
+        elements.selectedInvoiceAttachmentsList.innerHTML = '<span class="selected-invoice-attachments-empty">Loading attachments...</span>';
+        return;
+      }
+
+      if (!files.length) {
+        elements.selectedInvoiceAttachmentsList.innerHTML = '<span class="selected-invoice-attachments-empty">This invoice has no attachments.</span>';
+        return;
+      }
+
+      elements.selectedInvoiceAttachmentsList.innerHTML = files.map(function (file, index) {
+        return '<button class="card-purchase-file" type="button" data-invoice-file-index="' + index + '" title="Preview ' + helpers.escapeHtml(file.name) + '">' + helpers.escapeHtml(file.name) + "</button>";
+      }).join("");
+      elements.selectedInvoiceAttachmentsList.onclick = function (event) {
+        var button = event.target && event.target.closest("[data-invoice-file-index]");
+        var index;
+
+        if (!button) {
+          return;
+        }
+        index = Number(button.getAttribute("data-invoice-file-index"));
+        if (files[index]) {
+          showInvoiceFilePreview(files[index]);
+        }
+      };
+    }
+
+    function renderSelectedInvoice(view, tabState, callbacks) {
       var isInfoTab = tabState.selectedInvoiceDetailTab !== "payment" && tabState.selectedInvoiceDetailTab !== "accounting";
       var isPaymentTab = tabState.selectedInvoiceDetailTab === "payment";
       var isAccountingTab = tabState.selectedInvoiceDetailTab === "accounting";
-      var selectedPreviewUrl;
-      var selectedPreviewFileName;
-      var selectedPreviewMarkup;
 
       if (elements.selectedInvoiceTabBasic) {
         elements.selectedInvoiceTabBasic.onclick = function () {
@@ -148,20 +236,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.selectedInvoiceAllocationsEmpty.hidden = false;
         elements.selectedInvoiceAllocationsTableWrap.hidden = true;
         elements.selectedInvoiceAllocationsList.innerHTML = "";
-        if (elements.selectedInvoiceAttachmentsEmpty) {
-          elements.selectedInvoiceAttachmentsEmpty.textContent = "This invoice has no attachments yet.";
-          elements.selectedInvoiceAttachmentsEmpty.hidden = false;
-        }
-        if (elements.selectedInvoiceAttachmentsTableWrap) {
-          elements.selectedInvoiceAttachmentsTableWrap.hidden = true;
-        }
-        if (elements.selectedInvoiceAttachmentsList) {
-          elements.selectedInvoiceAttachmentsList.innerHTML = "";
-        }
-        if (elements.selectedInvoiceAttachmentsPreview) {
-          elements.selectedInvoiceAttachmentsPreview.hidden = true;
-          elements.selectedInvoiceAttachmentsPreview.innerHTML = "";
-        }
         return;
       }
 
@@ -175,6 +249,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
       elements.selectedInvoiceStatus.textContent = helpers.textValue(view.selectedInvoice.Status);
       elements.selectedInvoiceStatus.className = "status-pill " + helpers.getStatusTone(view.selectedInvoice.Status);
+      renderSelectedInvoiceAttachments(view.selectedInvoice);
       elements.selectedInvoiceSupplier.textContent = joinDisplayParts(
         view.getSupplierName(view.selectedInvoice),
         view.getSupplierDisplay(view.selectedInvoice).code
@@ -342,67 +417,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.selectedInvoiceAllocationsTableWrap.hidden = false;
       }
 
-      if (view.selectedInvoiceAttachmentsLoading) {
-        elements.selectedInvoiceAttachmentsEmpty.textContent = "Loading invoice attachments...";
-        elements.selectedInvoiceAttachmentsEmpty.hidden = false;
-        elements.selectedInvoiceAttachmentsTableWrap.hidden = true;
-        elements.selectedInvoiceAttachmentsList.innerHTML = "";
-        if (elements.selectedInvoiceAttachmentsPreview) {
-          elements.selectedInvoiceAttachmentsPreview.hidden = true;
-          elements.selectedInvoiceAttachmentsPreview.innerHTML = "";
-        }
-      } else if (!view.selectedInvoiceAttachments.length) {
-        elements.selectedInvoiceAttachmentsEmpty.textContent = "This invoice has no attachments yet.";
-        elements.selectedInvoiceAttachmentsEmpty.hidden = false;
-        elements.selectedInvoiceAttachmentsTableWrap.hidden = true;
-        elements.selectedInvoiceAttachmentsList.innerHTML = "";
-        if (elements.selectedInvoiceAttachmentsPreview) {
-          elements.selectedInvoiceAttachmentsPreview.hidden = true;
-          elements.selectedInvoiceAttachmentsPreview.innerHTML = "";
-        }
-      } else {
-        elements.selectedInvoiceAttachmentsList.innerHTML = view.selectedInvoiceAttachments.map(function (attachment, index) {
-          var fileName = attachmentHelpers.getAttachmentFileName(attachment) || ("Attachment " + String(index + 1));
-          var previewKey = attachmentHelpers.getAttachmentKey(attachment, index);
-
-          return [
-            "<tr>",
-            '  <td class="selected-invoice-attachment-file-cell"><a class="supplier-inline-link" href="#" data-selected-invoice-attachment-preview="' + helpers.escapeHtml(previewKey) + '">' + helpers.escapeHtml(fileName) + "</a></td>",
-            "</tr>"
-          ].join("");
-        }).join("");
-        elements.selectedInvoiceAttachmentsEmpty.hidden = true;
-        elements.selectedInvoiceAttachmentsTableWrap.hidden = false;
-        if (elements.selectedInvoiceAttachmentsPreview && view.selectedInvoiceAttachmentPreview) {
-          selectedPreviewUrl = attachmentHelpers.getAttachmentPreviewUrl(view.selectedInvoiceAttachmentPreview);
-          selectedPreviewFileName = attachmentHelpers.getAttachmentFileName(view.selectedInvoiceAttachmentPreview) || "Attachment";
-          selectedPreviewMarkup = buildAttachmentPreviewBody(selectedPreviewFileName, selectedPreviewUrl);
-          elements.selectedInvoiceAttachmentsPreview.innerHTML = [
-            '<div class="selected-invoice-attachment-popup-card" role="document">',
-            '  <div class="selected-invoice-attachment-popup-top">',
-            '    <div class="selected-invoice-attachment-popup-meta">',
-            '      <strong>' + helpers.escapeHtml(selectedPreviewFileName) + "</strong>",
-            '      <span>' + helpers.escapeHtml(attachmentHelpers.getAttachmentCategory(view.selectedInvoiceAttachmentPreview) || "Attachment") + "</span>",
-            "    </div>",
-            '    <div class="selected-invoice-attachment-popup-actions">',
-            selectedPreviewUrl
-              ? '      <a class="button secondary compact-action-button attachment-preview-link" href="' + helpers.escapeHtml(selectedPreviewUrl) + '" target="_blank" rel="noopener">Open in new tab</a>'
-              : '      <button class="button secondary compact-action-button attachment-preview-link" type="button" disabled>Open in new tab</button>',
-            '      <button class="button secondary compact-action-button close-icon-button" type="button" data-close-selected-invoice-attachment-preview="true" aria-label="Close" title="Close">&times;</button>',
-            "    </div>",
-            "  </div>",
-            selectedPreviewMarkup,
-            "</div>"
-          ].join("");
-          elements.selectedInvoiceAttachmentsPreview.hidden = false;
-        } else if (elements.selectedInvoiceAttachmentsPreview) {
-          elements.selectedInvoiceAttachmentsPreview.hidden = true;
-          elements.selectedInvoiceAttachmentsPreview.innerHTML = "";
-        }
-      }
     }
 
-    function renderInvoiceTable(view, listState, callbacks, attachmentHelpers) {
+    function renderInvoiceTable(view, listState, callbacks) {
       var currentToggleAllInvoices;
 
       if (!view.filteredRecords.length) {
@@ -419,15 +436,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (elements.invoicesTableHead) {
-        elements.invoicesTableHead.innerHTML = listState.showAttachmentsColumn ? [
+        elements.invoicesTableHead.innerHTML = listState.showAttachments ? [
           "<tr>",
           '  <th class="checkbox-column"><input id="toggle-all-invoices" class="table-checkbox" type="checkbox" aria-label="Select visible invoices"></th>',
           "  <th data-invoice-sort=\"supplierCode\">Supplier code</th>",
           "  <th data-invoice-sort=\"mfsp\">MFSP</th>",
           "  <th data-invoice-sort=\"invoice\">Invoice</th>",
-          '  <th class="invoice-attachment-files-column" data-invoice-sort="invoiceFile">Invoice file</th>',
+          '  <th class="invoice-attachment-files-column">Attachment</th>',
           "  <th data-invoice-sort=\"date\">Date</th>",
-          '  <th class="numeric-cell" data-invoice-sort="total">Total Payable Amount</th>',
+          "  <th class=\"numeric-cell\" data-invoice-sort=\"total\">Total Payable Amount</th>",
           "  <th data-invoice-sort=\"status\">Status</th>",
           "  <th data-invoice-sort=\"invoiceType\">Invoice Type</th>",
           "</tr>"
@@ -455,47 +472,33 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         var supplierDisplay = view.getSupplierDisplay
           ? view.getSupplierDisplay(invoice)
           : { name: view.getSupplierName(invoice), code: "" };
-        var hasCachedInvoiceAttachments = Boolean(state.invoiceAttachmentsByInvoiceId) &&
-          Object.prototype.hasOwnProperty.call(state.invoiceAttachmentsByInvoiceId, invoice.id);
-        var loadedInvoiceAttachments = hasCachedInvoiceAttachments && state.invoiceAttachmentsByInvoiceId && state.invoiceAttachmentsByInvoiceId[invoice.id]
-          ? state.invoiceAttachmentsByInvoiceId[invoice.id].filter(function (attachment) {
-            return String(attachment && attachment.Source_Field || "") === "Invoice_File";
-          })
-          : [];
-        var invoiceFileAttachments = loadedInvoiceAttachments.length
-          ? loadedInvoiceAttachments
-          : attachmentHelpers.getInvoiceAttachmentsForField(invoice, "Invoice_File");
-        var invoiceFileMarkup = "";
+        var invoiceFiles = normalizeInvoiceFiles(invoice.Invoice_File);
+        var attachmentMarkup = "";
 
-        if (listState.showAttachmentsColumn) {
-          invoiceFileMarkup = invoiceFileAttachments.length
-            ? '<div class="invoice-attachments-summary">' + invoiceFileAttachments.map(function (attachment, index) {
-              var previewKey = attachmentHelpers.getAttachmentKey(attachment, index);
-
-              return '<div class="invoice-attachments-summary-item">' +
-                '<a class="supplier-inline-link" href="#" data-invoice-attachment-preview="' + helpers.escapeHtml(previewKey) + '" data-invoice-attachment-invoice-id="' + helpers.escapeHtml(invoice.id) + '">' +
-                helpers.escapeHtml(attachmentHelpers.getAttachmentFileName(attachment) || ("Invoice " + String(index + 1))) +
-                "</a>" +
-                "</div>";
-            }).join("") + "</div>"
-            : !hasCachedInvoiceAttachments
-            ? '<span class="table-inline-secondary">Loading...</span>'
-            : '<span class="table-inline-secondary">No files</span>';
+        if (listState.showAttachments && !Object.prototype.hasOwnProperty.call(invoice, "Invoice_File")) {
+          callbacks.onInvoiceFilesNeeded(invoice.id);
+          attachmentMarkup = '<span class="table-inline-secondary">Loading...</span>';
+        } else if (listState.showAttachments && !invoiceFiles.length) {
+          attachmentMarkup = '<span class="table-inline-secondary">-</span>';
+        } else if (listState.showAttachments) {
+          attachmentMarkup = '<div class="invoice-attachments-summary">' + invoiceFiles.map(function (file, index) {
+            return '<div class="invoice-attachments-summary-item"><button class="card-purchase-file" type="button" data-invoice-file-index="' + index + '" title="Preview ' + helpers.escapeHtml(file.name) + '">' + helpers.escapeHtml(file.name) + '</button></div>';
+          }).join("") + "</div>";
         }
 
-        return listState.showAttachmentsColumn ? [
+        return (listState.showAttachments ? [
           '<tr class="is-clickable' + (isActive ? " is-active" : "") + (isChecked ? " is-checked" : "") + '" data-invoice-id="' + helpers.escapeHtml(invoice.id) + '">',
           '  <td class="checkbox-column"><input class="table-checkbox" type="checkbox" data-invoice-checkbox="' + helpers.escapeHtml(invoice.id) + '"' + (isChecked ? " checked" : "") + ' aria-label="Select invoice"></td>',
           "  <td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>",
           "  <td>" + helpers.escapeHtml(view.getMfsp(invoice) || "-") + "</td>",
           '  <td><a class="supplier-inline-link invoice-native-link" href="#" data-invoice-open-native="' + helpers.escapeHtml(invoice.id) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</a></td>",
-          '  <td class="invoice-attachment-files-cell">' + invoiceFileMarkup + "</td>",
+          '  <td class="invoice-attachment-files-cell">' + attachmentMarkup + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(formatCandidateCurrency(invoice, fieldCandidates.invoice.totalPayableAmount, fieldCandidates.invoice.invoiceTotal)) + "</td>",
           "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml(invoice.Status || "-") + "</span></td>",
-          "  <td>" + helpers.escapeHtml(helpers.textValue(helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType))) + "</td>",
+          "  <td>" + formatInvoiceTypeBadge(invoice) + "</td>",
           "</tr>"
-        ].join("") : [
+        ] : [
           '<tr class="is-clickable' + (isActive ? " is-active" : "") + (isChecked ? " is-checked" : "") + '" data-invoice-id="' + helpers.escapeHtml(invoice.id) + '">',
           '  <td class="checkbox-column"><input class="table-checkbox" type="checkbox" data-invoice-checkbox="' + helpers.escapeHtml(invoice.id) + '"' + (isChecked ? " checked" : "") + ' aria-label="Select invoice"></td>',
           "  <td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>",
@@ -504,19 +507,17 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(formatCandidateCurrency(invoice, fieldCandidates.invoice.totalPayableAmount, fieldCandidates.invoice.invoiceTotal)) + "</td>",
           "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml(invoice.Status || "-") + "</span></td>",
-          "  <td>" + helpers.escapeHtml(helpers.textValue(helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType))) + "</td>",
+          "  <td>" + formatInvoiceTypeBadge(invoice) + "</td>",
           "</tr>"
-        ].join("");
+        ]).join("");
       }).join("");
 
       elements.invoicesEmpty.hidden = true;
       elements.invoicesTableWrap.hidden = false;
-      if (elements.invoicesTableWrap) {
-        Array.prototype.forEach.call(elements.invoicesTableWrap.querySelectorAll(".invoice-results-table"), function (table) {
-          table.classList.toggle("show-attachments-column", listState.showAttachmentsColumn);
-        });
-      }
-      elements.invoicesPaginationBar.hidden = view.page <= 1 && !view.hasMore;
+      Array.prototype.forEach.call(elements.invoicesTableWrap.querySelectorAll(".invoice-results-table"), function (table) {
+        table.classList.toggle("show-attachments-column", listState.showAttachments);
+      });
+      elements.invoicesPaginationBar.hidden = true;
       elements.invoicesPaginationCopy.textContent = view.pageSummary;
       elements.invoicesPrevPage.disabled = state.isLoading || view.page <= 1;
       elements.invoicesNextPage.disabled = state.isLoading || !view.hasMore;
@@ -545,24 +546,26 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       Array.prototype.forEach.call(elements.invoicesTableBody.querySelectorAll("a[data-invoice-open-native]"), function (link) {
         link.addEventListener("click", function (event) {
           event.preventDefault();
-          callbacks.onInvoiceAttachmentFallbackOpen(link.getAttribute("data-invoice-open-native"));
+          callbacks.onInvoiceOpenNative(link.getAttribute("data-invoice-open-native"));
         });
       });
 
-      Array.prototype.forEach.call(elements.invoicesTableBody.querySelectorAll("a[data-invoice-attachment-preview]"), function (link) {
-        link.addEventListener("click", function (event) {
-          event.preventDefault();
-          callbacks.onInvoiceSelected(link.getAttribute("data-invoice-attachment-invoice-id"));
-          callbacks.onSelectedInvoiceAttachmentPreview(link.getAttribute("data-invoice-attachment-preview"));
+      Array.prototype.forEach.call(elements.invoicesTableBody.querySelectorAll("button[data-invoice-file-index]"), function (button) {
+        button.addEventListener("click", function () {
+          var row = button.closest("tr[data-invoice-id]");
+          var invoiceId = row && row.getAttribute("data-invoice-id");
+          var invoice = view.visibleRecords.find(function (record) {
+            return record.id === invoiceId;
+          });
+          var files = normalizeInvoiceFiles(invoice && invoice.Invoice_File);
+          var index = Number(button.getAttribute("data-invoice-file-index"));
+
+          if (files[index]) {
+            showInvoiceFilePreview(files[index]);
+          }
         });
       });
 
-      Array.prototype.forEach.call(elements.selectedInvoiceAttachmentsList.querySelectorAll("a[data-selected-invoice-attachment-preview]"), function (link) {
-        link.addEventListener("click", function (event) {
-          event.preventDefault();
-          callbacks.onSelectedInvoiceAttachmentPreview(link.getAttribute("data-selected-invoice-attachment-preview"));
-        });
-      });
 
       Array.prototype.forEach.call(elements.invoicesTableBody.querySelectorAll("tr[data-invoice-id]"), function (row) {
         row.addEventListener("click", function (event) {
@@ -570,7 +573,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           var checkbox;
           var invoiceId;
 
-          if (target && (target.closest("input[data-invoice-checkbox]") || target.closest("a") || target.closest("button[data-invoice-attachment-fallback]"))) {
+          if (target && (target.closest("input[data-invoice-checkbox]") || target.closest("a") || target.closest("button[data-invoice-file-index]"))) {
             return;
           }
 
@@ -591,18 +594,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         };
       }
 
-      if (elements.selectedInvoiceAttachmentsPreview) {
-        elements.selectedInvoiceAttachmentsPreview.onclick = function (event) {
-          var target = event && event.target;
-
-          if (target === elements.selectedInvoiceAttachmentsPreview || (target && target.closest("[data-close-selected-invoice-attachment-preview]"))) {
-            callbacks.onSelectedInvoiceAttachmentPreview("");
-          }
-        };
-      }
     }
 
-    function renderInvoiceSelectionSummary(view) {
+    function renderInvoiceSelectionSummary(view, callbacks) {
       if (!view.selectedFilteredRecords.length) {
         elements.invoiceSelectionEmpty.hidden = false;
         elements.invoiceSelectionTableWrap.hidden = true;
@@ -611,28 +605,39 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       elements.invoiceSelectionList.innerHTML = view.selectedFilteredRecords.map(function (invoice) {
+        var supplierDisplay = view.getSupplierDisplay
+          ? view.getSupplierDisplay(invoice)
+          : { code: "" };
+
         return [
           "<tr>",
           "  <td>" + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</td>",
+          "  <td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(
             helpers.getInvoiceTotalAmount(invoice, fieldCandidates) *
             (helpers.textValue(helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType)) === "Credit Note" ? -1 : 1)
           )) + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
+          '  <td class="invoice-selection-remove-cell"><button class="invoice-selection-remove" type="button" data-remove-selected-invoice="' + helpers.escapeHtml(invoice.id) + '" aria-label="Remove invoice from selection" title="Remove from selection">&times;</button></td>',
           "</tr>"
         ].join("");
       }).join("");
       elements.invoiceSelectionEmpty.hidden = true;
       elements.invoiceSelectionTableWrap.hidden = false;
+      Array.prototype.forEach.call(elements.invoiceSelectionList.querySelectorAll("[data-remove-selected-invoice]"), function (button) {
+        button.onclick = function () {
+          callbacks.onInvoiceChecked(button.getAttribute("data-remove-selected-invoice"), false);
+        };
+      });
     }
 
-    function renderInvoicesWorkspace(view, onInvoiceChecked, onInvoiceSelected, onToggleAll, onSortChange, onInvoiceListTabChange, onInvoiceDetailTabChange, onSelectedInvoiceAttachmentPreview, onInvoiceAttachmentFallbackOpen, getInvoiceAttachmentsForField, getAttachmentKey, getAttachmentFileName, getAttachmentCategory, getAttachmentDateValue, getAttachmentPreviewUrl) {
+    function renderInvoicesWorkspace(view, onInvoiceChecked, onInvoiceSelected, onToggleAll, onSortChange, onInvoiceDetailTabChange, onInvoiceOpenNative, onInvoiceFilesNeeded, onShowAttachmentsChange) {
       var isSpecificDateRange = (view.filters.datePreset || "specific") === "specific";
       var listState = {
         sortKey: view.sort && view.sort.key ? view.sort.key : "",
         sortDirection: view.sort && view.sort.direction ? view.sort.direction : "asc",
         selectedInvoiceDetailTab: view.selectedInvoiceDetailTab || "basic",
-        showAttachmentsColumn: view.listTab === "attachments"
+        showAttachments: Boolean(view.showAttachments)
       };
       var callbacks = {
         onInvoiceChecked: onInvoiceChecked,
@@ -640,15 +645,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         onToggleAll: onToggleAll,
         onSortChange: onSortChange,
         onInvoiceDetailTabChange: onInvoiceDetailTabChange,
-        onSelectedInvoiceAttachmentPreview: onSelectedInvoiceAttachmentPreview,
-        onInvoiceAttachmentFallbackOpen: onInvoiceAttachmentFallbackOpen
-      };
-      var attachmentHelpers = {
-        getInvoiceAttachmentsForField: getInvoiceAttachmentsForField,
-        getAttachmentKey: getAttachmentKey,
-        getAttachmentFileName: getAttachmentFileName,
-        getAttachmentCategory: getAttachmentCategory,
-        getAttachmentPreviewUrl: getAttachmentPreviewUrl
+        onInvoiceOpenNative: onInvoiceOpenNative,
+        onInvoiceFilesNeeded: onInvoiceFilesNeeded || function () {},
+        onShowAttachmentsChange: onShowAttachmentsChange || function () {}
       };
 
       if (elements.invoiceFilterSupplierCode) {
@@ -678,15 +677,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.invoiceCreatePayment.hidden = view.selectedFilteredRecords.length === 0;
 
       if (elements.invoicesShowAttachments) {
-        elements.invoicesShowAttachments.checked = listState.showAttachmentsColumn;
+        elements.invoicesShowAttachments.checked = listState.showAttachments;
         elements.invoicesShowAttachments.onchange = function () {
-          onInvoiceListTabChange(elements.invoicesShowAttachments.checked ? "attachments" : "basic");
+          callbacks.onShowAttachmentsChange(elements.invoicesShowAttachments.checked);
         };
       }
 
-      renderInvoiceSelectionSummary(view);
-      renderSelectedInvoice(view, listState, callbacks, attachmentHelpers);
-      renderInvoiceTable(view, listState, callbacks, attachmentHelpers);
+      renderInvoiceSelectionSummary(view, callbacks);
+      renderSelectedInvoice(view, listState, callbacks);
+      renderInvoiceTable(view, listState, callbacks);
     }
 
     return {

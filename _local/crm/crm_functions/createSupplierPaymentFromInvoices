@@ -267,11 +267,7 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 							}
 						}
 
-						supplierAccountingCode = ifnull(supplierRecord.get("Cuenta_Contable"),"").toString().trim();
-						supplierAccountNumber = ifnull(supplierRecord.get("Account_Number"),"").toString().trim();
-						supplierCifNif = ifnull(supplierRecord.get("CIF_NIF"),"").toString().trim();
-
-						if(!resolvedPaymentAccountsBySupplier.containKey(supplierIdForAccount) && supplierAccountingCode != "" && supplierAccountNumber != "" && supplierCifNif != "")
+						if(!resolvedPaymentAccountsBySupplier.containKey(supplierIdForAccount))
 						{
 							autoAccountingAccountId = "";
 							autoPaymentAccountId = "";
@@ -335,6 +331,7 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 
 				paymentStatus = ifnull(paymentData.get("Status"),"Paid").toString();
 				paymentAccountingStatus = ifnull(paymentData.get("Accounting_Status"),"Pending").toString();
+				paymentMovementType = ifnull(paymentData.get("Movement_Type"),"Outbound Payment").toString();
 				contextMode = "Mixed";
 				if(distinctSupplierIds.size() <= 1 && distinctBookingIds.size() <= 1 && distinctSettlementIds.size() <= 1)
 				{
@@ -379,6 +376,7 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 				paymentMap.put("Payment_Date",paymentDate);
 				paymentMap.put("Status",paymentStatus);
 				paymentMap.put("Accounting_Status",paymentAccountingStatus);
+				paymentMap.put("Movement_Type",paymentMovementType);
 				paymentMap.put("Context_Mode",contextMode);
 				paymentMap.put("Supplier_Count",distinctSupplierIds.size());
 				paymentMap.put("Booking_Count",distinctBookingIds.size());
@@ -390,7 +388,9 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 					paymentMap.put("Payment_Account",headerPaymentAccountId);
 				}
 
+				info "createSupplierPaymentFromInvoices | creating payment | payload=" + paymentMap.toString();
 				createPaymentResp = zoho.crm.createRecord("Supplier_Payments",paymentMap);
+				info "createSupplierPaymentFromInvoices | payment create response=" + ifnull(createPaymentResp,Map()).toString();
 				res.put("payment_response",createPaymentResp);
 
 				if(createPaymentResp != null && createPaymentResp.containKey("id"))
@@ -448,6 +448,7 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 						allocationMap.put("Payment_Date",paymentDate);
 						allocationMap.put("Payment_Status",paymentStatus);
 						allocationMap.put("Payment_Accounting_Status",paymentAccountingStatus);
+						allocationMap.put("Movement_Type",paymentMovementType);
 						allocationPaymentAccountId = "";
 						allocationSupplierId = ifnull(invInfo.get("supplier_id"),"").toString();
 
@@ -503,7 +504,7 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 				else
 				{
 					res.put("error",true);
-					res.put("message","Supplier payment could not be created.");
+					res.put("message","Supplier payment could not be created. CRM response: " + ifnull(createPaymentResp,Map()).toString());
 				}
 			}
 		}

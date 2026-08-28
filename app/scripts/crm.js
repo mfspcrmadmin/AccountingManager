@@ -3,9 +3,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createCrmClient = function (zoho, helpers) {
     function debugLog(label, payload) {
-      if (global.console && typeof global.console.log === "function") {
-        global.console.log("[AccountingManager][CRM] " + label, payload || "");
-      }
+      // Keep regular CRM traffic out of the browser console. Targeted diagnostics
+      // are emitted by the feature that is being investigated instead.
     }
 
     function debugError(label, error, payload) {

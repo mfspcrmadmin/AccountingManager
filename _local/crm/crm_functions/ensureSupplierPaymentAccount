@@ -29,19 +29,13 @@ string standalone.ensureSupplierPaymentAccount(String supplierId,String accounti
 			{
 				supplierName = ifnull(supplier.get("Vendor_Name"),"").toString().trim();
 				supplierTaxName = ifnull(supplier.get("Tax_Name"),"").toString().trim();
-				paymentAccountDisplayName = if(supplierTaxName != "",supplierTaxName,supplierName);
+				paymentAccountDisplayName = if(supplierTaxName != "",supplierTaxName,if(supplierName != "",supplierName,"Supplier " + supplierId));
 				accountNumber = ifnull(supplier.get("Account_Number"),"").toString().trim();
 				cifNif = ifnull(supplier.get("CIF_NIF"),"").toString().trim();
 				paymentAccountId = "";
 				firstOwnedAccount = Map();
 				usableAccount = Map();
 
-				if(accountNumber == "" || cifNif == "")
-				{
-					res.put("message","Supplier is missing Account_Number or CIF_NIF.");
-				}
-				else
-				{
 					existingAccounts = zoho.crm.searchRecords("Payment_Accounts","(Owner_Supplier:equals:" + supplierId + ")");
 
 					if(existingAccounts != null)
@@ -84,7 +78,7 @@ string standalone.ensureSupplierPaymentAccount(String supplierId,String accounti
 						{
 							updateExistingMap.put("Accounting_Account",accountingAccountId);
 						}
-						if(existingIban == "")
+					if(existingIban == "" && accountNumber != "")
 						{
 							updateExistingMap.put("IBAN",accountNumber);
 						}
@@ -127,17 +121,17 @@ string standalone.ensureSupplierPaymentAccount(String supplierId,String accounti
 						}
 						if(currentName == "")
 						{
-							updateOwnedMap.put("Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName + " | " + accountNumber,accountNumber));
+							updateOwnedMap.put("Name",if(accountNumber != "",paymentAccountDisplayName + " | " + accountNumber,paymentAccountDisplayName));
 						}
 						if(currentBankAccountName == "")
 						{
-							updateOwnedMap.put("Bank_Account_Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName,cifNif));
+							updateOwnedMap.put("Bank_Account_Name",paymentAccountDisplayName);
 						}
-						if(currentIban == "")
+						if(currentIban == "" && accountNumber != "")
 						{
 							updateOwnedMap.put("IBAN",accountNumber);
 						}
-						if(currentExternalId == "")
+						if(currentExternalId == "" && (cifNif != "" || accountNumber != ""))
 						{
 							updateOwnedMap.put("External_ID",cifNif + "_" + accountNumber);
 						}
@@ -154,10 +148,16 @@ string standalone.ensureSupplierPaymentAccount(String supplierId,String accounti
 					else
 					{
 						createPaymentMap = Map();
-						createPaymentMap.put("Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName + " | " + accountNumber,accountNumber));
-						createPaymentMap.put("IBAN",accountNumber);
-						createPaymentMap.put("Bank_Account_Name",if(paymentAccountDisplayName != "",paymentAccountDisplayName,cifNif));
-						createPaymentMap.put("External_ID",cifNif + "_" + accountNumber);
+						createPaymentMap.put("Name",if(accountNumber != "",paymentAccountDisplayName + " | " + accountNumber,paymentAccountDisplayName));
+						createPaymentMap.put("Bank_Account_Name",paymentAccountDisplayName);
+						if(accountNumber != "")
+						{
+							createPaymentMap.put("IBAN",accountNumber);
+						}
+						if(cifNif != "" || accountNumber != "")
+						{
+							createPaymentMap.put("External_ID",cifNif + "_" + accountNumber);
+						}
 						createPaymentMap.put("Status","Active");
 						createPaymentMap.put("Currency","EUR");
 						createPaymentMap.put("Method_Type","Bank Transfer");
@@ -192,7 +192,6 @@ string standalone.ensureSupplierPaymentAccount(String supplierId,String accounti
 							res.put("message","Payment account ready.");
 						}
 					}
-				}
 			}
 		}
 	}

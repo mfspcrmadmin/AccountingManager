@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="./styles/accounting.css">
     <link rel="stylesheet" href="./styles/operations.css">
     <link rel="stylesheet" href="./styles/explorer.css">
+    <link rel="stylesheet" href="./styles/visual-refresh.css">
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
   </head>
   <body>
@@ -106,6 +107,30 @@
         </div>
       </section>
 
+      <section id="payment-undo-confirmation-popup" class="payment-undo-confirmation-popup" role="dialog" aria-modal="true" aria-labelledby="payment-undo-confirmation-title" hidden>
+        <div class="payment-undo-confirmation-card">
+          <p id="payment-undo-confirmation-eyebrow" class="payment-undo-confirmation-eyebrow">Destructive action</p>
+          <h2 id="payment-undo-confirmation-title">Undo payment?</h2>
+          <p id="payment-undo-confirmation-copy">Loading the affected records...</p>
+          <div id="payment-undo-confirmation-list" class="payment-undo-confirmation-list"></div>
+          <div class="inline-actions payment-undo-confirmation-actions">
+            <button id="payment-undo-confirmation-cancel" class="button secondary" type="button">Cancel</button>
+            <button id="payment-undo-confirmation-confirm" class="button button-danger" type="button" disabled>Confirm undo</button>
+            <button id="payment-undo-confirmation-close" class="button primary" type="button" hidden>Close</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="payment-create-feedback-popup" class="payment-create-feedback-popup" role="dialog" aria-modal="true" aria-labelledby="payment-create-feedback-title" hidden>
+        <div class="payment-create-feedback-card">
+          <span id="payment-create-feedback-spinner" class="payment-create-feedback-spinner" aria-hidden="true"></span>
+          <p id="payment-create-feedback-eyebrow" class="payment-create-feedback-eyebrow">Creating payment</p>
+          <h2 id="payment-create-feedback-title">Creating supplier payment...</h2>
+          <p id="payment-create-feedback-message">Preparing payment, allocations and related accounts.</p>
+          <button id="payment-create-feedback-close" class="button primary" type="button" hidden>Close</button>
+        </div>
+      </section>
+
       <section id="booking-closure-detail-popup" class="booking-closure-detail-popup" role="dialog" aria-modal="true" aria-labelledby="booking-closure-detail-title" hidden>
         <div class="booking-closure-detail-card">
           <div class="panel-header">
@@ -158,7 +183,7 @@
               </div>
             </div>
 
-            <div class="filters-grid operations-filters-grid">
+            <div id="operations-filters" class="filters-grid operations-filters-grid">
               <label id="operations-filter-status-field" class="field">
                 <span>Search</span>
                 <input id="operations-filter-search" type="search" placeholder="Reference, supplier or booking">
@@ -186,6 +211,56 @@
               </div>
             </div>
 
+            <div id="card-purchases-toolbar" class="card-purchases-toolbar" hidden>
+              <div class="card-purchases-view-switch" role="group" aria-label="Card purchase view">
+                <button class="is-active" type="button" data-card-purchase-view="open" aria-pressed="true">Open</button>
+                <button type="button" data-card-purchase-view="closed" aria-pressed="false">Closed</button>
+                <button type="button" data-card-purchase-view="all" aria-pressed="false">All</button>
+              </div>
+              <label class="field card-purchases-search-field">
+                <span>Search</span>
+                <input id="card-purchases-search" type="search" placeholder="Supplier, booking, reference or card purchase">
+              </label>
+              <div class="field card-purchases-status-field">
+                <span>Registration status</span>
+                <div class="card-purchases-status-multiselect">
+                  <button id="card-purchases-status-filter" class="card-purchases-status-toggle" type="button" aria-expanded="false" aria-controls="card-purchases-status-menu"><span id="card-purchases-status-filter-label">All statuses</span></button>
+                  <div id="card-purchases-status-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden>
+                    <label class="service-multi-filter-option service-multi-filter-option--all"><input type="checkbox" data-card-purchase-status-toggle-all><span>Select / deselect all</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending invoice"><span class="card-purchase-status is-pending-invoice">Pending invoice</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending payment record"><span class="card-purchase-status is-pending-payment">Pending payment record</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Purchase recorded"><span class="card-purchase-status is-purchase-recorded">Purchase recorded</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending credit note"><span class="card-purchase-status is-pending-credit-note">Pending credit note</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Refund pending"><span class="card-purchase-status is-refund-pending">Refund pending</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending refund record"><span class="card-purchase-status is-pending-refund">Pending refund record</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Refund recorded"><span class="card-purchase-status is-refund-recorded">Refund recorded</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Needs review"><span class="card-purchase-status is-needs-review">Needs review</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Cancelled"><span class="card-purchase-status is-cancelled">Cancelled</span></label>
+                  </div>
+                </div>
+              </div>
+              <div class="field card-purchases-type-field">
+                <span>Transaction type</span>
+                <div class="card-purchases-status-multiselect">
+                  <button id="card-purchases-type-filter" class="card-purchases-status-toggle" type="button" aria-expanded="false" aria-controls="card-purchases-type-menu"><span id="card-purchases-type-filter-label">All types</span></button>
+                  <div id="card-purchases-type-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden>
+                    <label class="service-multi-filter-option service-multi-filter-option--all"><input type="checkbox" data-card-purchase-type-toggle-all><span>Select / deselect all</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-type-option value="Purchase"><span class="card-purchase-status is-purchase">Purchase</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-type-option value="Refund"><span class="card-purchase-status is-refund">Refund</span></label>
+                  </div>
+                </div>
+              </div>
+              <div class="field card-purchases-owner-field">
+                <span>Card purchase owner</span>
+                <div class="card-purchases-status-multiselect">
+                  <button id="card-purchases-owner-filter" class="card-purchases-status-toggle" type="button" aria-expanded="false" aria-controls="card-purchases-owner-menu"><span id="card-purchases-owner-filter-label">All owners</span></button>
+                  <div id="card-purchases-owner-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden></div>
+                </div>
+              </div>
+              <button id="card-purchases-apply-filters" class="button primary card-purchases-apply-button" type="button" aria-label="Apply card purchase filters" title="Apply filters"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="4.75" fill="none" stroke="currentColor" stroke-width="1.7"></circle><path d="m12 12 4.1 4.1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"></path></svg></button>
+              <button id="card-purchases-refresh" class="button secondary card-purchases-icon-button" type="button" aria-label="Refresh card purchases" title="Refresh card purchases">&#8635;</button>
+            </div>
+
             <div id="operations-empty" class="empty-state operations-empty-state">
               <h3>Prepayments ready to review</h3>
               <p>Select “Apply filters” to load prepayment requests and prepayments from Creator.</p>
@@ -202,6 +277,41 @@
               <button id="operations-prev-page" class="button secondary" type="button">Previous</button>
               <span id="operations-pagination-copy" class="pagination-copy">Page 1 of 1</span>
               <button id="operations-next-page" class="button secondary" type="button">Next</button>
+            </div>
+
+            <div id="card-purchase-workflow-modal" class="card-purchase-workflow-modal" hidden>
+              <div class="card-purchase-workflow-backdrop" data-card-purchase-close></div>
+              <section class="card-purchase-workflow-card" role="dialog" aria-modal="true" aria-labelledby="card-purchase-workflow-title">
+                <header>
+                  <div>
+                    <p id="card-purchase-workflow-eyebrow" class="panel-eyebrow">Card purchase</p>
+                    <h3 id="card-purchase-workflow-title">Record card purchase</h3>
+                  </div>
+                  <button class="card-purchase-workflow-close" type="button" data-card-purchase-close aria-label="Close">&times;</button>
+                </header>
+                <div id="card-purchase-workflow-context" class="card-purchase-workflow-context"></div>
+                <form id="card-purchase-workflow-form" novalidate>
+                  <div id="card-purchase-workflow-invoice-fields" class="card-purchase-workflow-fields">
+                    <label class="field"><span id="card-purchase-reference-label">Invoice number</span><input id="card-purchase-reference" required></label>
+                    <label class="field"><span id="card-purchase-date-label">Invoice date</span><input id="card-purchase-date" type="date" required></label>
+                    <label class="field"><span>Amount incl. VAT</span><input id="card-purchase-amount" type="number" min="0.01" step="0.01" required></label>
+                    <label class="field"><span>VAT %</span><input id="card-purchase-vat" type="number" min="0" step="0.01" value="0"></label>
+                  </div>
+                  <div id="card-purchase-workflow-payment-fields" class="card-purchase-workflow-fields" hidden>
+                    <label class="field"><span>Payment reference</span><input id="card-purchase-payment-reference" required></label>
+                    <label class="field"><span>Payment date</span><input id="card-purchase-payment-date" type="date" required></label>
+                    <label class="field card-purchase-payment-account-field"><span>Supplier payment account</span><select id="card-purchase-payment-account"></select></label>
+                  </div>
+                  <div class="card-purchase-workflow-decision-divider" aria-hidden="true"></div>
+                  <label class="field"><span>Review notes</span><textarea id="card-purchase-review-notes" rows="3" placeholder="Optional note for accounting or reservations"></textarea></label>
+                  <div class="inline-actions card-purchase-workflow-actions">
+                    <p id="card-purchase-workflow-message" class="card-purchase-workflow-message" aria-live="polite"></p>
+                    <span id="card-purchase-workflow-spinner" class="card-purchase-workflow-spinner" role="status" aria-live="polite" hidden></span>
+                    <button id="card-purchase-workflow-needs-review" class="button secondary" type="button">Mark needs review</button>
+                    <button id="card-purchase-workflow-submit" class="button primary" type="submit">Save</button>
+                  </div>
+                </form>
+              </section>
             </div>
           </section>
         </section>
@@ -497,30 +607,6 @@
             </div>
 
             <form id="invoice-create-form" class="invoice-form invoice-create-form-shell" novalidate>
-              <section class="invoice-create-context-bar">
-                <dl class="invoice-context-strip invoice-context-strip-inline">
-                  <div class="readonly-field invoice-context-item invoice-context-item-supplier">
-                    <span>Supplier</span>
-                    <strong id="invoice-create-supplier-name">-</strong>
-                  </div>
-                  <div class="readonly-field invoice-context-item invoice-context-item-accounting">
-                    <span>IBAN / Account Number</span>
-                    <strong id="invoice-create-supplier-payment-account" class="accounting-status missing">Missing</strong>
-                  </div>
-                  <div class="readonly-field invoice-context-item invoice-context-item-accounting">
-                    <span>Accounting account</span>
-                    <div class="invoice-context-value-stack">
-                      <strong id="invoice-create-supplier-accounting" class="accounting-status missing">Missing</strong>
-                      <button id="invoice-create-request-accounting-account" class="button secondary compact-action-button invoice-context-action-button" type="button" hidden disabled>Request account</button>
-                    </div>
-                  </div>
-                  <div class="readonly-field invoice-context-item invoice-context-item-accounting">
-                    <span>Self Employment</span>
-                    <strong id="invoice-create-supplier-self-employed" class="accounting-status missing">No</strong>
-                  </div>
-                </dl>
-              </section>
-
               <section class="invoice-create-steps-shell">
                 <div class="invoice-create-steps-layout">
                   <div class="invoice-create-step-main">
@@ -987,8 +1073,10 @@
                     <thead>
                       <tr>
                         <th>Invoice</th>
+                        <th>Supplier code</th>
                         <th class="numeric-cell">Total</th>
                         <th>Date</th>
+                        <th aria-label="Actions"></th>
                       </tr>
                     </thead>
                     <tbody id="invoice-selection-list"></tbody>
@@ -1104,28 +1192,13 @@
                         </div>
                       </div>
 
-                    <section id="selected-invoice-attachments-view" class="detail-subsection">
-                      <div class="section-heading compact-section-heading">
-                        <h3>Attachments</h3>
-                      </div>
-
-                      <div id="selected-invoice-attachments-empty" class="empty-state compact-empty">
-                        This invoice has no attachments yet.
-                      </div>
-
-                        <div id="selected-invoice-attachments-table-wrap" class="table-wrap compact-table-wrap selected-invoice-attachments-table-wrap" hidden>
-                          <table class="results-table mini-results-table selected-invoice-attachments-table">
-                            <thead>
-                              <tr>
-                                <th>Invoice File</th>
-                              </tr>
-                            </thead>
-                            <tbody id="selected-invoice-attachments-list"></tbody>
-                          </table>
+                      <section class="detail-subsection selected-invoice-attachments-section">
+                        <div class="section-heading compact-section-heading">
+                          <h3>Attachments</h3>
                         </div>
-
-                        <div id="selected-invoice-attachments-preview" class="selected-invoice-attachment-popup" hidden role="dialog" aria-modal="true"></div>
+                        <div id="selected-invoice-attachments-list" class="selected-invoice-attachments-list"></div>
                       </section>
+
                     </div>
 
                     <section id="selected-invoice-payment-view" class="detail-subsection" hidden>
@@ -1230,40 +1303,24 @@
 
             <form id="invoice-payment-form" class="invoice-form payment-create-form-shell">
               <div class="payment-form-top-grid">
-                <section class="form-section">
+                <section class="form-section payment-context-section">
                   <div class="section-heading">
                     <h3>Payment context</h3>
                   </div>
 
-                  <div class="payment-context-grid">
-                    <div class="payment-context-column">
-                      <label class="field readonly-payment-field">
-                        <span>Supplier</span>
-                        <input id="invoice-payment-supplier" type="text" disabled>
-                      </label>
-
-                      <label class="field readonly-payment-field">
-                        <span>Booking</span>
-                        <input id="invoice-payment-booking" type="text" disabled>
-                      </label>
-
-                      <label class="field readonly-payment-field">
-                        <span>Supplier Settlement</span>
-                        <input id="invoice-payment-settlement" type="text" disabled>
-                      </label>
-
-                      <div class="payment-context-summary">
-                        <div class="payment-context-summary-row">
-                          <span>Selected invoices</span>
-                          <strong id="invoice-payment-selected-count">0 invoices</strong>
-                          <small id="invoice-payment-selected-list">-</small>
-                        </div>
-
-                        <div class="payment-context-summary-row total-row">
-                          <span>Total payment amount</span>
-                          <strong id="invoice-payment-total-amount">EUR 0.00</strong>
-                        </div>
-                      </div>
+                  <input id="invoice-payment-supplier" type="hidden">
+                  <input id="invoice-payment-booking" type="hidden">
+                  <input id="invoice-payment-settlement" type="hidden">
+                  <div class="payment-context-summary payment-context-summary-compact">
+                    <div>
+                      <strong id="invoice-payment-selected-count">0 invoices</strong>
+                      <span id="invoice-payment-context-supplier-count" class="payment-context-supplier-count"></span>
+                      <small id="invoice-payment-selected-list">-</small>
+                      <small id="invoice-payment-context-meta" class="payment-context-meta" hidden></small>
+                    </div>
+                    <div class="payment-context-total">
+                      <span>Total payment amount</span>
+                      <strong id="invoice-payment-total-amount">EUR 0.00</strong>
                     </div>
                   </div>
                 </section>
@@ -1291,9 +1348,8 @@
                           id="invoice-payment-account"
                           name="paymentAccount"
                           type="text"
-                          placeholder="Search payment account"
-                          autocomplete="off"
-                          aria-autocomplete="list"
+                          placeholder="Select payment account..."
+                          readonly
                           aria-expanded="false"
                           aria-controls="invoice-payment-account-dropdown"
                           required
@@ -1304,48 +1360,26 @@
                           type="button"
                           aria-label="Toggle payment account options"
                           title="Show payment account options"
-                        >v</button>
-                        <div id="invoice-payment-account-dropdown" class="settlement-dropdown" role="listbox" hidden></div>
+                        >&#9662;</button>
+                        <div id="invoice-payment-account-dropdown" class="settlement-dropdown payment-account-dropdown-popover" role="listbox" hidden></div>
                       </div>
                     </label>
-
-                    <label class="field readonly-payment-field">
-                      <span>Movement Type</span>
-                      <input id="invoice-payment-movement-type" type="text" disabled>
-                    </label>
-
-                    <label class="field readonly-payment-field">
-                      <span>Status</span>
-                      <input id="invoice-payment-status" type="text" disabled>
-                    </label>
-
-                    <label class="field readonly-payment-field">
-                      <span>Accounting Status</span>
-                      <input id="invoice-payment-accounting-status" type="text" disabled>
-                    </label>
                   </div>
+                  <input id="invoice-payment-movement-type" type="hidden">
+                  <input id="invoice-payment-status" type="hidden">
+                  <input id="invoice-payment-accounting-status" type="hidden">
+                  <p id="invoice-payment-readonly-meta" class="payment-readonly-meta" hidden></p>
                 </section>
               </div>
 
               <section class="form-section">
                 <div class="section-heading">
                   <h3>Supplier accounts</h3>
-                  <p>Choose one payment account per supplier or leave it in auto mode.</p>
                 </div>
 
                 <div id="invoice-payment-supplier-accounts-table-wrap" class="table-wrap compact-table-wrap">
                   <table class="results-table mini-results-table supplier-payment-account-table">
-                    <thead>
-                      <tr>
-                        <th>Supplier</th>
-                        <th>Booking</th>
-                        <th>MFSP</th>
-                        <th>Settlement</th>
-                        <th class="numeric-cell">Invoices</th>
-                        <th class="numeric-cell">Allocated</th>
-                        <th>Payment Account</th>
-                      </tr>
-                    </thead>
+                    <thead><tr><th>Supplier</th><th>Context</th><th class="numeric-cell">Invoices</th><th class="numeric-cell">Amount</th><th>Payment account</th></tr></thead>
                     <tbody id="invoice-payment-supplier-accounts-list"></tbody>
                   </table>
                 </div>
@@ -1362,9 +1396,7 @@
                       <tr>
                         <th>Invoice</th>
                         <th>Supplier</th>
-                        <th>Booking</th>
-                        <th>MFSP</th>
-                        <th>Settlement</th>
+                        <th>Context</th>
                         <th>Date</th>
                         <th class="numeric-cell">Pending</th>
                         <th class="numeric-cell">Allocate</th>
@@ -1376,6 +1408,7 @@
               </section>
 
               <div class="actions payment-create-actions">
+                <span id="invoice-payment-reconciliation" class="payment-reconciliation">Allocated EUR 0.00 &middot; Remaining EUR 0.00</span>
                 <button id="invoice-payment-submit" type="submit" class="button primary">Create payment</button>
                 <button id="invoice-payment-cancel" type="button" class="button secondary">Cancel</button>
               </div>
@@ -1504,8 +1537,8 @@
                   </div>
 
                   <div class="inline-actions selected-payment-actions">
-                    <button id="selected-payment-edit" class="button secondary compact-action-button" type="button">Edit</button>
-                    <button id="selected-payment-delete" class="button button-danger compact-action-button" type="button">Delete</button>
+                    <button id="selected-payment-manage-allocations" class="button secondary compact-action-button" type="button">Manage allocations</button>
+                    <button id="selected-payment-delete" class="button button-danger compact-action-button" type="button">Undo Payment</button>
                   </div>
 
                   <div class="segmented-control segmented-control-minimal selected-invoice-detail-tabs" role="tablist" aria-label="Selected payment sections">
@@ -1594,7 +1627,6 @@
                   <section id="selected-payment-allocations-view" class="detail-subsection" hidden>
                     <div class="section-heading compact-section-heading">
                       <h3>Payment allocations</h3>
-                      <button id="selected-payment-edit-allocations" class="button secondary compact-action-button" type="button">Edit allocations</button>
                     </div>
 
                     <div id="selected-payment-allocations-empty" class="empty-state compact-empty">
@@ -1641,40 +1673,18 @@
               </section>
             </aside>
           </div>
-          <section id="payment-allocation-editor" class="panel widget-popup-panel payment-allocation-editor" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-editor-title" hidden>
-            <div class="section-heading compact-section-heading">
-              <div>
-                <h2 id="payment-allocation-editor-title">Edit payment allocations</h2>
-                <p id="payment-allocation-editor-copy">Adjust the invoices and amounts assigned to this payment.</p>
-              </div>
-              <button id="payment-allocation-editor-close" class="button secondary compact-action-button payment-allocation-editor-close" type="button" aria-label="Close allocation editor" title="Close">&times;</button>
-            </div>
-            <div id="payment-allocation-editor-error" class="form-error" hidden></div>
-            <div id="payment-allocation-editor-loading" class="empty-state compact-empty" hidden>Loading eligible invoices...</div>
-            <div id="payment-allocation-editor-content" hidden>
-              <p class="panel-copy">Use the red &times; button to mark an allocation for removal. You can add an invoice from any Supplier using the search below.</p>
-              <section class="payment-allocation-editor-add">
-                <button id="payment-allocation-editor-add-button" class="button primary compact-action-button" type="button">+ Add allocation</button>
-                <label class="field">
-                  <span>Add invoice from any Supplier</span>
-                  <input id="payment-allocation-editor-search" type="search" placeholder="Invoice number or name">
-                </label>
-                <button id="payment-allocation-editor-search-button" class="button secondary compact-action-button" type="button">Search</button>
-              </section>
-              <div id="payment-allocation-editor-search-results" class="payment-allocation-editor-search-results" hidden></div>
-              <div class="table-wrap compact-table-wrap">
-                <table class="results-table mini-results-table">
-                  <thead><tr><th class="payment-allocation-editor-invoice-column">Invoice</th><th>Supplier code</th><th class="numeric-cell">Available</th><th class="numeric-cell">Allocate</th><th>Actions</th></tr></thead>
-                  <tbody id="payment-allocation-editor-list"></tbody>
-                </table>
-              </div>
-              <p id="payment-allocation-editor-changes" class="payment-allocation-editor-changes" aria-live="polite">No changes pending.</p>
-              <div class="actions payment-allocation-editor-actions">
-                <strong id="payment-allocation-editor-total">Total: EUR 0.00</strong>
-                <button id="payment-allocation-editor-save" class="button primary compact-action-button" type="button">Save allocations</button>
-                <button id="payment-allocation-editor-cancel" class="button secondary compact-action-button" type="button">Cancel</button>
-              </div>
-            </div>
+          <section id="payment-allocation-manager" class="panel widget-popup-panel payment-allocation-manager" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-manager-title" hidden>
+            <div class="section-heading compact-section-heading"><div class="payment-allocation-manager-heading-content"><h2 id="payment-allocation-manager-title">Manage payment allocations</h2><button id="payment-allocation-manager-add" class="button secondary compact-action-button" type="button">Add invoice</button></div><button id="payment-allocation-manager-close" class="button secondary compact-action-button payment-allocation-manager-close" type="button" aria-label="Close" title="Close">&times;</button></div>
+            <div id="payment-allocation-manager-error" class="form-error" hidden></div>
+            <div class="payment-allocation-manager-toolbar"><label class="field"><span>Search allocated invoices</span><input id="payment-allocation-manager-filter" type="search" placeholder="Invoice number or name"></label></div>
+            <div class="table-wrap compact-table-wrap payment-allocation-manager-table"><table class="results-table mini-results-table"><thead><tr><th>Invoice</th><th class="numeric-cell">Allocate</th><th></th></tr></thead><tbody id="payment-allocation-manager-list"></tbody></table></div>
+            <div class="actions payment-allocation-manager-footer"><div class="payment-allocation-manager-totals"><span id="payment-allocation-manager-total" class="payment-allocation-total applied">Applied: EUR 0.00</span><span id="payment-allocation-manager-remaining" class="payment-allocation-total unapplied">Unapplied: EUR 0.00</span><span id="payment-allocation-manager-added-count" class="payment-allocation-total new-invoices">Invoices to add: 0</span></div><button id="payment-allocation-manager-save" class="button primary compact-action-button" type="button">Save allocations</button></div>
+          </section>
+          <section id="payment-allocation-invoice-picker" class="payment-allocation-invoice-picker" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-invoice-picker-title" hidden>
+            <div class="payment-allocation-invoice-picker-card"><div class="section-heading compact-section-heading"><div><h2 id="payment-allocation-invoice-picker-title">Add invoice</h2><p class="panel-copy">Search by invoice number or name.</p></div><button id="payment-allocation-invoice-picker-close" class="button secondary compact-action-button payment-allocation-invoice-picker-close" type="button" aria-label="Close" title="Close">&times;</button></div><div id="payment-allocation-invoice-picker-error" class="form-error" hidden></div><label class="field"><span>Invoice</span><input id="payment-allocation-manager-search" type="search" placeholder="Start typing to search" autocomplete="off"></label><div id="payment-allocation-manager-results" class="payment-allocation-manager-results"></div></div>
+          </section>
+          <section id="payment-allocation-feedback-popup" class="payment-allocation-feedback-popup" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-feedback-title" hidden>
+            <div class="payment-allocation-feedback-card"><span id="payment-allocation-feedback-spinner" class="payment-allocation-feedback-spinner" aria-hidden="true"></span><p id="payment-allocation-feedback-eyebrow" class="payment-allocation-feedback-eyebrow">Saving allocations</p><h2 id="payment-allocation-feedback-title">Saving changes...</h2><p id="payment-allocation-feedback-message">Updating allocations and recalculating related records.</p><button id="payment-allocation-feedback-close" class="button primary" type="button" hidden>Close</button></div>
           </section>
           </div>
 

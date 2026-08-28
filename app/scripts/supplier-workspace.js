@@ -207,8 +207,6 @@
         state.supplierPayments = [];
         state.invoiceLinesByInvoiceId = {};
         state.invoiceLineLoadingId = "";
-        state.invoiceAttachmentsByInvoiceId = {};
-        state.invoiceAttachmentLoadingId = "";
         await Promise.allSettled([invoiceResult, paymentResult]).then(function (results) {
           state.supplierInvoices = results[0].status === "fulfilled" ? results[0].value : [];
           state.supplierPayments = results[1].status === "fulfilled" ? results[1].value : [];
@@ -257,8 +255,6 @@
       state.invoiceCreation.isOpen = false;
       state.invoiceLinesByInvoiceId = {};
       state.invoiceLineLoadingId = "";
-      state.invoiceAttachmentsByInvoiceId = {};
-      state.invoiceAttachmentLoadingId = "";
       resetInvoiceCreateSettlementState();
       resetInvoiceCreateFormAfterCreate();
       elements.supplierSearch.value = "";

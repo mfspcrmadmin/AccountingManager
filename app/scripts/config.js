@@ -237,6 +237,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       paymentCreation: {
         isOpen: false,
         isBusy: false,
+        feedback: {
+          isOpen: false,
+          status: "",
+          message: "",
+          actionSupplierId: ""
+        },
         context: null,
         form: {
           name: "",
@@ -248,23 +254,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           status: "Paid",
           accountingStatus: "Pending",
           paymentAccountsBySupplier: {},
+          supplierAccountQueries: {},
+          supplierAccountDropdownSupplierId: "",
           allocations: {}
         }
-      },
-      paymentAllocationEditor: {
-        isOpen: false,
-        isLoading: false,
-        isSaving: false,
-        paymentId: "",
-        sourcePaymentId: "",
-        sourceAllocations: [],
-        allocations: [],
-        invoices: [],
-        allocationAmounts: {},
-        addInvoiceQuery: "",
-        addInvoiceResults: [],
-        isSearchingInvoices: false,
-        error: ""
       },
       paymentLetter: {
         isOpen: false,
@@ -278,10 +271,41 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         contactsBySupplierId: {},
         requestToken: 0
       },
+      paymentAllocationManager: {
+        isOpen: false,
+        isLoading: false,
+        isSaving: false,
+        paymentId: "",
+        paymentAmount: 0,
+        invoices: [],
+        amounts: {},
+        unlinkedAmounts: {},
+        newInvoiceIds: {},
+        isPickerOpen: false,
+        tableQuery: "",
+        searchRequestId: 0,
+        searchResults: [],
+        pickerError: "",
+        error: ""
+      },
+      paymentAllocationFeedback: {
+        isOpen: false,
+        mode: "loading",
+        message: ""
+      },
       invoiceDeletion: {
         isOpen: false,
         isBusy: false,
         updateSettlement: true
+      },
+      paymentUndo: {
+        isOpen: false,
+        isLoading: false,
+        isBusy: false,
+        mode: "confirmation",
+        paymentId: "",
+        allocations: [],
+        resultMessage: ""
       },
       invoiceAccounting: {
         isBusy: false,
@@ -313,8 +337,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       invoiceLineLoadingId: "",
       invoiceAllocationsByInvoiceId: {},
       invoiceAllocationLoadingId: "",
-      invoiceAttachmentsByInvoiceId: {},
-      invoiceAttachmentLoadingId: "",
       records: {
         bookings: [],
         settlements: [],
@@ -385,10 +407,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           perPage: 10,
           hasMore: false,
           hasLoaded: false,
+          showAttachments: false,
           statusDropdownOpen: false,
-          listTab: "basic",
           detailTab: "basic",
-          selectedAttachmentPreviewKey: "",
           sort: {
             key: "date",
             direction: "desc"
@@ -412,6 +433,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             mfsp: ""
           },
           selectedIds: {},
+          selectedRecordsById: {},
           selectedDetailId: ""
         },
         payments: {

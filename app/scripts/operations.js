@@ -1,432 +1,86 @@
 (function (global) {
   "use strict";
 
-  var MINIMUM_PAGE_SIZE = 10;
-  var records = [];
-  var currentPage = 1;
-  var selectedType = "prepayments";
-  var sources = {
-    prepayments: { title: "Supplier prepayments", functionName: "creator_getcreatorprepayments", responseKey: "prepayments", supportsStatus: true, supportsDates: true, statusOptions: [["Not Paid", "Pending"], ["Paid", "Paid"], ["Cancelled", "Cancelled"]] },
-    renfe: { title: "RENFE payments", functionName: "creator_getrenfepayments", responseKey: "records", supportsStatus: false, supportsDates: false, statusOptions: [] },
-    "card-purchases": { title: "Card purchases", functionName: "creator_getcardpurchases", responseKey: "records", supportsStatus: true, supportsDates: false, statusOptions: [["Pending Accounting Review", "Pending accounting review"], ["Ok", "OK"]] }
-  };
-  var search = document.getElementById("operations-filter-search");
-  var status = document.getElementById("operations-filter-status");
-  var dateFrom = document.getElementById("operations-filter-from");
-  var dateTo = document.getElementById("operations-filter-to");
-  var apply = document.getElementById("operations-apply-filters");
-  var reset = document.getElementById("operations-reset-filters");
-  var empty = document.getElementById("operations-empty");
-  var tableWrap = document.getElementById("operations-table-wrap");
-  var tableHead = document.getElementById("operations-table-head");
-  var tableBody = document.getElementById("operations-table-body");
-  var paginationBar = document.getElementById("operations-pagination-bar");
-  var paginationCopy = document.getElementById("operations-pagination-copy");
-  var previousPage = document.getElementById("operations-prev-page");
-  var nextPage = document.getElementById("operations-next-page");
-  var typeCards = Array.prototype.slice.call(document.querySelectorAll("[data-operation-type]"));
-  var statusField = document.getElementById("operations-filter-status-field");
-  var fromField = document.getElementById("operations-filter-from-field");
-  var toField = document.getElementById("operations-filter-to-field");
-  var title = document.getElementById("operations-title");
+  var MODULES = { purchases: "Card_Purchases", invoices: "Supplier_Invoices", payments: "Supplier_Payments", invoiceLines: "Supplier_Invoice_Lines", invoiceSettlements: "Inv_Set_Allocations" };
+  var CREATE_PAYMENT_FUNCTION = "createsupplierpaymentfrominvoices";
+  var records = [], page = 1, activePurchase = null, busy = false, cardPurchaseView = "open", cardPurchaseOwnerId = "", cardPurchaseAppliedFilters = { search: "", statuses: [], types: [], ownerId: "" };
+  var selectedType = "prepayments", sort = { key: "Transaction_Date", direction: "desc" };
+  var sources = { prepayments: { title: "Supplier prepayments", functionName: "creator_getcreatorprepayments", responseKey: "prepayments" }, renfe: { title: "RENFE payments", functionName: "creator_getrenfepayments", responseKey: "records" }, "card-purchases": { title: "Card purchases", cards: true } };
+  var $ = function (id) { return document.getElementById(id); };
+  var search = $("operations-filter-search"), status = $("operations-filter-status"), dateFrom = $("operations-filter-from"), dateTo = $("operations-filter-to"), apply = $("operations-apply-filters"), reset = $("operations-reset-filters"), filters = $("operations-filters");
+  var toolbar = $("card-purchases-toolbar"), cardSearch = $("card-purchases-search"), cardStatus = $("card-purchases-status-filter"), cardStatusMenu = $("card-purchases-status-menu"), cardStatusLabel = $("card-purchases-status-filter-label"), cardStatusOptions = Array.prototype.slice.call(document.querySelectorAll("[data-card-purchase-status-option]")), cardStatusToggleAll = document.querySelector("[data-card-purchase-status-toggle-all]"), cardType = $("card-purchases-type-filter"), cardTypeMenu = $("card-purchases-type-menu"), cardTypeLabel = $("card-purchases-type-filter-label"), cardTypeOptions = Array.prototype.slice.call(document.querySelectorAll("[data-card-purchase-type-option]")), cardTypeToggleAll = document.querySelector("[data-card-purchase-type-toggle-all]"), cardOwner = $("card-purchases-owner-filter"), cardOwnerMenu = $("card-purchases-owner-menu"), cardOwnerLabel = $("card-purchases-owner-filter-label"), cardApplyFilters = $("card-purchases-apply-filters"), refresh = $("card-purchases-refresh"), title = $("operations-title"), empty = $("operations-empty"), tableWrap = $("operations-table-wrap"), tableHead = $("operations-table-head"), tableBody = $("operations-table-body"), pagination = $("operations-pagination-bar"), paginationCopy = $("operations-pagination-copy"), previous = $("operations-prev-page"), next = $("operations-next-page");
+  var modal = $("card-purchase-workflow-modal"), workflowForm = $("card-purchase-workflow-form"), workflowTitle = $("card-purchase-workflow-title"), workflowEyebrow = $("card-purchase-workflow-eyebrow"), workflowContext = $("card-purchase-workflow-context"), workflowMessage = $("card-purchase-workflow-message"), workflowSpinner = $("card-purchase-workflow-spinner"), workflowInvoiceFields = $("card-purchase-workflow-invoice-fields"), workflowPaymentFields = $("card-purchase-workflow-payment-fields"), workflowReference = $("card-purchase-reference"), workflowReferenceLabel = $("card-purchase-reference-label"), workflowDate = $("card-purchase-date"), workflowDateLabel = $("card-purchase-date-label"), workflowAmount = $("card-purchase-amount"), workflowVat = $("card-purchase-vat"), workflowPaymentReference = $("card-purchase-payment-reference"), workflowPaymentDate = $("card-purchase-payment-date"), workflowPaymentAccount = $("card-purchase-payment-account"), workflowNotes = $("card-purchase-review-notes"), workflowSubmit = $("card-purchase-workflow-submit"), workflowNeedsReview = $("card-purchase-workflow-needs-review"), workflowActions = document.querySelector(".card-purchase-workflow-actions");
+  var typeCards = Array.prototype.slice.call(document.querySelectorAll("[data-operation-type]")), cardPurchaseViewButtons = Array.prototype.slice.call(document.querySelectorAll("[data-card-purchase-view]"));
 
-  function escapeHtml(value) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
+  function esc(value) { return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;"); }
+  function lookupId(value) { return value && typeof value === "object" ? String(value.id || "") : ""; }
+  function lookupName(value) { return value && typeof value === "object" ? String(value.name || value.Name || "") : String(value || ""); }
+  function isoDate(value) { var match = String(value || "").match(/\d{4}-\d{2}-\d{2}/); return match ? match[0] : ""; }
+  function date(value) { var result = isoDate(value); return result ? result.split("-").reverse().join("/") : "—"; }
+  function money(value) { var number = Number(value); return Number.isFinite(number) ? new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" }).format(number) : "—"; }
+  function files(value) { return (Array.isArray(value) ? value : value ? [value] : []).map(function (file) { return typeof file === "string" ? { name: file, id: "", url: "", type: "" } : { name: file.File_Name || file.file_Name || file.file_name || file.filename || file.fileName || file.name || "Supporting document", id: file.id || file.file_id || file.file_Id || file.File_Id || file.$file_id || "", url: file.url || file.file_url || file.preview_url || file.download_url || "", type: file.type || file.mime_type || file.content_type || "" }; }); }
+  function api() { return global.ZOHO && global.ZOHO.CRM && global.ZOHO.CRM.API; }
+  function source() { return sources[selectedType]; }
+  function responseRecords(response) { return response && Array.isArray(response.data) ? response.data : []; }
+  function assertSuccess(response, fallback) { var result = responseRecords(response)[0] || response || {}; var state = String(result.status || result.code || "").toLowerCase(); if (state && state !== "success") { throw new Error(result.message || fallback); } return result; }
+  function actionFor(record) { var state = String(record.Accounting_Status || ""), refund = record.Transaction_Type === "Refund"; if (state === "Pending invoice") { return ["invoice", refund ? "Review credit note" : "Review invoice"]; } if ((!state || state === "-None-") && !refund) { return ["invoice", "Review invoice"]; } if (state === "Pending credit note" || (!state || state === "-None-") && refund) { return ["invoice", "Review credit note"]; } if (state === "Pending payment record") { return ["payment", "Record card payment"]; } if (state === "Pending refund record") { return ["payment", "Record card refund"]; } if (state === "Refund pending") { return ["refund-ready", "Refund received"]; } return null; }
+  function badge(value, type) { var statusValue = String(value || "Pending invoice"); var statusClass = { "Pending invoice": "is-pending-invoice", "Pending payment record": "is-pending-payment", "Purchase recorded": "is-purchase-recorded", "Pending credit note": "is-pending-credit-note", "Refund pending": "is-refund-pending", "Pending refund record": "is-pending-refund", "Refund recorded": "is-refund-recorded", "Needs review": "is-needs-review", "Cancelled": "is-cancelled" }[statusValue] || "is-pending"; return '<span class="card-purchase-status ' + (type ? (value === "Refund" ? "is-refund" : "is-purchase") : statusClass) + '">' + esc(statusValue) + "</span>"; }
+  function columns() { return [["review", ""], ["Name", "Card purchase"], ["Transaction_Type", "Type"], ["Supplier", "Supplier"], ["Booking", "Booking"], ["Accounting_Status", "Registration status"], ["Transaction_Date", "Transaction date"], ["Amount", "Amount"], ["Card_Payment_Account", "Card"], ["Vendor_Invoice", "Invoice / credit note"], ["Vendor_Payment", "Payment record"]]; }
+  function sortValue(record, key) { if (key === "Amount") { return Number(record[key]) || 0; } return String(key === "Supplier" || key === "Booking" || key === "Card_Payment_Account" || key === "Vendor_Invoice" || key === "Vendor_Payment" ? lookupName(record[key]) : record[key] || "").toLowerCase(); }
+  function isClosedCardPurchase(record) { return record.Accounting_Status === "Purchase recorded" || record.Accounting_Status === "Refund recorded"; }
+  function cardPurchaseMatchesView(record) { if (cardPurchaseView === "all") { return true; } if (cardPurchaseView === "closed") { return isClosedCardPurchase(record); } return !isClosedCardPurchase(record) && record.Accounting_Status !== "Cancelled"; }
+  function selectedCardPurchaseStatuses() { return cardStatusOptions.filter(function (option) { return option.checked; }).map(function (option) { return option.value; }); }
+  function syncCardPurchaseStatusFilter() { var selected = selectedCardPurchaseStatuses(), allSelected = selected.length === cardStatusOptions.length; if (cardStatusToggleAll) { cardStatusToggleAll.checked = allSelected; cardStatusToggleAll.indeterminate = selected.length > 0 && !allSelected; } if (cardStatusLabel) { cardStatusLabel.textContent = !selected.length || allSelected ? "All statuses" : selected.length === 1 ? selected[0] : selected.length + " statuses"; } }
+  function selectedCardPurchaseTypes() { return cardTypeOptions.filter(function (option) { return option.checked; }).map(function (option) { return option.value; }); }
+  function syncCardPurchaseTypeFilter() { var selected = selectedCardPurchaseTypes(), allSelected = selected.length === cardTypeOptions.length; if (cardTypeToggleAll) { cardTypeToggleAll.checked = allSelected; cardTypeToggleAll.indeterminate = selected.length > 0 && !allSelected; } if (cardTypeLabel) { cardTypeLabel.textContent = !selected.length || allSelected ? "All types" : selected.length === 1 ? selected[0] : selected.length + " types"; } }
+  function applyCardPurchaseFilters() { cardPurchaseAppliedFilters = { search: String(cardSearch && cardSearch.value || "").trim().toLowerCase(), statuses: selectedCardPurchaseStatuses(), types: selectedCardPurchaseTypes(), ownerId: cardPurchaseOwnerId }; page = 1; render(); }
+  function filtered() { var query = cardPurchaseAppliedFilters.search, selectedStatus = cardPurchaseAppliedFilters.statuses, selectedType = cardPurchaseAppliedFilters.types, selectedOwner = cardPurchaseAppliedFilters.ownerId; var items = records.filter(function (record) { return !source().cards || (cardPurchaseMatchesView(record) && (!query || [record.Name, lookupName(record.Supplier), lookupName(record.Booking), lookupName(record.Owner), lookupName(record.Card_Payment_Account), record.Invoice_Number, record.Transaction_Notes].join(" ").toLowerCase().indexOf(query) !== -1) && (!selectedStatus.length || selectedStatus.length === cardStatusOptions.length || selectedStatus.indexOf(record.Accounting_Status) !== -1) && (!selectedType.length || selectedType.length === cardTypeOptions.length || selectedType.indexOf(record.Transaction_Type) !== -1) && (!selectedOwner || lookupId(record.Owner) === selectedOwner)); }); return source().cards ? items.sort(function (left, right) { var a = sortValue(left, sort.key), b = sortValue(right, sort.key), compared = typeof a === "number" ? a - b : String(a).localeCompare(String(b), "en", { numeric: true }); return compared * (sort.direction === "asc" ? 1 : -1); }) : items; }
+  function headers() { if (source().cards) { tableHead.innerHTML = columns().map(function (column) { var indicator = sort.key === column[0] ? (sort.direction === "asc" ? " ▲" : " ▼") : ""; return '<th' + (column[0] === "Amount" ? ' class="numeric-cell"' : "") + ">" + (column[0] === "action" || column[0] === "review" ? "" : '<button class="operations-card-purchase-sort" type="button" data-card-purchase-sort="' + column[0] + '">' + esc(column[1] + indicator) + "</button>") + "</th>"; }).join(""); } else { tableHead.innerHTML = "<th>Status</th><th>Accounted</th><th>Amount</th><th>Transaction type</th><th>Payment date</th><th>Booking MFSP</th><th>Booking name</th><th>Supplier code</th>"; } }
+  function cardRow(record) { var active = activePurchase && String(activePurchase.id) === String(record.id), readOnly = record.Accounting_Status === "Purchase recorded" || record.Accounting_Status === "Refund recorded", icon = readOnly ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 10s2.7-4.5 7.5-4.5 7.5 4.5 7.5 4.5-2.7 4.5-7.5 4.5S2.5 10 2.5 10Zm7.5 2.2A2.2 2.2 0 1 0 10 7.8a2.2 2.2 0 0 0 0 4.4Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>' : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.75h6.3L15 6.45v10.8H5zM11 2.75v3.7h4M7.5 11l1.7 1.7 3.5-3.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>'; return '<tr data-card-purchase-id="' + esc(record.id) + '"' + (active ? ' class="is-card-purchase-active" aria-selected="true"' : "") + '><td><button class="card-purchase-review-button" type="button" data-card-purchase-review aria-label="' + (readOnly ? "View" : "Register") + " " + esc(record.Name || "card purchase") + '" title="' + (readOnly ? "View recorded card purchase" : "Register card purchase") + '">' + icon + "</button></td><td><strong>" + esc(record.Name || "—") + "</strong></td><td>" + badge(record.Transaction_Type, true) + "</td><td>" + esc(lookupName(record.Supplier) || "—") + "</td><td>" + esc(lookupName(record.Booking) || "—") + "</td><td>" + badge(record.Accounting_Status) + "</td><td>" + date(record.Transaction_Date) + '</td><td class="numeric-cell">' + money(record.Amount) + "</td><td>" + esc(lookupName(record.Card_Payment_Account) || "—") + "</td><td>" + esc(lookupName(record.Vendor_Invoice) || record.Invoice_Number || "—") + "</td><td>" + esc(lookupName(record.Vendor_Payment) || "—") + "</td></tr>"; }
+  function render() { var values = filtered(), perPage = 15, totalPages = Math.max(1, Math.ceil(values.length / perPage)), shown; if (page > totalPages) { page = totalPages; } shown = values.slice((page - 1) * perPage, page * perPage); headers(); if (!values.length) { tableWrap.hidden = true; pagination.hidden = true; empty.hidden = false; empty.innerHTML = source().cards ? "<h3>No card purchases match this view</h3><p>Change the search or status filter, or refresh the list.</p>" : "<h3>No records found</h3>"; return; } empty.hidden = true; tableWrap.hidden = false; tableBody.innerHTML = source().cards ? shown.map(cardRow).join("") : shown.map(function (record) { return "<tr><td>" + esc(record.status || "—") + "</td><td>" + esc(record.accounted || "—") + '</td><td class="numeric-cell">' + money(record.amount) + "</td><td>" + esc(record.transaction_type || "—") + "</td><td>" + date(record.payment_date) + "</td><td>" + esc(record.booking_mfsp || "—") + "</td><td>" + esc(record.booking_name || "—") + "</td><td>" + esc(record.supplier_code || "—") + "</td></tr>"; }).join(""); pagination.hidden = values.length <= perPage; paginationCopy.textContent = "Page " + page + " of " + totalPages; previous.disabled = page === 1; next.disabled = page === totalPages; }
+  async function cardPurchases() { var all = [], current = 1, response, batch; do { try { response = await api().getAllRecords({ Entity: MODULES.purchases, page: current, per_page: 200, sort_by: "Modified_Time", sort_order: "desc" }); } catch (sortError) { response = await api().getAllRecords({ Entity: MODULES.purchases, page: current, per_page: 200 }); } batch = responseRecords(response); all = all.concat(batch); current += 1; } while (response && response.info && response.info.more_records && batch.length); return all; }
+  async function populatePaymentAccounts(supplierId) { var supplier, accounts, defaultId = "", supplierAccounts, preferredId = "", firstAllowed; if (!workflowPaymentAccount) { return; } workflowPaymentAccount.innerHTML = '<option value="">Loading supplier payment account…</option>'; try { supplier = responseRecords(await api().getRecord({ Entity: "Vendors", RecordID: supplierId }))[0] || {}; defaultId = lookupId(supplier.Default_Payment_Account); accounts = responseRecords(await api().getAllRecords({ Entity: "Payment_Accounts", page: 1, per_page: 200 })); supplierAccounts = accounts.filter(function (account) { var allowed = account.Allowed_For_Supplier_Payments === true || String(account.Allowed_For_Supplier_Payments || "").toLowerCase() === "true"; return lookupId(account.Owner_Supplier) === String(supplierId) && ((allowed && String(account.Status || "").toLowerCase() !== "inactive") || String(account.id) === defaultId); }); firstAllowed = supplierAccounts.filter(function (account) { return (account.Allowed_For_Supplier_Payments === true || String(account.Allowed_For_Supplier_Payments || "").toLowerCase() === "true") && String(account.Status || "").toLowerCase() !== "inactive"; })[0]; preferredId = supplierAccounts.some(function (account) { return String(account.id) === defaultId && (account.Allowed_For_Supplier_Payments === true || String(account.Allowed_For_Supplier_Payments || "").toLowerCase() === "true") && String(account.Status || "").toLowerCase() !== "inactive"; }) ? defaultId : String(firstAllowed && firstAllowed.id || ""); workflowPaymentAccount.innerHTML = '<option value="">Create automatically if needed</option>' + supplierAccounts.map(function (account) { return '<option value="' + esc(account.id) + '">' + esc(account.Name || lookupName(account) || "Supplier payment account") + '</option>'; }).join(""); workflowPaymentAccount.value = preferredId; } catch (error) { if (global.console && global.console.error) { global.console.error("[Card Purchases] Supplier payment account options could not be loaded", error); } workflowPaymentAccount.innerHTML = '<option value="">Create automatically if needed</option>'; } }
+  function syncOwnerFilter() { var owners = {}, selectedName; if (!cardOwnerMenu) { return; } records.forEach(function (record) { var id = lookupId(record.Owner), name = lookupName(record.Owner); if (id && name) { owners[id] = name; } }); if (cardPurchaseOwnerId && !owners[cardPurchaseOwnerId]) { cardPurchaseOwnerId = ""; } selectedName = owners[cardPurchaseOwnerId] || "All owners"; cardOwnerLabel.textContent = selectedName; cardOwnerMenu.innerHTML = '<button class="service-multi-filter-option card-purchase-owner-option' + (!cardPurchaseOwnerId ? ' is-selected' : '') + '" type="button" data-card-purchase-owner-option=""><span>All owners</span></button>' + Object.keys(owners).sort(function (left, right) { return owners[left].localeCompare(owners[right], "en"); }).map(function (id) { return '<button class="service-multi-filter-option card-purchase-owner-option' + (cardPurchaseOwnerId === id ? ' is-selected' : '') + '" type="button" data-card-purchase-owner-option="' + esc(id) + '"><span>' + esc(owners[id]) + '</span></button>'; }).join(""); }
+  async function load() { var current = source(), response, output; empty.hidden = false; empty.innerHTML = "<h3>Loading " + esc(current.title.toLowerCase()) + "…</h3>"; tableWrap.hidden = true; if (current.cards) { records = await cardPurchases(); syncOwnerFilter(); page = 1; render(); return; } response = await global.ZOHO.CRM.FUNCTIONS.execute(current.functionName, { arguments: JSON.stringify({ status: String(status.value || ""), paymentDateFrom: String(dateFrom.value || ""), paymentDateTo: String(dateTo.value || ""), searchText: String(search.value || "") }) }); output = response && response.details && response.details.output; try { output = typeof output === "string" ? JSON.parse(output) : output; } catch (error) { throw new Error(output || "Could not load records."); } records = output && Array.isArray(output[current.responseKey]) ? output[current.responseKey] : []; page = 1; render(); }
+  function controls() { var cards = source().cards; title.textContent = source().title; filters.hidden = cards; toolbar.hidden = !cards; tableWrap.classList.toggle("is-card-purchases", cards); typeCards.forEach(function (item) { item.classList.toggle("is-active", item.getAttribute("data-operation-type") === selectedType); }); }
+  function setMessage(message, error) { workflowMessage.textContent = message || ""; workflowMessage.classList.toggle("is-error", Boolean(error)); }
+  function setWorkflowSaving(saving, label) { modal.classList.toggle("is-saving", Boolean(saving)); if (workflowSpinner) { workflowSpinner.hidden = !saving; workflowSpinner.textContent = saving ? label || "Saving…" : ""; } }
+  function isRecordedPurchase(purchase) { return purchase && (purchase.Accounting_Status === "Purchase recorded" || purchase.Accounting_Status === "Refund recorded"); }
+  function setWorkflowReadOnly(readOnly) { if (workflowActions) { workflowActions.hidden = readOnly; } workflowForm.classList.toggle("is-read-only", readOnly); workflowNotes.readOnly = readOnly; workflowNotes.disabled = readOnly; if (readOnly) { workflowTitle.textContent = activePurchase.Transaction_Type === "Refund" ? "Recorded card refund" : "Recorded card purchase"; workflowEyebrow.textContent = "Read-only record"; setMessage(""); } }
+  function setWorkflowPanelOpen(open) { var activeRow; if (open) { modal.hidden = false; setWorkflowReadOnly(isRecordedPurchase(activePurchase)); Array.prototype.forEach.call(tableBody.querySelectorAll("tr.is-card-purchase-active"), function (row) { row.classList.remove("is-card-purchase-active"); row.removeAttribute("aria-selected"); }); activeRow = activePurchase && tableBody.querySelector('[data-card-purchase-id="' + String(activePurchase.id).replace(/"/g, "\\\"") + '"]'); if (activeRow) { activeRow.classList.add("is-card-purchase-active"); activeRow.setAttribute("aria-selected", "true"); } global.requestAnimationFrame(function () { modal.classList.add("is-open"); }); return; } modal.classList.remove("is-open"); global.setTimeout(function () { if (!modal.classList.contains("is-open")) { modal.hidden = true; } }, 240); }
+  function previewFile(file) { var preview = document.createElement("div"), content, close; preview.className = "operations-file-preview"; preview.innerHTML = '<div class="operations-file-preview-backdrop"></div><section class="operations-file-preview-card" role="dialog" aria-modal="true" aria-label="File preview"><header><strong>' + esc(file.name) + '</strong><button type="button" aria-label="Close">&times;</button></header><div class="operations-file-preview-content">Loading preview…</div></section>'; content = preview.querySelector(".operations-file-preview-content"); close = function () { if (preview._url) { global.URL.revokeObjectURL(preview._url); } preview.remove(); }; preview.querySelector(".operations-file-preview-backdrop").onclick = close; preview.querySelector("button").onclick = close; document.body.appendChild(preview); Promise.resolve(file.url || (file.id && api().getFile({ id: file.id }))).then(function (source) { var blob = source instanceof Blob ? source : new Blob([source], { type: file.type || "application/octet-stream" }), url = typeof source === "string" && /^(https?:|data:|blob:)/i.test(source) ? source : global.URL.createObjectURL(blob), image = /^image\//i.test(blob.type || file.type) || /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(file.name), pdf = /^application\/pdf$/i.test(blob.type || file.type) || /\.pdf$/i.test(file.name); if (!source) { throw new Error("File is not available."); } if (url.indexOf("blob:") === 0) { preview._url = url; } content.innerHTML = image ? '<img src="' + esc(url) + '" alt="' + esc(file.name) + '">' : pdf ? '<iframe src="' + esc(url) + '" title="' + esc(file.name) + '"></iframe>' : '<p>This file cannot be previewed here.</p><a class="button secondary" href="' + esc(url) + '" download="' + esc(file.name) + '">Download file</a>'; }).catch(function () { content.innerHTML = '<p class="operations-file-preview-error">The file preview could not be loaded.</p>'; }); }
+  function closeWorkflow() { if (!busy) { activePurchase = null; setWorkflowSaving(false); setWorkflowPanelOpen(false); setMessage(""); if (source().cards) { render(); } } }
+  function openWorkflow(purchase, action) { var suggestedAction = action === "review" ? actionFor(purchase) : null, effectiveAction = suggestedAction ? suggestedAction[0] : action, refund = purchase.Transaction_Type === "Refund", invoice = effectiveAction === "invoice", payment = effectiveAction === "payment", documents = files(purchase.Supporting_Documents), contextItems; activePurchase = purchase; activePurchase._action = effectiveAction; workflowEyebrow.textContent = refund ? "Card refund" : "Card purchase"; workflowTitle.textContent = effectiveAction === "payment" ? (refund ? "Record card refund" : "Record card payment") : effectiveAction === "refund-ready" ? "Confirm refund received" : refund ? "Create credit note" : "Create supplier invoice"; contextItems = [["Booking", lookupName(purchase.Booking) || "—"], ["Transaction date", date(purchase.Transaction_Date)], ["Settlement", lookupName(purchase.Settlement) || "—"], ["Card", lookupName(purchase.Card_Payment_Account) || "—"]]; workflowContext.innerHTML = '<dl><div class="card-purchase-workflow-summary"><div><dt>Supplier</dt><dd title="' + esc(lookupName(purchase.Supplier) || "Missing") + '">' + esc(lookupName(purchase.Supplier) || "Missing") + '</dd></div><div class="card-purchase-workflow-amount"><dt>Card amount</dt><dd>' + money(purchase.Amount) + '</dd></div></div>' + contextItems.map(function (item) { return '<div><dt>' + esc(item[0]) + '</dt><dd title="' + esc(item[1]) + '">' + esc(item[1]) + '</dd></div>'; }).join("") + '<div class="card-purchase-workflow-transaction-type"><dt>Transaction type</dt><dd>' + esc(purchase.Transaction_Type || "—") + '</dd></div><div class="card-purchase-workflow-documents"><dt>Supporting documents</dt><dd>' + (documents.length ? documents.map(function (file, index) { return '<button class="card-purchase-file" type="button" data-card-purchase-workflow-file="' + index + '" title="' + esc(file.name) + '"><span>' + esc(file.name) + '</span></button>'; }).join("") : "—") + '</dd></div></dl>'; workflowInvoiceFields.hidden = !invoice; workflowPaymentFields.hidden = !payment; workflowReference.required = invoice; workflowDate.required = invoice; workflowAmount.required = invoice; workflowPaymentReference.required = payment; workflowPaymentDate.required = payment; workflowPaymentAccount.required = false; workflowReferenceLabel.textContent = refund ? "Credit note reference" : "Invoice number"; workflowDateLabel.textContent = refund ? "Credit note date" : "Invoice date"; workflowReference.value = purchase.Invoice_Number || ""; workflowDate.value = isoDate(purchase.Transaction_Date) || new Date().toISOString().slice(0, 10); workflowAmount.value = Number(purchase.Amount || 0).toFixed(2); workflowVat.value = "0"; workflowNotes.value = purchase.Review_Notes || ""; if (payment) { workflowPaymentReference.value = (refund ? "CARD-REFUND-" : "CARD-PAYMENT-") + purchase.Name; workflowPaymentDate.value = isoDate(purchase.Transaction_Date) || new Date().toISOString().slice(0, 10); populatePaymentAccounts(lookupId(purchase.Supplier)); } workflowSubmit.textContent = effectiveAction === "payment" ? (refund ? "Record refund" : "Record payment") : effectiveAction === "refund-ready" ? "Set ready to record" : refund ? "Create credit note" : "Create invoice"; setMessage(invoice && !lookupId(purchase.Settlement) ? "A settlement is required. Mark this record for review so reservations can complete it." : ""); setWorkflowPanelOpen(true); }
+  async function create(entity, data) { return assertSuccess(await api().insertRecord({ Entity: entity, APIData: [data], Trigger: ["workflow"] }), "Zoho CRM did not create the record."); }
+  async function updatePurchase(data) { var payload = Object.assign({ id: activePurchase.id }, data); try { return assertSuccess(await api().updateRecord({ Entity: MODULES.purchases, RecordID: activePurchase.id, APIData: payload, Trigger: ["workflow"] }), "Zoho CRM did not update the card purchase."); } catch (error) { if (global.console && global.console.error) { global.console.error("[Card Purchases] Card Purchase update failed", { error: error, cardPurchaseId: activePurchase.id, payload: payload }); } throw error; } }
+  async function createInvoice() { var refund = activePurchase.Transaction_Type === "Refund", amount = Number(workflowAmount.value), vat = Number(workflowVat.value || 0), net, invoice, invoiceId, settlementId = lookupId(activePurchase.Settlement), supplierId = lookupId(activePurchase.Supplier), bookingId = lookupId(activePurchase.Booking), serviceId = lookupId(activePurchase.Boking_Service), payload; if (!workflowReference.value.trim() || !workflowDate.value) { throw new Error("Enter the reference and date before creating the record."); } if (!settlementId) { throw new Error("A settlement is required before creating the invoice."); } if (!supplierId) { throw new Error("A supplier is required before creating the invoice."); } if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(vat) || vat < 0) { throw new Error("Enter a valid positive amount and VAT percentage."); } net = Math.round(amount / (1 + vat / 100) * 100) / 100; payload = { Name: workflowReference.value.trim(), Supplier: { id: supplierId }, Supplier_Name: lookupName(activePurchase.Supplier), Supplier_Settlement: { id: settlementId }, Invoice_Date: workflowDate.value, Invoice_Amount_Excl_VAT: net, Invoice_Amount_Incl_VAT: amount, VAT_percentage: vat, VAT_Amount: Math.round((amount - net) * 100) / 100, Invoice_Total: amount, Total_Payable_Amount: amount, Amount_Paid: 0, Status: "Received", Accounting_Status: "Pending", Invoice_Type: refund ? "Credit Note" : "Final Invoice" }; if (bookingId) { payload.Booking = { id: bookingId }; } invoice = await create(MODULES.invoices, payload); invoiceId = String(invoice.details && invoice.details.id || ""); if (!invoiceId) { throw new Error("Zoho CRM did not return the invoice ID."); } await create(MODULES.invoiceSettlements, { Name: invoiceId + "-" + settlementId, Vendor_Invoice: { id: invoiceId }, Vendor_Settlement: { id: settlementId }, Allocated_Amount: amount, Allocation_Date: workflowDate.value, Status: "Active", Allocation_Source: "Manual" }); if (serviceId && !refund) { await create(MODULES.invoiceLines, { Name: workflowReference.value.trim() + " - card purchase", Supplier_Invoice: { id: invoiceId }, Booking_Service: { id: serviceId }, Amount: amount, Service_Date: workflowDate.value, Line_Type: "Service" }); } await updatePurchase({ Vendor_Invoice: { id: invoiceId }, Invoice_Number: workflowReference.value.trim(), Accounting_Status: refund ? "Pending refund record" : "Pending payment record", Review_Notes: workflowNotes.value.trim() }); activePurchase.Vendor_Invoice = { id: invoiceId, name: workflowReference.value.trim() }; activePurchase.Invoice_Number = workflowReference.value.trim(); activePurchase.Accounting_Status = refund ? "Pending refund record" : "Pending payment record"; return invoiceId; }
+  function output(response) { var value = response && response.details && response.details.output; try { return typeof value === "string" ? JSON.parse(value) : value || {}; } catch (error) { throw new Error(value || "Payment function did not return valid data."); } }
+  async function userEmail() { try { var value = global.ZOHO.CRM.CONFIG && await global.ZOHO.CRM.CONFIG.getCurrentUser(); value = value && (value.users && value.users[0] || value.user || value); return String(value && value.email || ""); } catch (error) { return ""; } }
+  async function createPayment() { var invoiceId = lookupId(activePurchase.Vendor_Invoice), cardId = lookupId(activePurchase.Card_Payment_Account), supplierId = lookupId(activePurchase.Supplier), supplierPaymentAccountId = String(workflowPaymentAccount.value || ""), supplierPaymentAccounts = {}, paymentReference = workflowPaymentReference.value.trim(), paymentDate = workflowPaymentDate.value, refund = activePurchase.Transaction_Type === "Refund", result, paymentId, paymentInput, auditData, auditWarning = false, processedBy; if (!invoiceId) { throw new Error("Create or link the invoice / credit note before recording the card movement."); } if (!cardId) { throw new Error("A card payment account is required before recording the movement."); } if (!paymentReference || !paymentDate) { throw new Error("Enter a payment reference and payment date."); } if (supplierId && supplierPaymentAccountId) { supplierPaymentAccounts[supplierId] = supplierPaymentAccountId; } paymentInput = { Name: paymentReference, Payment_Date: paymentDate, Payment_Account: cardId, Status: "Paid", Accounting_Status: "Pending", Movement_Type: refund ? "Supplier Refund" : "Outbound Payment", Payment_Accounts_By_Supplier: supplierPaymentAccounts }; try { result = output(await global.ZOHO.CRM.FUNCTIONS.execute(CREATE_PAYMENT_FUNCTION, { arguments: JSON.stringify({ supplierInvoiceIds: invoiceId, paymentDataString: JSON.stringify(paymentInput) }) })); } catch (error) { if (global.console && global.console.error) { global.console.error("[Card Purchases] Supplier payment function failed", { error: error, invoiceId: invoiceId, paymentInput: paymentInput }); } throw error; } if (result.error || result.success === false || !result.payment_id) { if (global.console && global.console.error) { global.console.error("[Card Purchases] Supplier payment was rejected", { invoiceId: invoiceId, paymentInput: paymentInput, functionResult: result }); } throw new Error(result.message || "The card movement could not be recorded."); } paymentId = String(result.payment_id); await updatePurchase({ Accounting_Status: refund ? "Refund recorded" : "Purchase recorded", Review_Notes: workflowNotes.value.trim() }); activePurchase.Accounting_Status = refund ? "Refund recorded" : "Purchase recorded"; processedBy = await userEmail(); auditData = { Vendor_Payment: { id: paymentId }, Accounting_Processed_At: new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00") }; if (processedBy) { auditData.Accounting_Processed_By = processedBy; } try { await updatePurchase(auditData); activePurchase.Vendor_Payment = { id: paymentId, name: paymentReference }; } catch (error) { auditWarning = true; if (global.console && global.console.error) { global.console.error("[Card Purchases] Payment was created and status was updated, but the payment link/audit data could not be saved", { error: error, cardPurchaseId: activePurchase.id, paymentId: paymentId, auditData: auditData }); } } return { auditWarning: auditWarning }; }
+  async function submit(event) { var action, paymentResult, savingLabel; event.preventDefault(); if (!activePurchase || busy) { return; } action = activePurchase._action; savingLabel = action === "invoice" ? "Creating invoice…" : action === "payment" ? "Recording payment…" : "Saving…"; busy = true; workflowSubmit.disabled = true; workflowNeedsReview.disabled = true; setMessage(""); setWorkflowSaving(true, savingLabel); try { if (action === "invoice") { await createInvoice(); records = await cardPurchases(); syncOwnerFilter(); render(); openWorkflow(activePurchase, "payment"); setMessage("Invoice created. Review the card payment and record it when ready."); return; } if (action === "payment") { paymentResult = await createPayment(); setMessage(paymentResult && paymentResult.auditWarning ? "Card movement recorded and status updated. The payment link could not be saved; see the console log." : "Card movement recorded."); } else if (action === "refund-ready") { await updatePurchase({ Accounting_Status: "Pending refund record", Review_Notes: workflowNotes.value.trim() }); setMessage("The refund is ready to be recorded."); } else { await updatePurchase({ Review_Notes: workflowNotes.value.trim() }); setMessage("Review notes saved."); } records = await cardPurchases(); syncOwnerFilter(); render(); global.setTimeout(closeWorkflow, 650); } catch (error) { setMessage(error.message || "Could not save this record.", true); } finally { busy = false; setWorkflowSaving(false); workflowSubmit.disabled = false; workflowNeedsReview.disabled = false; } }
+  async function needsReview() { if (!activePurchase || busy) { return; } busy = true; workflowNeedsReview.disabled = true; workflowSubmit.disabled = true; setMessage(""); setWorkflowSaving(true, "Saving review…"); try { await updatePurchase({ Accounting_Status: "Needs review", Review_Notes: workflowNotes.value.trim() }); records = await cardPurchases(); syncOwnerFilter(); activePurchase = null; render(); setWorkflowPanelOpen(false); } catch (error) { setMessage(error.message || "Could not update this record.", true); } finally { busy = false; setWorkflowSaving(false); workflowNeedsReview.disabled = false; workflowSubmit.disabled = false; } }
 
-  function normaliseDate(value) {
-    var isoMatch = String(value || "").match(/(\d{4}-\d{2}-\d{2})/);
-    return isoMatch ? isoMatch[1] : "";
-  }
-
-  function formatDate(value) {
-    var iso = normaliseDate(value);
-    var creatorMatch;
-    var months;
-
-    if (iso) {
-      return iso.split("-").reverse().join("/");
-    }
-
-    creatorMatch = String(value || "").match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})/);
-    if (!creatorMatch) {
-      return "&mdash;";
-    }
-
-    months = { Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06", Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12" };
-    return String(creatorMatch[1]).padStart(2, "0") + "/" + (months[creatorMatch[2]] || creatorMatch[2]) + "/" + creatorMatch[3];
-  }
-
-  function formatCreatorDate(value) {
-    var iso = normaliseDate(value);
-    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var parts;
-
-    if (!iso) {
-      return "";
-    }
-
-    parts = iso.split("-");
-    return parts[2] + "-" + months[Number(parts[1]) - 1] + "-" + parts[0];
-  }
-
-  function formatAmount(value) {
-    var amount = Number(value);
-    if (!Number.isFinite(amount)) {
-      return "&mdash;";
-    }
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency: "EUR"
-    }).format(amount);
-  }
-
-  function statusClass(value) {
-    if (value === "Paid") {
-      return "is-paid";
-    }
-    if (value === "Cancelled") {
-      return "is-cancelled";
-    }
-    return "is-pending";
-  }
-
-  function statusLabel(value) {
-    return value === "Not Paid" ? "Pending" : (value || "");
-  }
-
-  function transactionClass(value) {
-    return value === "Partial Payment" ? "is-partial" : "is-full";
-  }
-
-  function transactionLabel(value) {
-    return value === "Partial Payment" ? "Partial" : (value === "Full Payment" ? "Full" : (value || ""));
-  }
-
-  function textOrDash(value) {
-    return value == null || value === "" ? "&mdash;" : escapeHtml(value);
-  }
-
-  function isTrue(value) {
-    return value === true || String(value).toLowerCase() === "true";
-  }
-
-  function attachmentFileNames(value) {
-    var names = [];
-
-    function addName(item) {
-      var raw;
-      var filePathMatch;
-      var fileName;
-
-      if (item == null || item === "") {
-        return;
-      }
-      if (Array.isArray(item)) {
-        item.forEach(addName);
-        return;
-      }
-      if (typeof item === "object") {
-        if (item.name || item.file_name || item.fileName || item.display_value) {
-          addName(item.name || item.file_name || item.fileName || item.display_value);
-        }
-        return;
-      }
-
-      raw = String(item);
-      filePathMatch = raw.match(/[?&]filepath=([^&]+)/i);
-      fileName = filePathMatch ? filePathMatch[1] : raw.split("?")[0].split("/").pop();
-      try {
-        fileName = decodeURIComponent(fileName);
-      } catch (error) {
-        // Keep the original name when the source is not URI encoded.
-      }
-      if (fileName && names.indexOf(fileName) === -1) {
-        names.push(fileName);
-      }
-    }
-
-    addName(value);
-    return names;
-  }
-
-  function formatAttachments(value) {
-    var names = attachmentFileNames(value);
-    if (!names.length) {
-      return "<span class=\"operations-empty-value\">&mdash;</span>";
-    }
-    return "<span class=\"operations-file-name\" title=\"" + escapeHtml(names.join(", ")) + "\">" +
-      escapeHtml(names[0]) + (names.length > 1 ? " <span>+" + (names.length - 1) + "</span>" : "") +
-    "</span>";
-  }
-
-  function extractFunctionOutput(response) {
-    var output = response && response.details ? response.details.output : response;
-    if (typeof output === "string") {
-      try {
-        output = JSON.parse(output);
-      } catch (error) {
-        throw new Error(output || "Creator did not return valid data.");
-      }
-    }
-    return output && typeof output === "object" ? output : {};
-  }
-
-  function getSource() {
-    return sources[selectedType];
-  }
-
-  function getPageSize() {
-    var availableHeight;
-    var headerHeight;
-    var estimatedRowHeight = 43;
-
-    if (!tableWrap) {
-      return MINIMUM_PAGE_SIZE;
-    }
-
-    availableHeight = tableWrap.clientHeight;
-    headerHeight = tableHead ? tableHead.offsetHeight : 42;
-    if (!availableHeight) {
-      return MINIMUM_PAGE_SIZE;
-    }
-
-    return Math.max(MINIMUM_PAGE_SIZE, Math.floor((availableHeight - headerHeight) / estimatedRowHeight));
-  }
-
-  function setTableHeaders() {
-    var headers = {
-      prepayments: ["Status", "Accounted", "Amount", "Transaction type", "Payment date", "Booking MFSP", "Booking name", "Service date", "Supplier code", "Observations", "Proforma attached", "Payment proof", "Check-in date", "Check-out date", "Requested by", "Requested date", "When to be paid"],
-      renfe: ["Requested date", "Requested by", "Booking MFSP", "Booking name", "RENFE ticket locator", "Amount", "Observations"],
-      "card-purchases": ["Status", "Amount", "Booking MFSP", "Booking name", "Supplier code", "Supplier name", "Service name", "Service date", "Observations", "Requested by"]
-    }[selectedType] || [];
-
-    if (tableHead) {
-      tableHead.innerHTML = headers.map(function (header) {
-        return "<th" + (header === "Amount" ? " class=\"numeric-cell\"" : "") + ">" + header + "</th>";
-      }).join("");
-    }
-  }
-
-  function syncSourceControls() {
-    var source = getSource();
-    var options = source.statusOptions;
-
-    if (title) {
-      title.textContent = source.title;
-    }
-    if (statusField) {
-      statusField.hidden = !source.supportsStatus;
-    }
-    if (fromField) {
-      fromField.hidden = !source.supportsDates;
-    }
-    if (toField) {
-      toField.hidden = !source.supportsDates;
-    }
-    if (status) {
-      status.innerHTML = "<option value=\"\">All statuses</option>" + options.map(function (option) {
-        return "<option value=\"" + escapeHtml(option[0]) + "\">" + escapeHtml(option[1]) + "</option>";
-      }).join("");
-    }
-    setTableHeaders();
-  }
-
-  function renderOperationRow(record) {
-    if (selectedType === "renfe") {
-      return "<tr>" +
-        "<td>" + formatDate(record.requested_date) + "</td><td>" + textOrDash(record.requested_by) + "</td><td>" + textOrDash(record.booking_mfsp) + "</td><td>" + textOrDash(record.booking_name) + "</td><td>" + textOrDash(record.ticket_locator) + "</td><td class=\"numeric-cell\">" + formatAmount(record.amount) + "</td><td class=\"operations-observations\" title=\"" + escapeHtml(record.observations || "") + "\">" + textOrDash(record.observations) + "</td>" +
-      "</tr>";
-    }
-    if (selectedType === "card-purchases") {
-      return "<tr>" +
-        "<td><span class=\"operations-status " + (record.status === "Ok" ? "is-paid" : "is-pending") + "\">" + textOrDash(record.status) + "</span></td><td class=\"numeric-cell\">" + formatAmount(record.amount) + "</td><td>" + textOrDash(record.booking_mfsp) + "</td><td>" + textOrDash(record.booking_name) + "</td><td>" + textOrDash(record.supplier_code) + "</td><td>" + textOrDash(record.supplier_name) + "</td><td>" + textOrDash(record.service_name) + "</td><td>" + formatDate(record.service_date) + "</td><td class=\"operations-observations\" title=\"" + escapeHtml(record.observations || "") + "\">" + textOrDash(record.observations) + "</td><td>" + textOrDash(record.requested_by) + "</td>" +
-      "</tr>";
-    }
-    return "<tr>" +
-      "<td><span class=\"operations-status " + statusClass(record.status) + "\">" + textOrDash(statusLabel(record.status)) + "</span></td>" +
-      "<td><span class=\"operations-boolean " + (isTrue(record.accounted) ? "is-yes" : "is-no") + "\">" + (isTrue(record.accounted) ? "Yes" : "No") + "</span></td>" +
-      "<td class=\"numeric-cell\">" + formatAmount(record.amount) + "</td>" +
-      "<td><span class=\"operations-transaction " + transactionClass(record.transaction_type) + "\">" + textOrDash(transactionLabel(record.transaction_type)) + "</span></td>" +
-      "<td>" + formatDate(record.payment_date) + "</td><td>" + textOrDash(record.booking_mfsp) + "</td><td>" + textOrDash(record.booking_name) + "</td><td>" + formatDate(record.service_date) + "</td><td>" + textOrDash(record.supplier_code) + "</td><td class=\"operations-observations\" title=\"" + escapeHtml(record.observations || "") + "\">" + textOrDash(record.observations) + "</td><td>" + formatAttachments(record.proforma_attached) + "</td><td>" + formatAttachments(record.payment_proof) + "</td><td>" + formatDate(record.check_in_date) + "</td><td>" + formatDate(record.check_out_date) + "</td><td>" + textOrDash(record.requested_by) + "</td><td>" + formatDate(record.requested_date) + "</td><td>" + textOrDash(record.when_to_be_paid) + "</td>" +
-    "</tr>";
-  }
-
-  function getFilteredRecords() {
-    var query = String(search && search.value || "").trim().toLocaleLowerCase("en");
-    var selectedStatus = String(status && status.value || "");
-    var from = String(dateFrom && dateFrom.value || "");
-    var to = String(dateTo && dateTo.value || "");
-
-    return records.filter(function (record) {
-      var haystack = [record.booking_mfsp, record.booking_name, record.supplier_code, record.supplier_name, record.ticket_locator, record.observations]
-        .join(" ").toLocaleLowerCase("en");
-      var paymentDate = normaliseDate(record.payment_date);
-
-      return (!query || haystack.indexOf(query) !== -1) &&
-        (!getSource().supportsStatus || !selectedStatus || record.status === selectedStatus) &&
-        (!from || !paymentDate || paymentDate >= from) &&
-        (!to || !paymentDate || paymentDate <= to);
-    });
-  }
-
-  function renderPagination(totalRecords, pageSize) {
-    var totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
-
-    if (currentPage > totalPages) {
-      currentPage = totalPages;
-    }
-    if (!paginationBar) {
-      return;
-    }
-
-    paginationBar.hidden = totalRecords <= pageSize;
-    if (paginationCopy) {
-      paginationCopy.textContent = "Page " + currentPage + " of " + totalPages;
-    }
-    if (previousPage) {
-      previousPage.disabled = currentPage <= 1;
-    }
-    if (nextPage) {
-      nextPage.disabled = currentPage >= totalPages;
-    }
-  }
-
-  function render() {
-    var filtered = getFilteredRecords();
-    var pageSize;
-    var totalPages;
-    var startIndex;
-    var pageRecords;
-
-    if (!tableWrap || !tableBody || !empty) {
-      return;
-    }
-
-    if (!filtered.length) {
-      tableWrap.hidden = true;
-      if (paginationBar) {
-        paginationBar.hidden = true;
-      }
-      empty.hidden = false;
-      empty.innerHTML = records.length
-        ? "<h3>No matching prepayments</h3><p>Change or reset the filters to view other results.</p>"
-        : "<h3>No prepayments found</h3><p>Creator did not return any prepayments to review.</p>";
-      return;
-    }
-
-    tableWrap.hidden = false;
-    pageSize = getPageSize();
-    totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    if (currentPage > totalPages) {
-      currentPage = totalPages;
-    }
-    startIndex = (currentPage - 1) * pageSize;
-    pageRecords = filtered.slice(startIndex, startIndex + pageSize);
-    tableBody.innerHTML = pageRecords.map(renderOperationRow).join("");
-    empty.hidden = true;
-    tableWrap.hidden = false;
-    renderPagination(filtered.length, pageSize);
-  }
-
-  async function loadRecords() {
-    var response;
-    var output;
-
-    if (!(global.ZOHO && ZOHO.CRM && ZOHO.CRM.FUNCTIONS)) {
-      throw new Error("The Zoho CRM connection is not available yet.");
-    }
-
-    empty.hidden = false;
-    empty.innerHTML = "<h3>Loading prepayments&hellip;</h3><p>Querying Creator.</p>";
-    tableWrap.hidden = true;
-    if (paginationBar) {
-      paginationBar.hidden = true;
-    }
-    response = await ZOHO.CRM.FUNCTIONS.execute(getSource().functionName, {
-      arguments: JSON.stringify({
-        status: String(status && status.value || ""),
-        paymentDateFrom: formatCreatorDate(dateFrom && dateFrom.value),
-        paymentDateTo: formatCreatorDate(dateTo && dateTo.value),
-        searchText: String(search && search.value || "").trim()
-      })
-    });
-    output = extractFunctionOutput(response);
-
-    if (output.success === false || output.error === true) {
-      throw new Error(output.message || "Prepayments could not be queried in Creator.");
-    }
-
-    records = Array.isArray(output[getSource().responseKey]) ? output[getSource().responseKey] : [];
-    currentPage = 1;
-    render();
-  }
-
-  async function applyFilters() {
-    try {
-      await loadRecords();
-    } catch (error) {
-      tableWrap.hidden = true;
-      if (paginationBar) {
-        paginationBar.hidden = true;
-      }
-      empty.hidden = false;
-      empty.innerHTML = "<h3>Prepayments could not be loaded</h3><p>" + escapeHtml(error.message || error) + "</p>";
-    }
-  }
-
-  if (apply) {
-    apply.addEventListener("click", applyFilters);
-  }
-  if (reset) {
-    reset.addEventListener("click", function () {
-      [search, status, dateFrom, dateTo].forEach(function (field) {
-        if (field) {
-          field.value = "";
-        }
-      });
-      currentPage = 1;
-      render();
-    });
-  }
-  if (previousPage) {
-    previousPage.addEventListener("click", function () {
-      if (currentPage > 1) {
-        currentPage -= 1;
-        render();
-      }
-    });
-  }
-  if (nextPage) {
-    nextPage.addEventListener("click", function () {
-      var totalPages = Math.ceil(getFilteredRecords().length / getPageSize());
-      if (currentPage < totalPages) {
-        currentPage += 1;
-        render();
-      }
-    });
-  }
-  typeCards.forEach(function (card) {
-    card.addEventListener("click", function () {
-      selectedType = card.getAttribute("data-operation-type") || "prepayments";
-      records = [];
-      currentPage = 1;
-      typeCards.forEach(function (candidate) {
-        candidate.classList.toggle("is-active", candidate === card);
-      });
-      syncSourceControls();
-      tableWrap.hidden = true;
-      if (paginationBar) {
-        paginationBar.hidden = true;
-      }
-      empty.hidden = false;
-      empty.innerHTML = "<h3>Ready to load " + escapeHtml(card.textContent.trim()) + "</h3><p>Apply filters to query Creator.</p>";
-    });
-  });
-  syncSourceControls();
+  apply && apply.addEventListener("click", function () { load().catch(function (error) { empty.hidden = false; empty.textContent = error.message || "Could not load records."; }); });
+  refresh && refresh.addEventListener("click", function () { load().catch(function (error) { empty.hidden = false; empty.textContent = error.message || "Could not refresh card purchases."; }); });
+  reset && reset.addEventListener("click", function () { [search, status, dateFrom, dateTo].forEach(function (field) { if (field) { field.value = ""; } }); });
+  cardStatus && cardStatus.addEventListener("click", function () { var open = cardStatusMenu.hidden; cardStatusMenu.hidden = !open; cardStatus.setAttribute("aria-expanded", open ? "true" : "false"); });
+  cardStatusToggleAll && cardStatusToggleAll.addEventListener("change", function () { cardStatusOptions.forEach(function (option) { option.checked = cardStatusToggleAll.checked; }); syncCardPurchaseStatusFilter(); });
+  cardStatusOptions.forEach(function (option) { option.addEventListener("change", function () { syncCardPurchaseStatusFilter(); }); });
+  cardType && cardType.addEventListener("click", function () { var open = cardTypeMenu.hidden; cardTypeMenu.hidden = !open; cardType.setAttribute("aria-expanded", open ? "true" : "false"); });
+  cardTypeToggleAll && cardTypeToggleAll.addEventListener("change", function () { cardTypeOptions.forEach(function (option) { option.checked = cardTypeToggleAll.checked; }); syncCardPurchaseTypeFilter(); });
+  cardTypeOptions.forEach(function (option) { option.addEventListener("change", function () { syncCardPurchaseTypeFilter(); }); });
+  cardOwner && cardOwner.addEventListener("click", function () { var open = cardOwnerMenu.hidden; cardOwnerMenu.hidden = !open; cardOwner.setAttribute("aria-expanded", open ? "true" : "false"); });
+  cardOwnerMenu && cardOwnerMenu.addEventListener("click", function (event) { var option = event.target.closest("[data-card-purchase-owner-option]"); if (!option) { return; } cardPurchaseOwnerId = option.getAttribute("data-card-purchase-owner-option") || ""; syncOwnerFilter(); cardOwnerMenu.hidden = true; cardOwner.setAttribute("aria-expanded", "false"); });
+  document.addEventListener("pointerdown", function (event) { if (cardStatusMenu && !cardStatusMenu.hidden && !cardStatusMenu.contains(event.target) && !cardStatus.contains(event.target)) { cardStatusMenu.hidden = true; cardStatus.setAttribute("aria-expanded", "false"); } });
+  document.addEventListener("pointerdown", function (event) { if (cardTypeMenu && !cardTypeMenu.hidden && !cardTypeMenu.contains(event.target) && !cardType.contains(event.target)) { cardTypeMenu.hidden = true; cardType.setAttribute("aria-expanded", "false"); } });
+  document.addEventListener("pointerdown", function (event) { if (cardOwnerMenu && !cardOwnerMenu.hidden && !cardOwnerMenu.contains(event.target) && !cardOwner.contains(event.target)) { cardOwnerMenu.hidden = true; cardOwner.setAttribute("aria-expanded", "false"); } });
+  cardApplyFilters && cardApplyFilters.addEventListener("click", applyCardPurchaseFilters);
+  cardPurchaseViewButtons.forEach(function (button) { button.addEventListener("click", function () { cardPurchaseView = button.getAttribute("data-card-purchase-view") || "open"; cardPurchaseViewButtons.forEach(function (item) { var active = item === button; item.classList.toggle("is-active", active); item.setAttribute("aria-pressed", active ? "true" : "false"); }); page = 1; render(); }); });
+  previous && previous.addEventListener("click", function () { page -= 1; render(); }); next && next.addEventListener("click", function () { page += 1; render(); });
+  tableHead && tableHead.addEventListener("click", function (event) { var button = event.target.closest("[data-card-purchase-sort]"), key; if (!button) { return; } key = button.getAttribute("data-card-purchase-sort"); sort.direction = sort.key === key && sort.direction === "asc" ? "desc" : "asc"; sort.key = key; render(); });
+  tableBody && tableBody.addEventListener("click", function (event) { var row = event.target.closest("[data-card-purchase-id]"), review = event.target.closest("[data-card-purchase-review]"), purchase; if (!row || !review) { return; } purchase = records.filter(function (record) { return String(record.id) === row.getAttribute("data-card-purchase-id"); })[0]; if (purchase) { openWorkflow(purchase, "review"); } });
+  workflowForm && workflowForm.addEventListener("submit", submit); workflowNeedsReview && workflowNeedsReview.addEventListener("click", needsReview); Array.prototype.slice.call(document.querySelectorAll("[data-card-purchase-close]")).forEach(function (button) { button.addEventListener("click", closeWorkflow); });
+  workflowContext && workflowContext.addEventListener("click", function (event) { var button = event.target.closest("[data-card-purchase-workflow-file]"), selectedFile; if (!button || !activePurchase) { return; } selectedFile = files(activePurchase.Supporting_Documents)[Number(button.getAttribute("data-card-purchase-workflow-file"))]; if (selectedFile) { previewFile(selectedFile); } });
+  typeCards.forEach(function (card) { card.addEventListener("click", function () { selectedType = card.getAttribute("data-operation-type") || "prepayments"; records = []; page = 1; controls(); if (source().cards) { load().catch(function (error) { empty.hidden = false; empty.textContent = error.message || "Could not load card purchases."; }); } else { empty.hidden = false; empty.innerHTML = "<h3>Ready to load " + esc(source().title) + "</h3><p>Apply filters to query Creator.</p>"; tableWrap.hidden = true; pagination.hidden = true; } }); });
+  controls();
 }(window));

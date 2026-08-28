@@ -1,0 +1,263 @@
+string standalone.manageSupplierPaymentAllocations(String supplierPaymentId,String allocationsDataString)
+{
+	res = Map();
+	res.put("error",false);
+	res.put("message","");
+	res.put("payment_id","");
+	res.put("payment_amount",0.0);
+	res.put("affected_invoice_ids",List());
+	res.put("affected_settlement_ids",List());
+	res.put("created_allocation_ids",List());
+	res.put("updated_allocation_ids",List());
+	res.put("deleted_allocation_ids",List());
+	createdAllocationIds = List();
+	updatedAllocationIds = List();
+	deletedAllocationIds = List();
+
+	try
+	{
+		CRM_API_BASE_URL = "https://www.zohoapis.eu/crm/v8";
+		supplierPaymentId = ifnull(supplierPaymentId,"").toString().trim();
+		allocationsDataString = ifnull(allocationsDataString,"").toString().trim();
+		if(supplierPaymentId == "" || allocationsDataString == "")
+		{
+			res.put("error",true);
+			res.put("message","supplierPaymentId and allocationsDataString are required.");
+			return res;
+		}
+
+		payment = zoho.crm.getRecordById("Supplier_Payments",supplierPaymentId.toLong());
+		if(payment == null || !payment.containKey("id"))
+		{
+			res.put("error",true);
+			res.put("message","Supplier payment was not found.");
+			return res;
+		}
+		paymentStatus = ifnull(payment.get("Status"),"").toString().trim().toLowerCase();
+		accountingStatus = ifnull(payment.get("Accounting_Status"),"").toString().trim().toLowerCase();
+		if(paymentStatus == "reconciled" || paymentStatus == "cancelled" || paymentStatus == "canceled" || accountingStatus == "posted" || accountingStatus == "synced" || accountingStatus == "exported" || accountingStatus == "reconciled")
+		{
+			res.put("error",true);
+			res.put("message","This payment is locked by its payment or accounting status. Create a reversal instead.");
+			return res;
+		}
+
+		requestData = allocationsDataString.toMap();
+		desiredAmounts = ifnull(requestData.get("allocations"),Map());
+		info "manageSupplierPaymentAllocations start | payment=" + supplierPaymentId + " | requested_invoices=" + desiredAmounts.keys().size();
+		paymentAmount = ifnull(payment.get("Payment_Amount"),0).toDecimal();
+		desiredTotal = 0.0;
+		for each invoiceIdValue in desiredAmounts.keys()
+		{
+			amount = ifnull(desiredAmounts.get(invoiceIdValue),0).toDecimal();
+			if(amount < 0)
+			{
+				res.put("error",true);
+				res.put("message","Allocation amounts cannot be negative.");
+				return res;
+			}
+			desiredTotal = desiredTotal + amount;
+		}
+		existingByInvoiceId = Map();
+		pageTokens = "1,2,3,4,5,6,7,8,9,10".toList(",");
+		allocationCriteria = "(Supplier_Payment:equals:" + supplierPaymentId + ")";
+		for each pageToken in pageTokens
+		{
+			allocationBatch = zoho.crm.searchRecords("Supplier_Pay_Allocations",allocationCriteria,pageToken.toLong(),200);
+			if(allocationBatch == null || allocationBatch.isEmpty()) { break; }
+			for each allocation in allocationBatch
+			{
+				invoiceLookup = allocation.get("Supplier_Invoice");
+				invoiceId = "";
+				if(invoiceLookup != null) { invoiceId = ifnull(invoiceLookup.get("id"),"").toString(); }
+				if(invoiceId != "") { existingByInvoiceId.put(invoiceId,allocation); }
+			}
+			if(allocationBatch.size() < 200) { break; }
+		}
+		info "manageSupplierPaymentAllocations loaded allocations | payment=" + supplierPaymentId + " | existing_invoices=" + existingByInvoiceId.keys().size();
+
+		affectedInvoiceIds = List();
+		affectedSettlementIds = List();
+		for each invoiceIdValue in desiredAmounts.keys()
+		{
+			invoiceId = invoiceIdValue.toString().trim();
+			desiredAmount = ifnull(desiredAmounts.get(invoiceIdValue),0).toDecimal();
+			existingAllocation = existingByInvoiceId.get(invoiceId);
+			existingAmount = 0.0;
+			if(existingAllocation != null) { existingAmount = ifnull(existingAllocation.get("Allocated_Amount"),0).toDecimal(); }
+			if(desiredAmount == existingAmount)
+			{
+				// Recalculate unchanged rows too. This repairs any earlier partial save
+				// where CRM created an allocation but the invoice/settlement update did not run.
+				unchangedInvoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+				if(unchangedInvoice == null || !unchangedInvoice.containKey("id"))
+				{
+					res.put("error",true); res.put("message","An invoice linked to this payment no longer exists."); return res;
+				}
+				if(!affectedInvoiceIds.contains(invoiceId)) { affectedInvoiceIds.add(invoiceId); }
+				unchangedSettlementLookup = unchangedInvoice.get("Supplier_Settlement"); unchangedSettlementId = "";
+				if(unchangedSettlementLookup != null) { unchangedSettlementId = ifnull(unchangedSettlementLookup.get("id"),"").toString(); }
+				if(unchangedSettlementId != "" && !affectedSettlementIds.contains(unchangedSettlementId)) { affectedSettlementIds.add(unchangedSettlementId); }
+				continue;
+			}
+
+			invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+			if(invoice == null || !invoice.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","An invoice selected for allocation no longer exists.");
+				return res;
+			}
+			totalAmount = ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal();
+			if(invoice.get("Invoice_Total") != null) { totalAmount = ifnull(invoice.get("Invoice_Total"),0).toDecimal(); }
+			otherPaid = ifnull(invoice.get("Amount_Paid"),0).toDecimal() - existingAmount;
+			availableAmount = totalAmount - otherPaid;
+			if(desiredAmount > availableAmount)
+			{
+				res.put("error",true);
+				res.put("message","Allocation for " + ifnull(invoice.get("Name"),invoiceId).toString() + " exceeds its available balance.");
+				return res;
+			}
+
+			if(existingAllocation != null && desiredAmount == 0)
+			{
+				info "manageSupplierPaymentAllocations unlink request | payment=" + supplierPaymentId + " | invoice=" + invoiceId + " | allocation=" + existingAllocation.get("id").toString();
+				deleteResult = invokeurl
+				[
+					url :CRM_API_BASE_URL + "/Supplier_Pay_Allocations?ids=" + existingAllocation.get("id").toString() + "&wf_trigger=false"
+					type :DELETE
+					connection:"crm_oauth_connection"
+				];
+				info "manageSupplierPaymentAllocations unlink response | allocation=" + existingAllocation.get("id").toString() + " | response=" + ifnull(deleteResult,Map()).toString();
+				deleteMessage = "";
+				if(deleteResult != null) { deleteMessage = ifnull(deleteResult.get("message"),"").toString(); }
+				if(deleteResult == null || !deleteResult.containKey("data"))
+				{
+					if(deleteMessage == "" && deleteResult != null) { deleteMessage = deleteResult.toString(); }
+					res.put("error",true); res.put("message","Could not remove an allocation." + if(deleteMessage == "",""," " + deleteMessage)); return res;
+				}
+				deleteItems = deleteResult.get("data");
+				if(deleteItems == null || deleteItems.isEmpty())
+				{
+					if(deleteMessage == "") { deleteMessage = deleteResult.toString(); }
+					res.put("error",true); res.put("message","Could not remove an allocation." + if(deleteMessage == "",""," " + deleteMessage)); return res;
+				}
+				deleteItem = deleteItems.get(0);
+				deleteCode = ifnull(deleteItem.get("code"),ifnull(deleteItem.get("status"),"")).toString().toLowerCase();
+				if(deleteCode != "success")
+				{
+					deleteMessage = ifnull(deleteItem.get("message"),deleteMessage).toString();
+					res.put("error",true); res.put("message","Could not remove an allocation." + if(deleteMessage == "",""," " + deleteMessage)); return res;
+				}
+				deletedAllocationIds.add(existingAllocation.get("id").toString());
+				try
+				{
+					deletedAllocationCheck = zoho.crm.getRecordById("Supplier_Pay_Allocations",existingAllocation.get("id").toLong());
+					if(deletedAllocationCheck != null && deletedAllocationCheck.containKey("id"))
+					{
+						res.put("error",true); res.put("message","Zoho did not remove allocation " + existingAllocation.get("id").toString() + "."); return res;
+					}
+				}
+				catch (deletedAllocationCheckError)
+				{
+					// A deleted CRM record can raise an invalid-data error when re-read.
+					info "manageSupplierPaymentAllocations unlink verification | allocation=" + existingAllocation.get("id").toString() + " | result=not_found";
+				}
+				info "manageSupplierPaymentAllocations unlink succeeded | allocation=" + existingAllocation.get("id").toString();
+			}
+			else if(existingAllocation != null)
+			{
+				updateMap = Map(); updateMap.put("Allocated_Amount",desiredAmount);
+				updateResult = zoho.crm.updateRecord("Supplier_Pay_Allocations",existingAllocation.get("id").toLong(),updateMap);
+				info "manageSupplierPaymentAllocations allocation update response | allocation=" + existingAllocation.get("id").toString() + " | response=" + ifnull(updateResult,Map()).toString();
+				if(updateResult == null || !updateResult.containKey("id"))
+				{
+					updateMessage = if(updateResult == null,"",ifnull(updateResult.get("message"),updateResult.toString()).toString());
+					res.put("error",true); res.put("message","Could not update an allocation." + if(updateMessage == "",""," " + updateMessage)); return res;
+				}
+				updatedAllocationIds.add(existingAllocation.get("id").toString());
+			}
+			else if(desiredAmount > 0)
+			{
+				createMap = Map(); createMap.put("Name",ifnull(payment.get("Name"),supplierPaymentId).toString() + " - " + ifnull(invoice.get("Name"),invoiceId).toString());
+				paymentLookup = Map(); paymentLookup.put("id",supplierPaymentId); createMap.put("Supplier_Payment",paymentLookup);
+				invoiceLookup = Map(); invoiceLookup.put("id",invoiceId); createMap.put("Supplier_Invoice",invoiceLookup);
+				createMap.put("Allocated_Amount",desiredAmount); createMap.put("Allocation_Date",payment.get("Payment_Date")); createMap.put("Payment_Date",payment.get("Payment_Date")); createMap.put("Payment_Status",payment.get("Status"));
+				createMap.put("Supplier",invoice.get("Supplier")); createMap.put("Booking",invoice.get("Booking")); createMap.put("Supplier_Settlement",invoice.get("Supplier_Settlement")); createMap.put("Supplier_Name",invoice.get("Supplier_Name")); createMap.put("MFSP_Reference",invoice.get("MFSP_Reference")); createMap.put("Invoice_Date",invoice.get("Invoice_Date")); createMap.put("Invoice_Status",invoice.get("Status"));
+				if(payment.get("Payment_Account") != null) { createMap.put("Payment_Account",payment.get("Payment_Account")); }
+				createResult = zoho.crm.createRecord("Supplier_Pay_Allocations",createMap);
+				info "manageSupplierPaymentAllocations allocation create response | invoice=" + invoiceId + " | response=" + ifnull(createResult,Map()).toString();
+				if(createResult == null || !createResult.containKey("id"))
+				{
+					createMessage = if(createResult == null,"",ifnull(createResult.get("message"),createResult.toString()).toString());
+					res.put("error",true); res.put("message","Could not create an allocation." + if(createMessage == "",""," " + createMessage)); return res;
+				}
+				createdAllocationIds.add(createResult.get("id").toString());
+			}
+			if(!affectedInvoiceIds.contains(invoiceId)) { affectedInvoiceIds.add(invoiceId); }
+			settlementLookup = invoice.get("Supplier_Settlement"); settlementId = "";
+			if(settlementLookup != null) { settlementId = ifnull(settlementLookup.get("id"),"").toString(); }
+			if(settlementId != "" && !affectedSettlementIds.contains(settlementId)) { affectedSettlementIds.add(settlementId); }
+		}
+
+		for each invoiceId in affectedInvoiceIds
+		{
+			invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+			paidAmount = 0.0;
+			invoiceAllocations = zoho.crm.searchRecords("Supplier_Pay_Allocations","(Supplier_Invoice:equals:" + invoiceId + ")",1,200);
+			for each invoiceAllocation in ifnull(invoiceAllocations,List()) { paidAmount = paidAmount + ifnull(invoiceAllocation.get("Allocated_Amount"),0).toDecimal(); }
+			totalAmount = ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal();
+			if(invoice.get("Invoice_Total") != null) { totalAmount = ifnull(invoice.get("Invoice_Total"),0).toDecimal(); }
+			invoiceUpdate = Map(); invoiceUpdate.put("Amount_Paid",paidAmount); invoiceUpdate.put("Unpaid_Invoiced_Amount",if(totalAmount - paidAmount < 0,0,totalAmount - paidAmount));
+			if(paidAmount >= totalAmount && totalAmount > 0) { invoiceUpdate.put("Status","Paid"); }
+			else if(paidAmount > 0) { invoiceUpdate.put("Status","Partially Paid"); }
+			else { invoiceUpdate.put("Status","Received"); }
+			updateResult = zoho.crm.updateRecord("Supplier_Invoices",invoiceId.toLong(),invoiceUpdate);
+			info "manageSupplierPaymentAllocations invoice update response | invoice=" + invoiceId + " | response=" + ifnull(updateResult,Map()).toString();
+			if(updateResult == null || !updateResult.containKey("id"))
+			{
+				invoiceUpdateMessage = if(updateResult == null,"",ifnull(updateResult.get("message"),updateResult.toString()).toString());
+				res.put("error",true); res.put("message","Could not recalculate an invoice." + if(invoiceUpdateMessage == "",""," " + invoiceUpdateMessage)); return res;
+			}
+			info "manageSupplierPaymentAllocations invoice recalculated | invoice=" + invoiceId + " | paid=" + paidAmount + " | status=" + ifnull(invoiceUpdate.get("Status"),ifnull(invoice.get("Status"),"")).toString();
+		}
+
+		settlementIdsString = "";
+		for each settlementId in affectedSettlementIds
+		{
+			if(settlementIdsString == "") { settlementIdsString = settlementId; }
+			else { settlementIdsString = settlementIdsString + "|||" + settlementId; }
+		}
+		if(settlementIdsString != "")
+		{
+			info "manageSupplierPaymentAllocations rebuilding settlements | ids=" + settlementIdsString;
+			settlementResult = standalone.rebuildSupplierSettlementTotals(settlementIdsString);
+			info "manageSupplierPaymentAllocations settlement rebuild response | response=" + ifnull(settlementResult,Map()).toString();
+			if(ifnull(settlementResult.get("error"),false))
+			{
+				res.put("error",true); res.put("message",ifnull(settlementResult.get("message"),"Could not recalculate settlements.")); return res;
+			}
+		}
+		if(paymentAmount != desiredTotal)
+		{
+			paymentUpdate = Map();
+			paymentUpdate.put("Payment_Amount",desiredTotal);
+			paymentUpdateResult = zoho.crm.updateRecord("Supplier_Payments",supplierPaymentId.toLong(),paymentUpdate);
+			info "manageSupplierPaymentAllocations payment amount update response | payment=" + supplierPaymentId + " | amount=" + desiredTotal + " | response=" + ifnull(paymentUpdateResult,Map()).toString();
+			if(paymentUpdateResult == null || !paymentUpdateResult.containKey("id"))
+			{
+				paymentUpdateMessage = if(paymentUpdateResult == null,"",ifnull(paymentUpdateResult.get("message"),paymentUpdateResult.toString()).toString());
+				res.put("error",true); res.put("message","Could not recalculate the payment total." + if(paymentUpdateMessage == "",""," " + paymentUpdateMessage)); return res;
+			}
+		}
+		info "manageSupplierPaymentAllocations completed | payment=" + supplierPaymentId + " | created=" + createdAllocationIds.size() + " | updated=" + updatedAllocationIds.size() + " | deleted=" + deletedAllocationIds.size();
+		res.put("payment_id",supplierPaymentId); res.put("payment_amount",desiredTotal); res.put("affected_invoice_ids",affectedInvoiceIds); res.put("affected_settlement_ids",affectedSettlementIds); res.put("created_allocation_ids",createdAllocationIds); res.put("updated_allocation_ids",updatedAllocationIds); res.put("deleted_allocation_ids",deletedAllocationIds); res.put("unapplied_amount",0.0); res.put("message","Payment total, allocations and related balances were recalculated.");
+	}
+	catch (e)
+	{
+		info "manageSupplierPaymentAllocations failed | payment=" + supplierPaymentId + " | error=" + e.toString();
+		res.put("error",true);
+		res.put("message",e.toString());
+	}
+	return res;
+}

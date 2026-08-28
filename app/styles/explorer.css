@@ -193,6 +193,23 @@ body {
   box-shadow: 0 10px 26px rgba(49, 37, 23, 0.13);
 }
 
+.toolbar-more-filters summary::after {
+  width: 0;
+  height: 0;
+  margin-left: 9px;
+  border-top: 6px solid currentColor;
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+  content: "";
+  color: var(--muted);
+  transform: translateY(1px);
+  transition: transform 140ms ease;
+}
+
+.toolbar-more-filters[open] summary::after {
+  transform: translateY(-1px) rotate(180deg);
+}
+
 .toolbar-more-filters-popover .field {
   display: grid;
   gap: 3px;
