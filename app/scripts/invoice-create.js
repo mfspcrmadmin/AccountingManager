@@ -1498,9 +1498,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     async function refreshInvoicesAfterCreate(createdInvoiceId) {
       var shouldReloadInvoicesView = state.currentTab === "invoices" && state.views.invoices.hasLoaded;
 
-      state.dashboard.loaded = false;
-      state.dashboard.pendingInvoices = [];
-      state.dashboard.pendingSettlements = [];
       state.loaded.invoices = false;
       state.loaded.settlements = false;
       state.views.invoices.hasMore = false;

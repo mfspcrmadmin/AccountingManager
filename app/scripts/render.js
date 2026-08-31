@@ -102,9 +102,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var isPaymentAccountingBusy = Boolean(state.paymentAccounting && state.paymentAccounting.isBusy);
       var isPaymentLetterBusy = Boolean(state.paymentLetter && state.paymentLetter.isBusy);
 
-      if (elements.dashboardRefresh) {
-        elements.dashboardRefresh.disabled = state.isLoading;
-      }
       elements.loadSupplier.disabled = state.isLoading;
       elements.createInvoiceFromSupplier.disabled = state.isLoading || !state.supplierId;
       if (elements.createRefundFromSupplier) {
@@ -123,7 +120,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.closeSupplierWorkspace.disabled = state.isLoading || !state.supplierId;
       }
       if (elements.invoicesRefresh) {
-        elements.invoicesRefresh.hidden = true;
+        elements.invoicesRefresh.disabled = state.isLoading;
+      }
+      if (elements.invoicesApplyFilters) {
+        elements.invoicesApplyFilters.disabled = state.isLoading;
       }
       if (elements.invoicesLoad) {
         elements.invoicesLoad.disabled = state.isLoading;
@@ -504,82 +504,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.supplierOptions.innerHTML = state.recentSuppliers.map(function (supplier) {
         return '<option value="' + helpers.escapeHtml(helpers.buildSupplierLabel(supplier, fieldCandidates)) + '"></option>';
       }).join("");
-    }
-
-    function renderDashboard(view) {
-      var alias = state.welcome && state.welcome.alias ? String(state.welcome.alias).trim() : "";
-      var isWelcomeLoading = Boolean(state.welcome && state.welcome.isLoading);
-
-      if (elements.welcomeHeading) {
-        elements.welcomeHeading.textContent = isWelcomeLoading
-          ? "Loading workspace..."
-          : alias ? "Hello, " + alias + "!" : "Hello!";
-        return;
-      }
-
-      setTextWithTitle(elements.dashboardStatSuppliers, String(view.supplierTotals.count));
-      setTextWithTitle(elements.dashboardStatOpenAmount, helpers.formatCurrency(view.supplierTotals.amount));
-      setTextWithTitle(elements.dashboardStatTripsReady, String(view.tripTotals.readyCount));
-      setTextWithTitle(elements.dashboardStatReadyAmount, helpers.formatCurrency(view.tripTotals.readyAmount));
-      setTextWithTitle(elements.dashboardStatTripsToInvoice, String(view.tripTotals.toInvoiceCount));
-      setTextWithTitle(elements.dashboardStatToInvoiceAmount, helpers.formatCurrency(view.tripTotals.toInvoiceAmount));
-      elements.dashboardSuppliersCount.textContent = view.pendingSuppliers.length + (view.pendingSuppliers.length === 1 ? " supplier" : " suppliers");
-      elements.dashboardTripsCount.textContent = view.pendingTrips.length + (view.pendingTrips.length === 1 ? " trip" : " trips");
-
-      if (!view.pendingSuppliers.length) {
-        elements.dashboardSuppliersEmpty.textContent = view.suppliersEmptyMessage;
-        elements.dashboardSuppliersEmpty.hidden = false;
-        elements.dashboardSuppliersTableWrap.hidden = true;
-        elements.dashboardSuppliersTableBody.innerHTML = "";
-      } else {
-        elements.dashboardSuppliersTableBody.innerHTML = view.pendingSuppliers.map(function (row) {
-          var actionMarkup = row.supplierId
-            ? '<button class="button secondary compact-action-button" type="button" data-dashboard-supplier-id="' + helpers.escapeHtml(row.supplierId) + '">Open supplier</button>'
-            : '<span class="table-inline-secondary">Unavailable</span>';
-
-          return [
-            "<tr>",
-            "  <td>" + helpers.escapeHtml(row.supplierName) + "</td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(String(row.openInvoicesCount)) + "</td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(String(row.tripCount)) + "</td>",
-            "  <td>" + helpers.escapeHtml(helpers.formatDate(row.oldestInvoiceDate)) + "</td>",
-            '  <td class="numeric-cell"><strong>' + helpers.escapeHtml(helpers.formatCurrency(row.pendingAmount)) + "</strong></td>",
-            "  <td>" + actionMarkup + "</td>",
-            "</tr>"
-          ].join("");
-        }).join("");
-        elements.dashboardSuppliersEmpty.hidden = true;
-        elements.dashboardSuppliersTableWrap.hidden = false;
-      }
-
-      if (!view.pendingTrips.length) {
-        elements.dashboardTripsEmpty.textContent = view.tripsEmptyMessage;
-        elements.dashboardTripsEmpty.hidden = false;
-        elements.dashboardTripsTableWrap.hidden = true;
-        elements.dashboardTripsTableBody.innerHTML = "";
-      } else {
-        elements.dashboardTripsTableBody.innerHTML = view.pendingTrips.map(function (row) {
-          var actionMarkup = row.supplierId
-            ? '<button class="button secondary compact-action-button" type="button" data-dashboard-supplier-id="' + helpers.escapeHtml(row.supplierId) + '">Open supplier</button>'
-            : '<span class="table-inline-secondary">Unavailable</span>';
-
-          return [
-            "<tr>",
-            "  <td>" + helpers.escapeHtml(row.settlementName) + "</td>",
-            "  <td>" + helpers.escapeHtml(row.mfsp || "-") + "</td>",
-            "  <td>" + helpers.escapeHtml(row.bookingName || "-") + "</td>",
-            "  <td>" + helpers.escapeHtml(row.supplierName) + "</td>",
-            '  <td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(row.adminStatus)) + '">' + helpers.escapeHtml(row.adminStatus) + "</span></td>",
-            "  <td>" + helpers.escapeHtml(helpers.formatDate(row.firstServiceDate)) + "</td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(row.remainingToInvoice)) + "</td>",
-            '  <td class="numeric-cell"><strong>' + helpers.escapeHtml(helpers.formatCurrency(row.remainingToPay)) + "</strong></td>",
-            "  <td>" + actionMarkup + "</td>",
-            "</tr>"
-          ].join("");
-        }).join("");
-        elements.dashboardTripsEmpty.hidden = true;
-        elements.dashboardTripsTableWrap.hidden = false;
-      }
     }
 
     function renderTabs() {
@@ -1347,7 +1271,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     return {
-      renderDashboard: renderDashboard,
       renderAccountingEntriesWorkspace: renderAccountingEntriesWorkspace,
       renderAccountingEntryLinesWorkspace: renderAccountingEntryLinesWorkspace,
       renderBookingsWorkspace: renderBookingsWorkspace,

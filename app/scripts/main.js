@@ -265,8 +265,8 @@ var ns = global.AccountingManagerApp;
   state.views.bookings.filters.stageValues = BOOKING_STAGE_FILTER_OPTIONS.slice();
   state.views.bookings.appliedFilters.stageValues = BOOKING_STAGE_FILTER_OPTIONS.slice();
   var INVOICE_STATUS_FILTER_OPTIONS = [
+    "-None-",
     "Received",
-    "Approved",
     "Partially Paid",
     "Paid",
     "Cancelled",
@@ -586,36 +586,6 @@ var ns = global.AccountingManagerApp;
   var onBookingClosureSettlementClick = bookingsModule.onClosureSettlementClick;
   var loadBookingsBrowserData = bookingsModule.loadBrowserData;
   var buildBookingsView = bookingsModule.buildView;
-  var dashboardModule = ns.createDashboardModule({
-    MODULES: MODULES,
-    FIELD_CANDIDATES: FIELD_CANDIDATES,
-    INVOICE_COQL_FIELDS: INVOICE_COQL_FIELDS,
-    SETTLEMENT_FIELDS: SETTLEMENT_FIELDS,
-    state: state,
-    helpers: helpers,
-    renderer: renderer,
-    renderAll: renderAll,
-    setCurrentTab: setCurrentTab,
-    loadSupplierWorkspace: function () {
-      return loadSupplierWorkspace.apply(null, arguments);
-    },
-    buildInvoiceRemoteWhereClause: buildInvoiceRemoteWhereClause,
-    buildInvoiceRemoteOrderByClause: buildInvoiceRemoteOrderByClause,
-    buildCoqlOrEqualsClause: buildCoqlOrEqualsClause,
-    loadRecordsByCoql: loadRecordsByCoql,
-    loadRecordsByPagination: loadRecordsByPagination,
-    normalizeSettlements: normalizeSettlements,
-    compareValues: compareValues,
-    roundCurrency: roundCurrency,
-    getSettlementMfsp: getSettlementMfsp,
-    getInvoiceCreateSettlementUnpaidInvoicedAmount: getInvoiceCreateSettlementUnpaidInvoicedAmount,
-    getInvoiceCreateSettlementRemainingToInvoice: getInvoiceCreateSettlementRemainingToInvoice
-  });
-  var buildDashboardView = dashboardModule.buildView;
-  var ensureDashboardDataLoaded = dashboardModule.ensureLoaded;
-  var refreshDashboardTabData = dashboardModule.refreshTabData;
-  var onDashboardSuppliersTableClick = dashboardModule.onSuppliersTableClick;
-  var onDashboardTripsTableClick = dashboardModule.onTripsTableClick;
   var supplierActivityModule = ns.createSupplierActivityModule({
     MODULES: MODULES,
     FIELD_CANDIDATES: FIELD_CANDIDATES,
@@ -1005,11 +975,26 @@ var ns = global.AccountingManagerApp;
         setCurrentTab(button.getAttribute("data-tab-button"));
       });
     });
+    if (elements.invoiceSummaryClose) {
+      elements.invoiceSummaryClose.addEventListener("click", function () {
+        setInvoiceSummaryOpen(false);
+      });
+    }
+    if (elements.invoiceSummaryOpen) {
+      elements.invoiceSummaryOpen.addEventListener("click", function () {
+        setInvoiceSummaryOpen(true);
+      });
+    }
     if (elements.bookingActionsToggle) {
       elements.bookingActionsToggle.addEventListener("click", onBookingActionsToggleClick);
     }
     if (elements.bookingActionsClose) {
       elements.bookingActionsClose.addEventListener("click", function () {
+        setBookingActionsPopupOpen(false);
+      });
+    }
+    if (elements.bookingActionsBackdrop) {
+      elements.bookingActionsBackdrop.addEventListener("click", function () {
         setBookingActionsPopupOpen(false);
       });
     }
@@ -1132,15 +1117,6 @@ var ns = global.AccountingManagerApp;
     });
     global.document.addEventListener("click", onDocumentClickCloseBookingActionsPopup);
     global.document.addEventListener("keydown", onDocumentKeydownCloseBookingActionsPopup);
-    if (elements.dashboardRefresh) {
-      elements.dashboardRefresh.addEventListener("click", refreshDashboardTabData);
-    }
-    if (elements.dashboardSuppliersTableBody) {
-      elements.dashboardSuppliersTableBody.addEventListener("click", onDashboardSuppliersTableClick);
-    }
-    if (elements.dashboardTripsTableBody) {
-      elements.dashboardTripsTableBody.addEventListener("click", onDashboardTripsTableClick);
-    }
     if (elements.supplierInvoicesTableBody) {
       elements.supplierInvoicesTableBody.addEventListener("click", function (event) {
         var row = event.target && event.target.closest("[data-supplier-activity-invoice-id]");
@@ -1206,7 +1182,6 @@ var ns = global.AccountingManagerApp;
     bindInvoicesLoadFilterControl(elements.invoiceFilterDateTo, "dateTo");
     elements.invoiceFilterDatePreset.addEventListener("change", function () {
       applyDateFilterPreset("invoices", elements.invoiceFilterDatePreset.value);
-      scheduleRemoteViewReload("invoices");
     });
     bindInvoicesLoadFilterControl(elements.invoiceFilterType, "invoiceType");
     bindInvoicesLoadFilterControl(elements.invoiceFilterSupplierCode, "supplierCode");
@@ -1219,6 +1194,23 @@ var ns = global.AccountingManagerApp;
     });
     elements.invoiceFilterStatusMenu.addEventListener("click", function (event) {
       onStatusFilterMenuActionClick("invoices", event);
+    });
+    elements.invoiceViewButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        var view = button.getAttribute("data-invoice-view") || "open";
+        state.views.invoices.view = view;
+        elements.invoiceViewButtons.forEach(function (item) {
+          var isActive = item === button;
+          item.classList.toggle("is-active", isActive);
+          item.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+        state.views.invoices.page = 1;
+        refreshInvoicesTabData({
+          loadingLabel: "Loading invoices...",
+          errorMessage: "Could not load invoices.",
+          loadedFlag: true
+        });
+      });
     });
 
     bindPaymentsLoadFilterControl(elements.paymentFilterDateFrom, "dateFrom");
@@ -1266,6 +1258,18 @@ var ns = global.AccountingManagerApp;
     });
     if (elements.invoicesLoad) {
       elements.invoicesLoad.addEventListener("click", loadInvoicesTabData);
+    }
+    if (elements.invoicesApplyFilters) {
+      elements.invoicesApplyFilters.addEventListener("click", loadInvoicesTabData);
+    }
+    if (elements.invoicesRefresh) {
+      elements.invoicesRefresh.addEventListener("click", function () {
+        refreshInvoicesTabData({
+          loadingLabel: "Refreshing invoices...",
+          errorMessage: "Could not refresh invoices.",
+          loadedFlag: true
+        });
+      });
     }
 
     elements.invoiceCreatePayment.addEventListener("click", function () {
@@ -1659,7 +1663,6 @@ var ns = global.AccountingManagerApp;
       }
       state.views.invoices.page = 1;
       renderAll();
-      scheduleRemoteViewReload("invoices");
     }
 
     element.addEventListener("input", updateValue);
@@ -1786,8 +1789,14 @@ var ns = global.AccountingManagerApp;
   }
 
   function getStatusFilterOptionsForView(viewKey, records) {
+    if (viewKey === "invoices") {
+      return INVOICE_STATUS_FILTER_OPTIONS.map(function (value) {
+        return { value: value, label: value };
+      });
+    }
+
     return buildCombinedStatusOptions(
-      viewKey === "payments" ? PAYMENT_STATUS_FILTER_OPTIONS : INVOICE_STATUS_FILTER_OPTIONS,
+      PAYMENT_STATUS_FILTER_OPTIONS,
       records || [],
       "Status"
     );
@@ -1893,7 +1902,9 @@ var ns = global.AccountingManagerApp;
     state.views[viewKey].filters.statusValues = getNormalizedStatusFilterValues(nextValues);
     state.views[viewKey].page = 1;
     renderAll();
-    scheduleRemoteViewReload(viewKey);
+    if (viewKey !== "invoices") {
+      scheduleRemoteViewReload(viewKey);
+    }
   }
 
   function onStatusFilterMenuActionClick(viewKey, event) {
@@ -1916,7 +1927,9 @@ var ns = global.AccountingManagerApp;
 
     state.views[viewKey].page = 1;
     renderAll();
-    scheduleRemoteViewReload(viewKey);
+    if (viewKey !== "invoices") {
+      scheduleRemoteViewReload(viewKey);
+    }
   }
 
   function onDocumentClickCloseStatusFilterDropdown(event) {
@@ -3117,20 +3130,6 @@ var ns = global.AccountingManagerApp;
     return record;
   }
 
-  function isPendingDashboardSettlement(settlement) {
-    var status = String(settlement && settlement.Admin_Status || "").toLowerCase();
-    var remainingToPay;
-    var remainingToInvoice;
-
-    if (status.indexOf("paid") !== -1 || status.indexOf("cancel") !== -1 || status.indexOf("no services") !== -1) {
-      return false;
-    }
-
-    remainingToPay = Math.max(0, getInvoiceCreateSettlementUnpaidInvoicedAmount(settlement));
-    remainingToInvoice = Math.max(0, getInvoiceCreateSettlementRemainingToInvoice(settlement));
-    return remainingToPay > 0 || remainingToInvoice > 0;
-  }
-
   function syncSettlementStateFromRebuildDetail(detail) {
     var settlementId = String(detail && detail.settlement_id || "");
     var updatedSettlementRecord;
@@ -3151,11 +3150,6 @@ var ns = global.AccountingManagerApp;
 
     if (state.records && Array.isArray(state.records.settlements)) {
       state.records.settlements = upsertRecordById(state.records.settlements, updatedSettlementRecord);
-    }
-
-    if (state.dashboard && Array.isArray(state.dashboard.pendingSettlements)) {
-      state.dashboard.pendingSettlements = upsertRecordById(state.dashboard.pendingSettlements, updatedSettlementRecord)
-        .filter(isPendingDashboardSettlement);
     }
 
     syncInvoiceCreateSettlementRecord(updatedSettlementRecord);
@@ -3752,95 +3746,6 @@ var ns = global.AccountingManagerApp;
     return "";
   }
 
-  function extractLoggedInUserId(response) {
-    var candidates = [];
-    var index;
-    var candidate;
-
-    if (response) {
-      candidates.push(response);
-    }
-    if (response && Array.isArray(response.users)) {
-      candidates = candidates.concat(response.users);
-    }
-    if (response && Array.isArray(response.data)) {
-      candidates = candidates.concat(response.data);
-    }
-    if (response && response.data && !Array.isArray(response.data)) {
-      candidates.push(response.data);
-    }
-    if (response && response.result) {
-      candidates.push(response.result);
-    }
-    if (response && response.current_user) {
-      candidates.push(response.current_user);
-    }
-    if (response && response.user) {
-      candidates.push(response.user);
-    }
-
-    for (index = 0; index < candidates.length; index += 1) {
-      candidate = candidates[index] || {};
-      if (candidate.id || candidate.user_id || candidate.userId || candidate.ID) {
-        return String(candidate.id || candidate.user_id || candidate.userId || candidate.ID).trim();
-      }
-    }
-
-    return "";
-  }
-
-  // Mirrors the reader used in Reservations Manager.  Zoho has returned the
-  // current user in different nested response shapes across widget contexts.
-  function extractLoggedInUserInfo(response) {
-    var queue = [response];
-    var candidates = [];
-    var seenObjects = [];
-    var current;
-    var index;
-    var candidate;
-    var userId;
-    var userName;
-
-    while (queue.length) {
-      current = queue.shift();
-      if (!current || typeof current !== "object") {
-        continue;
-      }
-      if (seenObjects.indexOf(current) !== -1) {
-        continue;
-      }
-      seenObjects.push(current);
-
-      if (Array.isArray(current)) {
-        Array.prototype.push.apply(queue, current);
-        continue;
-      }
-
-      candidates.push(current);
-      ["user", "users", "data", "currentUser", "current_user", "currentuser", "user_details", "details"].forEach(function (key) {
-        if (current[key]) {
-          queue.push(current[key]);
-        }
-      });
-    }
-
-    for (index = 0; index < candidates.length; index += 1) {
-      candidate = candidates[index];
-      userId = candidate.id || candidate.user_id || candidate.zuid || "";
-      userName = candidate.full_name || candidate.name || candidate.display_name || candidate.email || "";
-
-      if (userId || userName) {
-        return {
-          id: String(userId || "").trim(),
-          name: String(userName || "").trim(),
-          email: String(candidate.email || candidate.user_email || "").trim()
-        };
-      }
-    }
-
-    return null;
-  }
-
   async function getCurrentUserEmail() {
     var readers = [
       function () {
@@ -3878,163 +3783,30 @@ var ns = global.AccountingManagerApp;
     throw new Error("Could not determine the email of the user starting the Ezus sync.");
   }
 
-  async function loadWelcomeMessage() {
-    var currentUserReaders;
-    var currentUserResponse;
-    var email;
-    var userId;
-    var userName;
-    var currentUser;
-    var relationships;
-    var match;
-    var readerIndex;
-    var currentUserReaderLabels;
-    var relationshipPage;
-    var relationshipPageIndex;
+  var zohoPageLoadReceived = false;
+  var zohoSdkInitialized = false;
+  var initialInvoicesLoadPromise = null;
 
-    debugWarn("Welcome lookup invoked", {
-      currentTab: state.currentTab,
-      alreadyLoaded: Boolean(state.welcome.loaded),
-      zohoCrmAvailable: Boolean(global.ZOHO && ZOHO.CRM),
-      userRelationshipsModule: MODULES.userRelationships
-    });
-
-    if (state.welcome.loaded) {
-      debugWarn("Welcome lookup skipped because it was already loaded", {
-        alias: state.welcome.alias || ""
-      });
-      return;
+  function loadInitialOpenInvoices() {
+    if (initialInvoicesLoadPromise || !zohoSdkInitialized || !zohoPageLoadReceived) {
+      return initialInvoicesLoadPromise;
     }
 
-    state.welcome.loaded = true;
-    state.welcome.isLoading = true;
-
-    try {
-      if (!(global.ZOHO && ZOHO.CRM)) {
-        debugWarn("Welcome alias was not loaded: ZOHO.CRM is unavailable");
-        return;
-      }
-
-      currentUserReaders = [
-        function () {
-          return ZOHO.CRM.CONFIG && typeof ZOHO.CRM.CONFIG.getCurrentUser === "function"
-            ? ZOHO.CRM.CONFIG.getCurrentUser()
-            : null;
-        },
-        function () { return global.$Crm && global.$Crm.user ? global.$Crm.user : null; },
-        function () {
-          return ZOHO.CRM.API && typeof ZOHO.CRM.API.getCurrentUser === "function"
-            ? ZOHO.CRM.API.getCurrentUser()
-            : null;
-        }
-      ];
-      currentUserReaderLabels = [
-        "ZOHO.CRM.CONFIG.getCurrentUser",
-        "$Crm.user",
-        "ZOHO.CRM.API.getCurrentUser"
-      ];
-
-      for (readerIndex = 0; readerIndex < currentUserReaders.length && (!email || !userId); readerIndex += 1) {
-        try {
-          currentUserResponse = await Promise.resolve(currentUserReaders[readerIndex]());
-          currentUser = extractLoggedInUserInfo(currentUserResponse);
-          email = email || extractLoggedInUserEmail(currentUserResponse);
-          userId = userId || extractLoggedInUserId(currentUserResponse);
-          userName = userName || (currentUser && currentUser.name) || "";
-          email = email || (currentUser && currentUser.email) || "";
-          userId = userId || (currentUser && currentUser.id) || "";
-          debugLog("Welcome current-user reader", {
-            source: currentUserReaderLabels[readerIndex],
-            resolvedEmail: email || "",
-            resolvedUserId: userId || "",
-            resolvedUserName: userName || "",
-            responseKeys: currentUserResponse && typeof currentUserResponse === "object"
-              ? Object.keys(currentUserResponse)
-              : [],
-            response: currentUserResponse || null
-          });
-        } catch (readerError) {
-          debugWarn("Welcome current-user reader failed", {
-            source: currentUserReaderLabels[readerIndex],
-            error: readerError && readerError.message ? readerError.message : String(readerError)
-          });
-        }
-      }
-
-      if (!email && !userId && !userName) {
-        debugWarn("Welcome alias was not loaded: no current-user identity was returned by Zoho", {
-          readersTried: currentUserReaderLabels
-        });
-        state.welcome.loaded = false;
-        state.welcome.isLoading = false;
-        return;
-      }
-
-      // User_Relationships is loaded as a collection, as in Reservations
-      // Manager. This avoids criteria-search differences in CRM widgets.
-      relationships = [];
-      for (relationshipPageIndex = 1; relationshipPageIndex <= 10; relationshipPageIndex += 1) {
-        try {
-          relationshipPage = await crm.getAllRecords(MODULES.userRelationships, relationshipPageIndex, 100);
-          relationships = relationships.concat(relationshipPage || []);
-          if (!relationshipPage || relationshipPage.length < 100) {
-            break;
-          }
-        } catch (relationshipLoadError) {
-          debugWarn("Welcome User_Relationships collection load failed", {
-            page: relationshipPageIndex,
-            error: relationshipLoadError && relationshipLoadError.message ? relationshipLoadError.message : String(relationshipLoadError)
-          });
-          break;
-        }
-      }
-      debugLog("Welcome User_Relationships response", {
-        count: relationships.length,
-        records: relationships.map(function (record) {
-          return {
-            id: record && record.id || "",
-            Email: record && record.Email || "",
-            User_ID: record && record.User_ID || "",
-            Status: record && record.Status || "",
-            User_Alias: record && record.User_Alias || ""
-          };
-        })
+    // PageLoad marks the point at which Zoho has finished creating the
+    // widget context. Loading before it can complete without returning CRM
+    // records, while clicking Open later works as expected.
+    initialInvoicesLoadPromise = (async function () {
+      state.currentTab = "invoices";
+      state.views.invoices.view = "open";
+      state.views.invoices.page = 1;
+      await refreshInvoicesTabData({
+        loadingLabel: "Loading invoices...",
+        errorMessage: "Could not load invoices.",
+        loadedFlag: true
       });
-      match = relationships.filter(function (record) {
-        var recordEmail = String(record && record.Email || "").trim().toLowerCase();
-        var recordUserId = String(record && record.User_ID || "").trim();
-        var recordAlias = String(record && record.User_Alias || "").trim().toLowerCase();
+    }());
 
-        return (email && recordEmail === email.toLowerCase()) ||
-          (userId && recordUserId === userId) ||
-          (userName && recordAlias === userName.toLowerCase());
-      })[0] || null;
-
-      state.welcome.alias = match && match.User_Alias
-        ? String(match.User_Alias).trim()
-        : String(userName || "").trim();
-      state.welcome.isLoading = false;
-      // The initial dashboard can render before the asynchronous user lookup
-      // completes. Update the heading immediately as well as keeping state
-      // for the normal renderer.
-      if (elements.welcomeHeading) {
-        elements.welcomeHeading.textContent = state.welcome.alias
-          ? "Hello, " + state.welcome.alias + "!"
-          : "Hello!";
-      }
-      debugLog("Welcome alias resolved", {
-        email: email,
-        userId: userId || "",
-        userName: userName || "",
-        matchedRecordId: match && match.id || "",
-        alias: state.welcome.alias || "",
-        reason: match ? (state.welcome.alias ? "resolved" : "User_Alias is empty") : "no exact User_ID, Email or User_Alias match"
-      });
-    } catch (error) {
-      state.welcome.loaded = false;
-      state.welcome.isLoading = false;
-      debugError("Could not load the welcome alias", error);
-    }
+    return initialInvoicesLoadPromise;
   }
 
   async function bootstrap() {
@@ -4047,9 +3819,14 @@ var ns = global.AccountingManagerApp;
     ZOHO.embeddedApp.on("PageLoad", function (data) {
       var supplierIdFromPayload;
 
+      zohoPageLoadReceived = true;
       state.selectedIds = helpers.readSelectedIds(data);
       state.clientPayload = helpers.getClientPayload(data);
       supplierIdFromPayload = helpers.getSupplierIdFromPayload(state.clientPayload);
+
+      // Keep the context assignment ahead of the initial query.  The loader
+      // itself is guarded until both PageLoad and embeddedApp.init have run.
+      loadInitialOpenInvoices();
 
       if (supplierIdFromPayload) {
         loadSupplierWorkspace(supplierIdFromPayload);
@@ -4063,10 +3840,12 @@ var ns = global.AccountingManagerApp;
 
     try {
       await ZOHO.embeddedApp.init();
+      zohoSdkInitialized = true;
 
-      // Resolve the user immediately after the SDK is ready. This mirrors
-      // Reservations Manager and does not depend on the active tab lifecycle.
-      await loadWelcomeMessage();
+      // Supplier suggestions are unrelated to the invoice query.  Starting
+      // this here prevents a slow supplier bootstrap from leaving the Open
+      // view selected but empty.
+      loadInitialOpenInvoices();
 
       if (ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Resize) {
         await ZOHO.CRM.UI.Resize({
@@ -4076,15 +3855,10 @@ var ns = global.AccountingManagerApp;
       }
 
       await bootstrapRecentSuppliers();
-      await ensureTabDataLoaded(state.currentTab);
       state.zohoReady = true;
       renderer.setMode("Connected to CRM");
       if (!state.supplier) {
-        renderer.showNotice(
-          state.currentTab === "dashboard"
-            ? "Welcome loaded."
-            : "Supplier list loaded. Search by name, connection reference or Ezus reference."
-        );
+        renderer.showNotice("Supplier list loaded. Search by name, connection reference or Ezus reference.");
       }
     } catch (error) {
       debugError("bootstrap failed", error);
@@ -4177,6 +3951,33 @@ var ns = global.AccountingManagerApp;
     renderAll();
     await ensureTabDataLoaded(state.currentTab);
     renderAll();
+  }
+
+  function setInvoiceSummaryOpen(isOpen) {
+    if (!elements.invoicesWorkspace || !elements.invoiceSummarySidebar || !elements.invoiceSummaryOpen) {
+      return;
+    }
+
+    if (!isOpen && global.innerWidth <= 980) {
+      return;
+    }
+
+    elements.invoicesWorkspace.classList.toggle("is-summary-collapsed", !isOpen);
+    elements.invoiceSummarySidebar.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    elements.invoiceSummaryOpen.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if ("inert" in elements.invoiceSummarySidebar) {
+      elements.invoiceSummarySidebar.inert = !isOpen;
+    }
+
+    if (isOpen && elements.invoiceSummaryClose) {
+      global.setTimeout(function () {
+        elements.invoiceSummaryClose.focus();
+      }, 0);
+    } else if (!isOpen) {
+      global.setTimeout(function () {
+        elements.invoiceSummaryOpen.focus();
+      }, 420);
+    }
   }
 
   async function openNativeCreateForModule(moduleApi, label, onRefresh) {
@@ -4795,9 +4596,6 @@ var ns = global.AccountingManagerApp;
   async function refreshInvoicesAfterInvoiceDelete(deletedInvoice) {
     var shouldReloadInvoicesView = state.currentTab === "invoices" && state.views.invoices.hasLoaded;
 
-    state.dashboard.loaded = false;
-    state.dashboard.pendingInvoices = [];
-    state.dashboard.pendingSettlements = [];
     state.loaded.settlements = false;
     state.loaded.invoices = false;
     state.loaded.payAllocations = false;
@@ -6068,7 +5866,6 @@ var ns = global.AccountingManagerApp;
   async function ensureTabDataLoaded(tabName) {
     var activePaymentsSection = normalizePaymentsSection(state.views.payments.section);
     var labelByTab = {
-      dashboard: "Loading welcome...",
       payments: "Loading payments...",
       invoices: "Loading invoices...",
       accounting: "Loading accounting data..."
@@ -6094,14 +5891,8 @@ var ns = global.AccountingManagerApp;
     }
 
     try {
-      if (tabName === "dashboard") {
-        await loadWelcomeMessage();
-        renderAll();
-      }
-
       if (tabName === "invoices") {
-        await ensureInvoicesLoaded();
-        state.views.invoices.hasLoaded = true;
+        await loadInvoicesTabData();
       }
 
       if (tabName === "payments" && activePaymentsSection === "accounts") {
@@ -6183,21 +5974,19 @@ var ns = global.AccountingManagerApp;
     invoicesLoadPromise = (async function () {
       var appliedFilters = cloneFilterState(state.views.invoices.appliedFilters || state.views.invoices.filters);
       var records;
+      var whereClause;
+      var orderByClause;
 
-      if (!hasAnyLoadFilterValue(appliedFilters)) {
-        state.records.invoices = [];
-        state.views.invoices.hasMore = false;
-        state.loaded.invoices = true;
-        renderAll();
-        return;
-      }
+      appliedFilters.invoiceView = state.views.invoices.view || "open";
+      whereClause = await buildInvoiceRemoteWhereClause(appliedFilters);
+      orderByClause = await buildInvoiceRemoteOrderByClause(state.views.invoices.sort || {
+        key: "date",
+        direction: "desc"
+      });
 
       records = await loadModuleRecords(MODULES.invoices, INVOICE_COQL_FIELDS, {
-        whereClause: await buildInvoiceRemoteWhereClause(appliedFilters),
-        orderByClause: await buildInvoiceRemoteOrderByClause(state.views.invoices.sort || {
-          key: "date",
-          direction: "desc"
-        })
+        whereClause: whereClause,
+        orderByClause: orderByClause
       });
       state.records.invoices = sortRecordsByDateDesc(records, "Invoice_Date");
       state.views.invoices.hasMore = false;
@@ -7469,7 +7258,6 @@ var ns = global.AccountingManagerApp;
   }
 
   function renderAll() {
-    var dashboardView = buildDashboardView();
     var bookingsView = buildBookingsView();
     var invoicesView = buildInvoicesView();
     var paymentsView = buildPaymentsView();
@@ -7480,8 +7268,15 @@ var ns = global.AccountingManagerApp;
     var accountingAccountsView = buildAccountingAccountsView();
     var accountingRulesView = buildAccountingRulesView();
 
+    if (elements.invoiceViewButtons) {
+      elements.invoiceViewButtons.forEach(function (button) {
+        var isActive = button.getAttribute("data-invoice-view") === (state.views.invoices.view || "open");
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
+
     renderer.renderTabs();
-    renderer.renderDashboard(dashboardView);
     renderer.renderSupplierContext();
     renderer.renderSupplierRelatedActivity(state.supplierInvoices, state.supplierPayments, {
       getInvoiceBooking: getInvoiceBookingDisplay,

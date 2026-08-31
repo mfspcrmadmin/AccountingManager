@@ -233,6 +233,13 @@
       var supplierCode = String(filters && filters.supplierCode || "").trim();
       var invoiceType = String(filters && filters.invoiceType || "").trim();
       var selectedStatuses = getNormalizedStatusFilterValues(filters && filters.statusValues);
+      var invoiceView = String(filters && filters.invoiceView || "open").trim().toLowerCase();
+      var viewStatuses = invoiceView === "closed"
+        ? ["Paid", "Cancelled", "Rejected"]
+        : invoiceView === "open"
+        ? ["-None-", "Received", "Partially Paid"]
+        : [];
+      var statusesToLoad;
       var statusFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Status"], "Status");
       var dateFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Date", "Invoice Date"], "Invoice_Date");
       var supplierCodeFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Supplier_Code", "Supplier Code", "TP_Reference", "Connection_Reference", "Supplier_Connection_Reference", "Supplier Connection Reference"], "Supplier_Code");
@@ -240,9 +247,19 @@
       var invoiceTypeFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Type", "Invoice Type"], "Invoice_Type");
 
       if (settings.pendingOnly) {
-        conditions.push(buildCoqlOrEqualsClause(statusFieldApi, ["Received", "Approved", "Partially Paid"]));
-      } else if (selectedStatuses.length && !hasAllStatusFilterValuesSelected(selectedStatuses, INVOICE_STATUS_FILTER_OPTIONS)) {
-        conditions.push(buildCoqlOrEqualsClause(statusFieldApi, selectedStatuses));
+        conditions.push(buildCoqlOrEqualsClause(statusFieldApi, ["Received", "Partially Paid"]));
+      } else {
+        statusesToLoad = selectedStatuses.length && !hasAllStatusFilterValuesSelected(selectedStatuses, INVOICE_STATUS_FILTER_OPTIONS)
+          ? selectedStatuses.filter(function (status) {
+            return invoiceView === "all" || viewStatuses.indexOf(status) !== -1;
+          })
+          : viewStatuses;
+
+        if (selectedStatuses.length && viewStatuses.length && !statusesToLoad.length) {
+          conditions.push("id = '__none__'");
+        } else if (statusesToLoad.length) {
+          conditions.push(buildCoqlOrEqualsClause(statusFieldApi, statusesToLoad));
+        }
       }
 
       if (filters && filters.dateFrom) {

@@ -818,3 +818,39 @@
   border-color: rgba(209, 136, 87, 0.22);
   background: #fdf9f5;
 }
+/* Match the compact Card Purchases dropdown trigger across the Payments workspace. */
+#tab-payments select:not(.status-select) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  min-height: 38px;
+  padding-right: 42px !important;
+  border-radius: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), linear-gradient(180deg, #fff 0%, #fbfdff 100%) !important;
+  background-repeat: no-repeat, no-repeat !important;
+  background-position: right 15px center, center !important;
+  background-size: 12px 8px, 100% 100% !important;
+  cursor: pointer;
+  transition: border-color 90ms ease, box-shadow 90ms ease, background-color 90ms ease;
+}
+
+#tab-payments select:not(.status-select):hover,
+#tab-payments select:not(.status-select):focus-visible {
+  border-color: rgba(209, 136, 87, .42);
+  outline: 0;
+}
+
+#tab-payments .bookings-stage-filter-field { position: relative; }
+#tab-payments .bookings-stage-toggle { position: relative; width: 100%; min-height: 38px; padding: 9px 42px 9px 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, #fff 0%, #fbfdff 100%); color: var(--text); cursor: pointer; font: inherit; font-size: 13px; text-align: left; text-overflow: ellipsis; white-space: nowrap; transition: border-color 90ms ease, background-color 90ms ease, transform 70ms ease; }
+#tab-payments .bookings-stage-toggle::after { position: absolute; top: 50%; right: 15px; width: 0; height: 0; border-top: 6px solid currentColor; border-right: 5px solid transparent; border-left: 5px solid transparent; color: #667085; content: ""; transform: translateY(-35%); transition: transform 90ms ease; }
+#tab-payments .bookings-stage-toggle[aria-expanded="true"]::after { transform: translateY(-60%) rotate(180deg); }
+#tab-payments .bookings-stage-toggle:hover, #tab-payments .bookings-stage-toggle:focus-visible { border-color: rgba(209, 136, 87, .42); outline: 0; }
+#tab-payments .bookings-stage-toggle:active { transform: scale(.985); }
+#tab-payments .bookings-stage-menu { z-index: 40; width: max-content; min-width: 250px; max-width: min(330px, calc(100vw - 32px)); max-height: 330px; padding: 6px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 16px 30px rgba(16, 24, 40, .16); }
+#tab-payments .bookings-stage-option { gap: 9px; padding: 8px 9px; border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 600; transition: background-color 80ms ease, transform 60ms ease; }
+#tab-payments .bookings-stage-option:hover { background: #fff8ef; }
+#tab-payments .bookings-stage-option:active { transform: scale(.99); }
+#tab-payments .bookings-stage-option input { width: 15px; height: 15px; min-height: 0; accent-color: var(--accent-strong); }
+#tab-payments .status-filter-menu-actions { gap: 8px; padding: 3px 3px 8px; border-bottom-color: #eaecf0; }
+#tab-payments .status-filter-menu-action { padding: 6px 8px; border-radius: 7px; color: var(--accent-strong); font-size: 11px; font-weight: 700; }
+#tab-payments .status-filter-menu-action:hover { background: #fff8ef; }

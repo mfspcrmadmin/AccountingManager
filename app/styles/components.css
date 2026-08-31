@@ -176,15 +176,6 @@ body:has(.operations-file-preview) {
   overflow: hidden;
 }
 
-/* Booking quick actions is the only dialog without its own backdrop. */
-body:has(#booking-actions-popup:not([hidden]))::before {
-  position: fixed;
-  z-index: 999;
-  inset: 0;
-  content: "";
-  background: rgba(16, 24, 40, 0.18);
-}
-
 .booking-actions-toggle {
   min-height: 42px;
   padding: 10px 16px;
@@ -5691,17 +5682,6 @@ textarea:hover,
   box-shadow: 0 8px 18px rgba(209, 136, 87, 0.18);
 }
 
-.welcome-panel {
-  display: grid;
-  align-content: center;
-  justify-items: start;
-  min-height: min(430px, calc(100vh - 180px));
-  padding: clamp(28px, 6vw, 72px);
-  background:
-    radial-gradient(circle at top right, rgba(209, 136, 87, 0.16), transparent 32%),
-    linear-gradient(180deg, #fdf9f5 0%, #ffffff 100%);
-}
-
 .welcome-eyebrow {
   margin: 0 0 8px;
   color: var(--accent-strong);
@@ -5709,21 +5689,6 @@ textarea:hover,
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.welcome-panel h1 {
-  margin: 0;
-  color: #102a2d;
-  font-size: clamp(30px, 4vw, 46px);
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-}
-
-.welcome-copy {
-  max-width: 44ch;
-  margin: 12px 0 0;
-  color: var(--muted);
-  font-size: 16px;
 }
 
 @media (max-width: 720px) {
@@ -5741,10 +5706,6 @@ textarea:hover,
     margin-left: 0;
   }
 
-  .welcome-panel {
-    min-height: 320px;
-    padding: 28px;
-  }
 }
 
 /* Suppliers workspace: compact, task-oriented layout shared with Reservations Manager. */

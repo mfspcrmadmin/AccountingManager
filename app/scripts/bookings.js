@@ -181,13 +181,13 @@
       }
 
       setBookingActionsPopupOpen(
-        !elements.bookingActionsPopup ||
-        elements.bookingActionsPopup.hidden
+        !elements.bookingActionsShortcut ||
+        elements.bookingActionsShortcut.hidden
       );
     }
 
     function onDocumentClickCloseBookingActionsPopup(event) {
-      if (!elements.bookingActionsPopup || elements.bookingActionsPopup.hidden) {
+      if (!elements.bookingActionsShortcut || elements.bookingActionsShortcut.hidden) {
         return;
       }
 
@@ -211,11 +211,23 @@
     }
 
     function setBookingActionsPopupOpen(isOpen) {
-      if (!elements.bookingActionsPopup || !elements.bookingActionsToggle) {
+      if (!elements.bookingActionsShortcut || !elements.bookingActionsPopup || !elements.bookingActionsToggle) {
         return;
       }
 
-      elements.bookingActionsPopup.hidden = !isOpen;
+      if (isOpen) {
+        elements.bookingActionsShortcut.hidden = false;
+        global.requestAnimationFrame(function () {
+          elements.bookingActionsShortcut.classList.add("is-open");
+        });
+      } else {
+        elements.bookingActionsShortcut.classList.remove("is-open");
+        global.setTimeout(function () {
+          if (!elements.bookingActionsShortcut.classList.contains("is-open")) {
+            elements.bookingActionsShortcut.hidden = true;
+          }
+        }, 240);
+      }
       elements.bookingActionsToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
 
       if (isOpen && elements.bookingActionsMfsp && typeof elements.bookingActionsMfsp.focus === "function") {

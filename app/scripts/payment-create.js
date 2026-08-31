@@ -1564,9 +1564,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var shouldReloadInvoicesView = state.currentTab === "invoices" && state.views.invoices.hasLoaded;
       var shouldReloadPaymentsView = state.currentTab === "payments" && state.views.payments.hasLoaded;
 
-      state.dashboard.loaded = false;
-      state.dashboard.pendingInvoices = [];
-      state.dashboard.pendingSettlements = [];
       state.loaded.settlements = false;
       state.loaded.invoices = false;
       state.loaded.payments = false;

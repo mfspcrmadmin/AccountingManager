@@ -877,10 +877,20 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var appliedFilters = cloneFilterState(state.views.invoices.appliedFilters || state.views.invoices.filters);
       var hasCurrentFilters = hasAnyLoadFilterValue(filters);
       var sort = state.views.invoices.sort || { key: "date", direction: "desc" };
+      var invoiceView = state.views.invoices.view || "open";
       var selectedStatuses = getNormalizedStatusFilterValues(appliedFilters.statusValues);
       var selectedInvoiceType = String(appliedFilters.invoiceType || "").trim();
       var filteredRecords = records.filter(function (invoice) {
         var invoiceDate = helpers.toIsoDate(invoice.Invoice_Date);
+        var status = String(invoice.Status || "").trim().toLowerCase();
+
+        if (invoiceView === "closed" && status !== "paid" && status !== "cancelled" && status !== "rejected") {
+          return false;
+        }
+
+        if (invoiceView === "open" && (status === "paid" || status === "cancelled" || status === "rejected")) {
+          return false;
+        }
 
         if (selectedStatuses.length && selectedStatuses.indexOf(String(invoice.Status || "")) === -1) {
           return false;
@@ -1078,7 +1088,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         page: page,
         hasMore: hasMore,
         pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " invoice" : " invoices"),
-        statusOptions: buildCombinedStatusOptions(INVOICE_STATUS_FILTER_OPTIONS, records, "Status"),
+        statusOptions: INVOICE_STATUS_FILTER_OPTIONS.map(function (value) {
+          return { value: value, label: value };
+        }),
         emptyMessage: state.currentTab === "invoices" && state.isLoading
           ? "Loading invoices..."
           : state.views.invoices.hasLoaded || !hasCurrentFilters

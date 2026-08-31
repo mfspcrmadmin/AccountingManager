@@ -165,7 +165,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createInitialState = function () {
     return {
-      currentTab: "dashboard",
+      currentTab: "invoices",
       accountingTab: "entries",
       supplier: null,
       supplierId: "",
@@ -317,16 +317,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         action: "",
         lastEntryId: ""
       },
-      dashboard: {
-        pendingInvoices: [],
-        pendingSettlements: [],
-        loaded: false
-      },
-      welcome: {
-        alias: "",
-        loaded: false,
-        isLoading: true
-      },
       recentSuppliers: [],
       supplierIndex: {},
       selectedIds: [],
@@ -408,6 +398,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           hasMore: false,
           hasLoaded: false,
           showAttachments: false,
+          view: "open",
           statusDropdownOpen: false,
           detailTab: "basic",
           sort: {
@@ -418,7 +409,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             datePreset: "specific",
             dateFrom: "",
             dateTo: "",
-            statusValues: ["Received"],
+            statusValues: ["-None-", "Received", "Partially Paid", "Paid", "Cancelled", "Rejected"],
             invoiceType: "",
             supplierCode: "",
             mfsp: ""
@@ -427,7 +418,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             datePreset: "specific",
             dateFrom: "",
             dateTo: "",
-            statusValues: ["Received"],
+            statusValues: ["-None-", "Received", "Partially Paid", "Paid", "Cancelled", "Rejected"],
             invoiceType: "",
             supplierCode: "",
             mfsp: ""
