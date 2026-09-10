@@ -632,6 +632,12 @@
       }
 
       elements.bookingClosurePopup.hidden = !closure.isOpen;
+      if (elements.bookingClosureAccountingRep) {
+        elements.bookingClosureAccountingRep.hidden = !closure.isOpen || closure.isLoading || !booking;
+        elements.bookingClosureAccountingRep.textContent = booking
+          ? "Accounting rep: " + (getBookingBrowserValue(booking, FIELD_CANDIDATES.booking.accountingRep) || "Unassigned")
+          : "";
+      }
       if (!closure.isOpen) {
         if (elements.bookingClosureStatus) {
           elements.bookingClosureStatus.hidden = true;
@@ -675,7 +681,7 @@
 
       summary = [
         ["Sales Price now", helpers.formatCurrency(currentSalesPrice)],
-        ["Balance Due Amount", helpers.formatCurrency(getClosureNumber(booking, "Balance_Amount"))],
+        ["Balance Due Amount", helpers.formatCurrency(getClosureNumber(booking, "Balance_Amount")), getClosureNumber(booking, "Balance_Amount") === 0 ? "is-zero-balance" : "is-outstanding-balance"],
         ["Quoted cost", helpers.formatCurrency(quotedCost)],
         ["Invoiced cost", helpers.formatCurrency(invoicedCost)],
         ["Paid", helpers.formatCurrency(paidCost)],
@@ -695,6 +701,21 @@
           closureSort.direction
         );
       });
+      var closureColumns = [{"key": "actions", "label": "Actions"}, {"key": "reviewToggle", "label": "Review toggle"}, {"key": "supplier", "label": "Supplier / settlement"}, {"key": "review", "label": "Closure review"}, {"key": "quoted", "label": "Quoted"}, {"key": "invoiced", "label": "Invoiced"}, {"key": "paid", "label": "Paid"}, {"key": "variance", "label": "Variance"}, {"key": "status", "label": "Invoice & payment status"}, {"key": "finalInvoiceCheck", "label": "Final invoice check"}];
+      ns.tableColumns.configure("tripClosure", closureColumns, renderBookingClosure);
+      var visibleClosureColumns = ns.tableColumns.visibleOrder("tripClosure");
+      var closureHeaders = {
+        actions: '<th aria-label="Settlement actions"></th>',
+        reviewToggle: '<th class="booking-closure-review-cell" aria-label="Review"></th>',
+        supplier: getClosureSortHeader("Supplier / settlement", "supplier", closureSort),
+        review: getClosureSortHeader("Closure review", "review", closureSort),
+        quoted: getClosureSortHeader("Quoted", "quoted", closureSort),
+        invoiced: getClosureSortHeader("Invoiced", "invoiced", closureSort),
+        paid: getClosureSortHeader("Paid", "paid", closureSort),
+        variance: getClosureSortHeader("Variance", "variance", closureSort),
+        status: getClosureSortHeader("Invoice & payment status", "status", closureSort),
+        finalInvoiceCheck: '<th>Final invoice check</th>',
+      };
       rows = settlements.map(function (settlement) {
         var settlementId = String(settlement.id || "");
         var relatedInvoices = invoices.filter(function (invoice) {
@@ -724,36 +745,51 @@
           : tone === "is-ok"
           ? "Matched and paid"
           : "Payment pending";
+        var nonFinalInvoiceCount = relatedInvoices.filter(function (invoice) {
+          return String(helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.invoiceType) || "").trim().toLowerCase() !== "final invoice";
+        }).length;
         var settlementDetail = isAgentCommission
           ? "Commission"
           : String(settlement.Service_Count || 0) + " services";
 
-        return [
-          '<tr class="booking-closure-row ' + tone + (isReviewed ? " is-reviewed" : "") + (isAgentCommission ? " booking-closure-agent-commission" : "") + '" data-booking-closure-settlement-id="' + helpers.escapeHtml(settlementId) + '">',
-          "<td><strong>" + helpers.escapeHtml(settlement.Supplier_Name || helpers.getLookupName(settlement.Supplier) || settlement.Name || "-") + "</strong><br><span class=\"table-inline-secondary\">" + helpers.escapeHtml(settlement.Name || "") + " · " + helpers.escapeHtml(settlementDetail) + "</span></td>",
-          '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(quoted)) + "</td>",
-          '<td class="numeric-cell">' + helpers.escapeHtml(hasInvoice ? helpers.formatCurrency(invoiced) : "-") + "</td>",
-          '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(paid)) + "</td>",
-          '<td class="numeric-cell booking-closure-variance ' + varianceTone + '">' + helpers.escapeHtml(hasInvoice ? helpers.formatCurrency(variance) : "-") + "</td>",
-          "<td>" + helpers.escapeHtml(status) + "</td>",
-          '<td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(closureReviewStatus)) + (isReviewed ? " booking-closure-review-pill" : "") + '">' + helpers.escapeHtml(closureReviewStatus) + "</span></td>",
-          '<td><details class="booking-closure-actions"><summary aria-label="Settlement actions" title="Settlement actions">&#8942;</summary><div>' +
-            (isReviewed
-              ? '<button type="button" class="button secondary" disabled>Reviewed</button>'
-              : '<button type="button" class="button secondary" data-booking-closure-review-settlement-id="' + helpers.escapeHtml(settlementId) + '">Mark as reviewed</button>') +
-            '<button type="button" class="button secondary" title="Coming soon">Request invoice</button></div></details></td>',
-          "</tr>"
-        ].join("");
+        var cells = {
+          actions: '<td><details class="booking-closure-actions"><summary aria-label="Settlement actions" title="Settlement actions">&#8942;</summary><div>' +
+            '<button type="button" class="button secondary" data-booking-closure-request-invoice="' + helpers.escapeHtml(settlementId) + '">Request invoice</button></div></details></td>',
+          reviewToggle: '<td class="booking-closure-review-cell"><button type="button" class="booking-closure-review-button' + (isReviewed ? ' is-reviewed' : '') + '" aria-label="' + (isReviewed ? 'Mark as pending review' : 'Mark as reviewed') + '" title="' + (isReviewed ? 'Mark as pending review' : 'Mark as reviewed') + '" aria-pressed="' + isReviewed + '"' + (' data-booking-closure-review-settlement-id="' + helpers.escapeHtml(settlementId) + '"') + '><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6" /></svg></button></td>',
+          supplier: '<td class="booking-closure-settlement-cell"><strong>' + helpers.escapeHtml(settlement.Supplier_Name || helpers.getLookupName(settlement.Supplier) || settlement.Name || "-") + "</strong><br><span class=\"table-inline-secondary\">" + helpers.escapeHtml(settlement.Name || "") + " · " + helpers.escapeHtml(settlementDetail) + "</span></td>",
+          review: '<td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(closureReviewStatus)) + (isReviewed ? " booking-closure-review-pill" : "") + '">' + helpers.escapeHtml(closureReviewStatus) + "</span></td>",
+          quoted: '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(quoted)) + "</td>",
+          invoiced: '<td class="numeric-cell">' + helpers.escapeHtml(hasInvoice ? helpers.formatCurrency(invoiced) : "-") + "</td>",
+          paid: '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(paid)) + "</td>",
+          variance: '<td class="numeric-cell booking-closure-variance ' + varianceTone + '">' + helpers.escapeHtml(hasInvoice ? helpers.formatCurrency(variance) : "-") + "</td>",
+          status: "<td>" + helpers.escapeHtml(status) + "</td>",
+          finalInvoiceCheck: '<td><span class="booking-closure-final-check ' + (hasInvoice && nonFinalInvoiceCount === 0 ? 'is-complete' : 'is-incomplete') + '">' + helpers.escapeHtml(!hasInvoice ? "No invoices" : nonFinalInvoiceCount ? nonFinalInvoiceCount + " non-final / " + relatedInvoices.length : "All final") + '</span></td>'
+        };
+        return '<tr class="booking-closure-row ' + tone + (isReviewed ? " is-reviewed" : "") + (isAgentCommission ? " booking-closure-agent-commission" : "") + '" data-booking-closure-settlement-id="' + helpers.escapeHtml(settlementId) + '">' + visibleClosureColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
       }).join("");
 
       elements.bookingClosureContent.innerHTML =
         '<div class="booking-closure-summary">' + summary.map(function (item) {
-          return "<div><span>" + helpers.escapeHtml(item[0]) + "</span><strong>" + helpers.escapeHtml(item[1]) + "</strong></div>";
+          return '<div' + (item[2] ? ' class="' + helpers.escapeHtml(item[2]) + '"' : '') + '><span>' + helpers.escapeHtml(item[0]) + "</span><strong>" + helpers.escapeHtml(item[1]) + "</strong></div>";
         }).join("") + "</div>" +
         '<div class="booking-closure-legend"><button type="button" class="' + (closureFilter === "all" ? "is-active" : "") + '" data-booking-closure-filter="all">All</button><button type="button" class="is-ok' + (closureFilter === "matched" ? " is-active" : "") + '" data-booking-closure-filter="matched">Matched, invoiced and paid</button><button type="button" class="is-pending' + (closureFilter === "pending" ? " is-active" : "") + '" data-booking-closure-filter="pending">Payment pending or amount differs from quote</button><button type="button" class="is-alert' + (closureFilter === "missing" ? " is-active" : "") + '" data-booking-closure-filter="missing">Invoice missing</button><button type="button" class="is-reviewed' + (closureFilter === "reviewed" ? " is-active" : "") + '" data-booking-closure-filter="reviewed">Reviewed</button></div>' +
-        '<div class="table-wrap booking-closure-table-wrap"><table class="results-table"><thead><tr>' + getClosureSortHeader("Supplier / settlement", "supplier", closureSort) + getClosureSortHeader("Quoted", "quoted", closureSort) + getClosureSortHeader("Invoiced", "invoiced", closureSort) + getClosureSortHeader("Paid", "paid", closureSort) + getClosureSortHeader("Variance", "variance", closureSort) + getClosureSortHeader("Status", "status", closureSort) + getClosureSortHeader("Closure review", "review", closureSort) + "<th>Actions</th></tr></thead><tbody>" +
-        (rows || '<tr><td colspan="8" class="table-empty">No settlements were found for this booking.</td></tr>') +
+        '<div class="table-wrap booking-closure-table-wrap"><table class="results-table"><thead><tr>' + visibleClosureColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, closureHeaders[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("tripClosure") + "</th></tr></thead><tbody>" +
+        (rows || '<tr><td colspan="' + (visibleClosureColumns.length + 1) + '" class="table-empty">No settlements were found for this booking.</td></tr>') +
         "</tbody></table></div>";
+    }
+
+    function onInvoiceRequested(settlementId) {
+      var closure = state.bookingClosure;
+      if (!closure) { return; }
+      (closure.settlements || []).forEach(function (settlement) {
+        if (String(settlement.id) === settlementId) {
+          settlement.Closure_Review_Status = "Invoice Requested";
+        }
+      });
+      if (closure.detail && closure.detail.settlement && String(closure.detail.settlement.id) === settlementId) {
+        closure.detail.settlement.Closure_Review_Status = "Invoice Requested";
+      }
+      renderBookingClosure();
     }
 
     function closeBookingClosure() {
@@ -897,30 +933,39 @@
       var target = event.target && event.target.closest("[data-booking-closure-review-settlement-id]");
       var settlementId = target && target.getAttribute("data-booking-closure-review-settlement-id");
 
-      if (!settlementId) {
+      if (!settlementId || target.disabled) {
         return;
       }
+
+      var settlement = (state.bookingClosure.settlements || []).find(function (record) {
+        return String(record && record.id || "") === settlementId;
+      });
+      if (!settlement) {
+        return;
+      }
+      var isReviewed = helpers.normalizeString(getClosureReviewStatus(settlement)) === "reviewed";
+      var nextReviewStatus = isReviewed ? "Pending review" : "Reviewed";
 
       target.disabled = true;
       try {
         await crm.updateRecord(MODULES.settlements, settlementId, {
-          Closure_Review_Status: "Reviewed"
+          Closure_Review_Status: nextReviewStatus
         });
         state.bookingClosure.settlements = (state.bookingClosure.settlements || []).map(function (settlement) {
           if (String(settlement && settlement.id || "") === settlementId) {
             return Object.assign({}, settlement, {
-              Closure_Review_Status: "Reviewed"
+              Closure_Review_Status: nextReviewStatus
             });
           }
 
           return settlement;
         });
         renderBookingClosure();
-        renderer.showNotice("Settlement marked as reviewed.", { tone: "success" });
+        renderer.showNotice(isReviewed ? "Settlement marked as pending review." : "Settlement marked as reviewed.", { tone: "success" });
       } catch (error) {
         target.disabled = false;
         debugError("onBookingClosureReviewClick failed", error, { settlementId: settlementId });
-        renderer.showError(error.message || "Could not mark the settlement as reviewed.");
+        renderer.showError(error.message || "Could not update the settlement review status.");
       }
     }
 
@@ -1199,6 +1244,7 @@
       closeBookingClosureDetail: closeBookingClosureDetail,
       onClosureRefreshClick: onBookingClosureRefreshClick,
       onClosureReviewClick: onBookingClosureReviewClick,
+      onInvoiceRequested: onInvoiceRequested,
       onClosureTableControlClick: onBookingClosureTableControlClick,
       onClosureSettlementClick: onBookingClosureSettlementClick,
       loadBrowserData: loadBookingsBrowserData,

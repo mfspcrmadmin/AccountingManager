@@ -1,0 +1,49 @@
+string standalone.sendSupplierInvoiceRequest(String settlementId, String recipientEmail, String emailSubject, String emailBody)
+{
+res = Map();
+res.put("success",false);
+res.put("error",true);
+try
+{
+	settlementId = ifnull(settlementId,"").trim();
+	recipientEmail = ifnull(recipientEmail,"").trim();
+	emailSubject = ifnull(emailSubject,"").trim();
+	emailBody = ifnull(emailBody,"").trim();
+	if(!settlementId.matches("^[0-9]+$"))
+	{
+		res.put("message","A valid settlement is required.");
+		return res.toString();
+	}
+	if(!recipientEmail.matches("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$") || recipientEmail.contains("\n") || recipientEmail.contains("\r"))
+	{
+		res.put("message","A valid recipient email is required.");
+		return res.toString();
+	}
+	if(emailSubject == "" || emailSubject.contains("\n") || emailSubject.contains("\r") || emailBody == "")
+	{
+		res.put("message","A subject and message are required.");
+		return res.toString();
+	}
+	settlement = zoho.crm.getRecordById("Supplier_Settlements",settlementId.toLong());
+	if(settlement == null || !settlement.containKey("id") || settlement.get("Supplier") == null)
+	{
+		res.put("message","The settlement or its associated supplier could not be found.");
+		return res.toString();
+	}
+	sendmail
+	[
+		from : "crmadmin@madeforspainandportugal.com"
+		to : recipientEmail
+		subject : emailSubject
+		message : emailBody
+	]
+	res.put("success",true);
+	res.put("error",false);
+	res.put("message","Invoice request sent.");
+}
+catch (e)
+{
+	res.put("message","Could not send the invoice request: " + e.toString());
+}
+return res.toString();
+}

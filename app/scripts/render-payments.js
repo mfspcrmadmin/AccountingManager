@@ -66,10 +66,19 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function renderPaymentsWorkspace(view, onSelected) {
+      var paymentColumns = [
+        { key: "date", label: "Date" }, { key: "payment", label: "Payment" }, { key: "status", label: "Status" },
+        { key: "account", label: "Payment account" }, { key: "amount", label: "Amount" }
+      ];
+      ns.tableColumns.configure("payments", paymentColumns, function () { renderPaymentsWorkspace(view, onSelected); });
+      var visiblePaymentColumns = ns.tableColumns.visibleOrder("payments");
       var isSpecificDateRange = (view.filters.datePreset || "specific") === "specific";
       if (elements.paymentFilterDatePreset) {
         elements.paymentFilterDatePreset.value = view.filters.datePreset || "specific";
-        elements.paymentFilterDatePreset.closest(".filters-grid").classList.toggle("is-custom-date-range", isSpecificDateRange);
+        var paymentFilterToolbar = elements.paymentFilterDatePreset.closest(".list-toolbar");
+        if (paymentFilterToolbar) {
+          paymentFilterToolbar.classList.toggle("is-custom-date-range", isSpecificDateRange);
+        }
       }
       if (elements.paymentFilterDateFrom) {
         elements.paymentFilterDateFrom.value = view.filters.dateFrom || "";
@@ -82,11 +91,22 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       if (elements.paymentFilterSupplierCode) {
         elements.paymentFilterSupplierCode.value = view.filters.supplierCode || "";
       }
+      if (elements.paymentFilterName) {
+        elements.paymentFilterName.value = view.filters.paymentName || "";
+      }
       if (elements.paymentFilterMfsp) {
         elements.paymentFilterMfsp.value = view.filters.mfsp || "";
       }
 
       elements.paymentsCount.textContent = view.countLabel;
+
+      if (elements.paymentsTableHead) {
+        var headers = {
+          date: "<th>Date</th>", payment: "<th>Payment</th>", status: "<th>Status</th>",
+          account: "<th>Payment account</th>", amount: '<th class="numeric-cell">Amount</th>'
+        };
+        elements.paymentsTableHead.innerHTML = "<tr>" + visiblePaymentColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, headers[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("payments") + "</th></tr>";
+      }
 
       if (!view.filteredRecords.length) {
         elements.paymentsEmpty.textContent = view.emptyMessage;
@@ -102,15 +122,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             helpers.textValue(helpers.getLookupName(payment.Payment_Account), "")
           ].filter(Boolean).join(" | ");
 
-          return [
-            '<tr class="is-clickable' + (isActive ? " is-active" : "") + '" data-payment-id="' + helpers.escapeHtml(payment.id) + '">',
-            "  <td>" + helpers.escapeHtml(helpers.formatDate(payment.Payment_Date)) + "</td>",
-            "  <td>" + helpers.escapeHtml(view.getPaymentReference(payment)) + "</td>",
-            "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(payment.Status)) + "\">" + helpers.escapeHtml(payment.Status || "-") + "</span></td>",
-            "  <td>" + helpers.escapeHtml(paymentAccountDisplay || "-") + "</td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(helpers.getPaymentAmount(payment, fieldCandidates))) + "</td>",
-            "</tr>"
-          ].join("");
+          var cells = {
+            date: "<td>" + helpers.escapeHtml(helpers.formatDate(payment.Payment_Date)) + "</td>",
+            payment: "<td>" + helpers.escapeHtml(view.getPaymentReference(payment)) + "</td>",
+            status: "<td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(payment.Status)) + "\">" + helpers.escapeHtml(payment.Status || "-") + "</span></td>",
+            account: "<td>" + helpers.escapeHtml(paymentAccountDisplay || "-") + "</td>",
+            amount: '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(helpers.getPaymentAmount(payment, fieldCandidates))) + "</td>"
+          };
+          return '<tr class="is-clickable' + (isActive ? " is-active" : "") + '" data-payment-id="' + helpers.escapeHtml(payment.id) + '">' + visiblePaymentColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
         }).join("");
 
         Array.prototype.forEach.call(elements.paymentsTableBody.querySelectorAll("tr[data-payment-id]"), function (row) {

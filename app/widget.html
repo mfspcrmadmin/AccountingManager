@@ -85,6 +85,7 @@
                 <h2 id="booking-closure-title">Trip closure</h2>
                 <span id="booking-closure-status" class="booking-closure-status" hidden></span>
               </div>
+              <p id="booking-closure-accounting-rep" class="booking-closure-accounting-rep" hidden></p>
             </div>
             <div class="inline-actions">
               <button id="booking-closure-refresh" class="button secondary icon-button refresh-icon-button" type="button" aria-label="Refresh trip closure" title="Refresh trip closure">&#8635;</button>
@@ -154,41 +155,48 @@
             <div class="panel-header operations-header">
               <div>
                 <p class="panel-eyebrow">Administration</p>
-                <h2 id="operations-title">Supplier prepayments</h2>
+                <div class="operations-title-row"><h2 id="operations-title">Supplier prepayments</h2><span id="ministry-traveler-count" class="badge subtle" hidden>0 travelers found</span></div>
+                <p id="ministry-destination-note" class="ministry-destination-note" hidden>Only hotel services with Supplier Destination set to Spain, or with no destination, are loaded.</p>
               </div>
               <div class="operations-report-switch" role="group" aria-label="Operations report">
                 <button class="operations-report-option is-active" type="button" data-operation-type="prepayments">Prepayments</button>
                 <button class="operations-report-option" type="button" data-operation-type="card-purchases">Card purchases</button>
                 <button class="operations-report-option" type="button" data-operation-type="renfe">RENFE</button>
+                <button class="operations-report-option" type="button" data-ministry-report-tab>Ministry Traveler Register</button>
               </div>
             </div>
 
-            <div id="operations-filters" class="filters-grid operations-filters-grid">
+            <div id="operations-filters" class="table-filter-bar operations-filters-grid">
               <label id="operations-filter-status-field" class="field">
                 <span>Search</span>
                 <input id="operations-filter-search" type="search" placeholder="Reference, supplier or booking">
               </label>
-              <label id="operations-filter-from-field" class="field">
-                <span>Status</span>
-                <select id="operations-filter-status">
-                  <option value="">All statuses</option>
-                  <option value="Not Paid">Pending</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </label>
-              <label id="operations-filter-to-field" class="field">
-                <span>From</span>
-                <input id="operations-filter-from" type="date">
-              </label>
-              <label class="field">
-                <span>To</span>
-                <input id="operations-filter-to" type="date">
-              </label>
-              <div class="operations-filter-actions">
-                <button id="operations-apply-filters" class="button primary" type="button">Apply filters</button>
-                <button id="operations-reset-filters" class="button secondary" type="button">Reset</button>
-              </div>
+              <details class="table-filters-popover">
+                <summary>Filters</summary>
+                <div class="table-filters-panel filters-grid">
+                  <label id="operations-filter-from-field" class="field">
+                    <span>Status</span>
+                    <select id="operations-filter-status">
+                      <option value="">All statuses</option>
+                      <option value="Not Paid">Pending</option>
+                      <option value="Paid">Paid</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </label>
+                  <label id="operations-filter-to-field" class="field">
+                    <span>From</span>
+                    <input id="operations-filter-from" type="date">
+                  </label>
+                  <label class="field">
+                    <span>To</span>
+                    <input id="operations-filter-to" type="date">
+                  </label>
+                </div>
+                <div class="table-filter-actions">
+                  <button id="operations-reset-filters" class="button secondary" type="button">Reset</button>
+                  <button id="operations-apply-filters" class="button primary" type="button">Apply</button>
+                </div>
+              </details>
             </div>
 
             <div id="card-purchases-toolbar" class="card-purchases-toolbar" hidden>
@@ -201,6 +209,9 @@
                 <span>Search</span>
                 <input id="card-purchases-search" type="search" placeholder="Supplier, booking, reference or card purchase">
               </label>
+              <details class="table-filters-popover card-purchases-filters-popover">
+                <summary>Filters</summary>
+                <div class="table-filters-panel card-purchases-advanced-filters">
               <div class="field card-purchases-status-field">
                 <span>Registration status</span>
                 <div class="card-purchases-status-multiselect">
@@ -237,9 +248,57 @@
                   <div id="card-purchases-owner-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden></div>
                 </div>
               </div>
-              <button id="card-purchases-apply-filters" class="button primary card-purchases-apply-button" type="button" aria-label="Apply card purchase filters" title="Apply filters"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="4.75" fill="none" stroke="currentColor" stroke-width="1.7"></circle><path d="m12 12 4.1 4.1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"></path></svg></button>
+                </div>
+                <div class="table-filter-actions">
+                  <button id="card-purchases-reset-filters" class="button secondary" type="button">Reset</button>
+                  <button id="card-purchases-apply-filters" class="button primary" type="button">Apply</button>
+                </div>
+              </details>
               <button id="card-purchases-refresh" class="button secondary card-purchases-icon-button" type="button" aria-label="Refresh card purchases" title="Refresh card purchases">&#8635;</button>
             </div>
+
+            <section id="ministry-traveller-register" class="ministry-traveller-register" hidden>
+              <div class="ministry-traveller-register-toolbar">
+                <label class="field"><span>Date range</span><select id="ministry-date-preset"><option value="last-7-days">Last 7 days</option><option value="last-month">Last month</option><option value="last-30-days">Last 30 days</option><option value="next-7-days">Next 7 days</option><option value="next-month">Next month</option><option value="next-30-days">Next 30 days</option><option value="specific" selected>Specific range</option></select></label>
+                <label class="field"><span>Check-in from</span><input id="ministry-check-in-from" type="date"></label>
+                <label class="field"><span>Check-out to</span><input id="ministry-check-out-to" type="date"></label>
+                <label class="field"><span>MFSP</span><input id="ministry-filter-mfsp" type="search" placeholder="MFSP reference"></label>
+                <label class="field"><span>Supplier code</span><input id="ministry-filter-supplier-code" type="search" placeholder="Connection reference"></label>
+                <div class="ministry-traveller-register-actions">
+                  <button id="ministry-search" class="button primary ministry-search-button" type="button" aria-label="Search traveler register" title="Search traveler register"><svg class="ministry-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.2"></circle><path d="m16 16 4.3 4.3"></path></svg><span class="ministry-search-spinner" aria-hidden="true"></span></button>
+                  <button id="ministry-export" class="button secondary ministry-export-button" type="button" disabled>Export to Excel</button>
+                </div>
+                <div class="ministry-view-switch" role="group" aria-label="Traveller register grouping">
+                  <button class="is-active" type="button" data-ministry-view="simple" aria-pressed="true">Simple</button>
+                  <button type="button" data-ministry-view="hotel" aria-pressed="false">By booking and hotel</button>
+                </div>
+              </div>
+              <p id="ministry-register-message" class="ministry-register-message">Choose the check-in and check-out dates to prepare the traveller register.</p>
+              <div id="ministry-register-table-wrap" class="table-wrap ministry-register-table-wrap" hidden>
+                <table class="results-table ministry-register-table">
+                  <thead id="ministry-register-table-head"></thead>
+                  <tbody id="ministry-register-table-body"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section id="ministry-export-picker" class="ministry-export-picker" role="dialog" aria-modal="true" aria-labelledby="ministry-export-picker-title" hidden>
+              <div class="ministry-export-picker-backdrop" data-ministry-export-close></div>
+              <div class="ministry-export-picker-card">
+                <header>
+                  <div>
+                    <h2 id="ministry-export-picker-title">Choose travelers for export</h2>
+                    <p>Select one traveler for each booking and hotel.</p>
+                  </div>
+                  <button class="button secondary ministry-export-picker-close" type="button" data-ministry-export-close aria-label="Close" title="Close">&times;</button>
+                </header>
+                <div id="ministry-export-picker-list" class="ministry-export-picker-list"></div>
+                <footer>
+                  <button class="button secondary" type="button" data-ministry-export-close>Cancel</button>
+                  <button id="ministry-export-picker-confirm" class="button primary" type="button">Export to Excel</button>
+                </footer>
+              </div>
+            </section>
 
             <div id="operations-empty" class="empty-state operations-empty-state">
               <h3>Prepayments ready to review</h3>
@@ -270,6 +329,7 @@
                   <button class="card-purchase-workflow-close" type="button" data-card-purchase-close aria-label="Close">&times;</button>
                 </header>
                 <div id="card-purchase-workflow-context" class="card-purchase-workflow-context"></div>
+                <section id="card-purchase-workflow-service" class="card-purchase-workflow-service" aria-label="Associated service" aria-live="polite" hidden></section>
                 <form id="card-purchase-workflow-form" novalidate>
                   <div id="card-purchase-workflow-invoice-fields" class="card-purchase-workflow-fields">
                     <label class="field"><span id="card-purchase-reference-label">Invoice number</span><input id="card-purchase-reference" required></label>
@@ -305,14 +365,10 @@
               <span id="bookings-count" class="badge subtle">0 bookings</span>
             </div>
 
-            <div class="filters-grid bookings-filters-grid">
+            <div class="table-filter-bar bookings-filters-grid">
               <label class="field">
-                <span>MFSP</span>
+                <span>MFSP Reference</span>
                 <input id="bookings-filter-mfsp" type="search" placeholder="MFSP reference">
-              </label>
-              <label class="field">
-                <span>Booking Name</span>
-                <input id="bookings-filter-name" type="search" placeholder="Booking name">
               </label>
               <label class="field bookings-date-filter-field">
                 <span>Arrival Date</span>
@@ -331,13 +387,7 @@
               </label>
               <div id="bookings-filter-stage-field" class="field bookings-stage-filter-field">
                 <span>Stage</span>
-                <button
-                  id="bookings-filter-stage-toggle"
-                  class="button secondary bookings-stage-toggle"
-                  type="button"
-                  aria-expanded="false"
-                  aria-controls="bookings-filter-stage-menu"
-                >All stages</button>
+                <button id="bookings-filter-stage-toggle" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="bookings-filter-stage-menu">All stages</button>
                 <div id="bookings-filter-stage-menu" class="bookings-stage-menu" hidden></div>
               </div>
               <label class="field">
@@ -345,7 +395,7 @@
                 <input id="bookings-filter-accounting-rep" type="search" placeholder="Accounting rep">
               </label>
               <div class="bookings-load-action">
-                <button id="bookings-load" class="button primary bookings-load-button" type="button">Load</button>
+                <button id="bookings-load" class="button primary bookings-load-button bookings-load-icon-button" type="button" aria-label="Load bookings" title="Load bookings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.2"></circle><path d="m16 16 4.3 4.3"></path></svg></button>
               </div>
             </div>
 
@@ -355,9 +405,9 @@
 
             <div id="bookings-table-wrap" class="table-wrap bookings-table-wrap" hidden>
               <table class="results-table bookings-results-table">
-                <thead>
+                <thead id="bookings-table-head">
                   <tr>
-                    <th class="booking-row-actions-heading"><span class="sr-only">Actions</span></th>
+                    <th class="booking-row-actions-heading" aria-label="Actions"></th>
                     <th>Closure Status</th>
                     <th>MFSP</th>
                     <th>Booking Name</th>
@@ -597,7 +647,7 @@
 
                       <div class="invoice-create-inline-section-heading"><span>Select settlement</span></div>
                       <div id="invoice-create-settlement-selector-panel" class="settlement-selector-panel invoice-create-settlement-browser">
-                        <div class="filters-grid filters-grid-inline settlement-filter-grid">
+                        <div class="table-filter-bar settlement-filter-grid">
                           <label class="field settlement-filter-search-field">
                             <span>Settlement code</span>
                             <input
@@ -927,9 +977,45 @@
                 </div>
               </div>
 
-              <div id="invoices-filter-toolbar" class="filters-grid filters-grid-compact invoices-filters-grid list-toolbar is-custom-date-range">
+              <div id="invoices-filter-toolbar" class="table-filter-bar invoices-filters-grid list-toolbar is-custom-date-range">
                 <label class="field">
-                  <span>Period</span>
+                  <span>Supplier code</span>
+                  <input id="invoice-filter-supplier-code" type="search" placeholder="Supplier code">
+                </label>
+                <label class="field">
+                  <span>MFSP reference</span>
+                  <input id="invoice-filter-mfsp" type="search" placeholder="MFSP reference">
+                </label>
+                <label class="field invoices-primary-search">
+                  <span>Invoice number</span>
+                  <input id="invoice-filter-number" type="search" placeholder="Invoice number">
+                </label>
+                <div id="invoice-filter-destination-field" class="field bookings-stage-filter-field">
+                  <span>Destination</span>
+                  <button id="invoice-filter-destination-toggle" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="invoice-filter-destination-menu">All destinations</button>
+                  <div id="invoice-filter-destination-menu" class="bookings-stage-menu" hidden></div>
+                </div>
+                <label class="field">
+                  <span>Self Employed</span>
+                  <select id="invoice-filter-self-employed">
+                    <option value="">All</option>
+                    <option value="true">Self employed</option>
+                    <option value="false">Not self employed</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Type</span>
+                  <select id="invoice-filter-type">
+                    <option value="">All types</option>
+                    <option value="Proforma">Proforma</option>
+                    <option value="Final Invoice">Final Invoice</option>
+                    <option value="Credit Note">Credit Note</option>
+                    <option value="Tickets">Tickets</option>
+                    <option value="Commission">Commission</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Date</span>
                   <select id="invoice-filter-date-preset">
                     <option value="specific">Specific range</option>
                     <option value="this-week">This week</option>
@@ -955,38 +1041,32 @@
                   <button id="invoice-filter-status-toggle" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="invoice-filter-status-menu">All statuses</button>
                   <div id="invoice-filter-status-menu" class="bookings-stage-menu" hidden></div>
                 </div>
-                <label class="field">
-                  <span>Invoice type</span>
-                  <select id="invoice-filter-type">
-                    <option value="">All types</option>
-                    <option value="Proforma">Proforma</option>
-                    <option value="Final Invoice">Final Invoice</option>
-                    <option value="Credit Note">Credit Note</option>
-                    <option value="Tickets">Tickets</option>
-                    <option value="Commission">Commission</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>Supplier code</span>
-                  <input id="invoice-filter-supplier-code" type="search" placeholder="Supplier code">
-                </label>
-                <label class="field">
-                  <span>MFSP</span>
-                  <input id="invoice-filter-mfsp" type="search" placeholder="MFSP reference">
-                </label>
+                <div class="invoices-toolbar-actions">
+                <button id="invoices-apply-filters" class="button primary invoices-apply-icon-button" type="button" aria-label="Apply invoice filters" title="Apply invoice filters">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+                </button>
                 <div class="bookings-load-action" hidden>
                   <button id="invoices-load" class="button primary bookings-load-button" type="button">Load</button>
                 </div>
-                <div class="invoices-filter-actions">
-                  <button id="invoices-apply-filters" class="button invoices-apply-button" type="button" aria-label="Apply invoice filters" title="Apply invoice filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 20-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path></svg></button>
-                  <button id="invoices-refresh" class="button secondary invoices-refresh-button" type="button" aria-label="Refresh invoices" title="Refresh invoices">&#8635;</button>
+                <button id="invoices-refresh" class="button secondary invoices-refresh-button" type="button" aria-label="Refresh invoices" title="Refresh invoices">&#8635;</button>
                 </div>
               </div>
 
+              <div class="invoices-display-options">
               <label class="invoices-show-attachments-toggle">
                 <input id="invoices-show-attachments" type="checkbox">
                 <span>Show attachments</span>
               </label>
+              <label class="field invoices-group-by-field">
+                <span>Group by</span>
+                <select id="invoices-group-by">
+                  <option value="none">None</option>
+                  <option value="supplier">By supplier</option>
+                  <option value="destination">By supplier destination</option>
+                  <option value="mfsp">By MFSP</option>
+                </select>
+              </label>
+              </div>
 
               <div id="invoices-empty" class="empty-state">
                 Open the tab to load invoices.
@@ -1101,8 +1181,8 @@
                       <div id="selected-invoice-delete-warning" class="payment-letter-warning"></div>
 
                       <label class="checkbox-field invoice-delete-checkbox">
-                        <input id="selected-invoice-delete-update-settlement" type="checkbox" checked>
-                        <span>Update settlement totals after deletion</span>
+                        <input id="selected-invoice-delete-update-settlement" type="checkbox" checked disabled>
+                        <span>Recalculate all affected balances and statuses (required)</span>
                       </label>
 
                       <div class="actions payment-letter-actions">
@@ -1424,55 +1504,64 @@
                   <h2>Supplier payments</h2>
                 </div>
                 <div class="inline-actions">
-                  <button
-                    id="payments-refresh" hidden
-                    class="button primary compact-action-button"
-                    type="button"
-                    aria-label="Refresh payments"
-                    title="Refresh payments"
-                  >↻</button>
+                  <div class="invoices-view-switch payments-view-switch" role="group" aria-label="Payment view">
+                    <button type="button" data-payment-view="open" aria-pressed="false">Open</button>
+                    <button class="is-active" type="button" data-payment-view="closed" aria-pressed="true">Closed</button>
+                    <button type="button" data-payment-view="all" aria-pressed="false">All</button>
+                  </div>
                   <span id="payments-count" class="badge subtle">0 payments</span>
                 </div>
               </div>
 
-              <div id="payments-filter-toolbar" class="filters-grid filters-grid-inline payments-filters-grid list-toolbar">
-                <label class="field">
-                  <span>Period</span>
-                  <select id="payment-filter-date-preset">
-                    <option value="specific">Specific range</option>
-                    <option value="this-week">This week</option>
-                    <option value="last-week">Last week</option>
-                    <option value="last-7-days">Last 7 days</option>
-                    <option value="this-month">This month</option>
-                    <option value="last-month">Last month</option>
-                    <option value="last-30-days">Last 30 days</option>
-                    <option value="year-to-date">Year to date</option>
-                    <option value="all-time">All time</option>
-                  </select>
-                </label>
-                <label class="field payment-date-range-field">
-                  <span>From</span>
-                  <input id="payment-filter-date-from" type="date">
-                </label>
-                <label class="field payment-date-range-field">
-                  <span>To</span>
-                  <input id="payment-filter-date-to" type="date">
-                </label>
-                <div id="payment-filter-status-field" class="field bookings-stage-filter-field">
-                  <span>Status</span>
-                  <button id="payment-filter-status-toggle" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="payment-filter-status-menu">No statuses</button>
-                  <div id="payment-filter-status-menu" class="bookings-stage-menu" hidden></div>
-                </div>
-                <label class="field">
-                  <span>Supplier code</span>
-                  <input id="payment-filter-supplier-code" type="search" placeholder="Supplier code">
-                </label>
-                <label class="field">
-                  <span>MFSP</span>
-                  <input id="payment-filter-mfsp" type="search" placeholder="MFSP reference">
-                </label>
-                <div class="bookings-load-action" hidden>
-                  <button id="payments-load" class="button primary bookings-load-button" type="button">Load</button>
+<div id="payments-filter-toolbar" class="table-filter-bar payments-filters-grid list-toolbar">
+  <label class="field">
+    <span>MFSP reference</span>
+    <input id="payment-filter-mfsp" type="search" placeholder="MFSP reference">
+  </label>
+  <label class="field">
+    <span>Supplier code</span>
+    <input id="payment-filter-supplier-code" type="search" placeholder="Supplier code">
+  </label>
+  <label class="field payments-primary-search">
+    <span>Payment name</span>
+    <input id="payment-filter-name" type="search" placeholder="Payment name">
+  </label>
+  <label class="field">
+    <span>Period</span>
+    <select id="payment-filter-date-preset">
+      <option value="today">Today</option>
+      <option value="specific">Specific range</option>
+      <option value="this-week">This week</option>
+      <option value="last-week">Last week</option>
+      <option value="last-7-days">Last 7 days</option>
+      <option value="this-month">This month</option>
+      <option value="last-month">Last month</option>
+      <option value="last-30-days">Last 30 days</option>
+      <option value="year-to-date">Year to date</option>
+      <option value="all-time">All time</option>
+    </select>
+  </label>
+  <label class="field payment-date-range-field">
+    <span>From</span>
+    <input id="payment-filter-date-from" type="date">
+  </label>
+  <label class="field payment-date-range-field">
+    <span>To</span>
+    <input id="payment-filter-date-to" type="date">
+  </label>
+  <div id="payment-filter-status-field" class="field bookings-stage-filter-field">
+    <span>Status</span>
+    <button id="payment-filter-status-toggle" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="payment-filter-status-menu">No statuses</button>
+    <div id="payment-filter-status-menu" class="bookings-stage-menu" hidden></div>
+  </div>
+  <div class="payments-toolbar-actions">
+  <button id="payments-apply-filters" class="button primary payments-apply-icon-button" type="button" aria-label="Apply payment filters" title="Apply payment filters">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+  </button>
+  <div class="bookings-load-action" hidden>
+    <button id="payments-load" class="button primary bookings-load-button" type="button">Load</button>
+  </div>
+                <button id="payments-refresh" class="button secondary invoices-refresh-button" type="button" aria-label="Refresh payments" title="Refresh payments">&#8635;</button>
                 </div>
               </div>
 
@@ -1482,7 +1571,7 @@
 
               <div id="payments-table-wrap" class="table-wrap payments-table-wrap" hidden>
                 <table class="results-table payments-results-table">
-                  <thead>
+                  <thead id="payments-table-head">
                     <tr>
                       <th>Date</th>
                       <th>Payment</th>
@@ -1581,30 +1670,6 @@
                       <button id="selected-payment-export-bank-invoices" class="button secondary compact-action-button" type="button">Export bank file by invoice</button>
                     </div>
 
-                    <section id="selected-payment-letter-panel" class="detail-subsection payment-letter-panel widget-popup-panel" role="dialog" aria-modal="true" aria-labelledby="selected-payment-letter-title" hidden>
-                      <div class="section-heading compact-section-heading">
-                        <h3 id="selected-payment-letter-title">Send payment letter</h3>
-                      </div>
-
-                      <div id="selected-payment-letter-empty" class="empty-state compact-empty" hidden>
-                        This payment has no suppliers available to send.
-                      </div>
-
-                      <div id="selected-payment-letter-warning" class="payment-letter-warning" hidden></div>
-
-                      <div class="payment-letter-bulk-action">
-                        <label class="payment-letter-master-check">
-                          <input id="selected-payment-letter-toggle-all" type="checkbox">
-                          <span>All suppliers</span>
-                        </label>
-                      </div>
-                      <div id="selected-payment-letter-suppliers" class="payment-letter-supplier-list"></div>
-
-                      <div class="actions payment-letter-actions">
-                        <button id="selected-payment-letter-cancel" class="button secondary compact-action-button" type="button">Cancel</button>
-                        <button id="selected-payment-letter-submit" class="button primary compact-action-button" type="button">Send</button>
-                      </div>
-                    </section>
                   </div>
 
                   <section id="selected-payment-allocations-view" class="detail-subsection" hidden>
@@ -1656,6 +1721,30 @@
               </section>
             </aside>
           </div>
+          <section id="selected-payment-letter-panel" class="detail-subsection payment-letter-panel widget-popup-panel" role="dialog" aria-modal="true" aria-labelledby="selected-payment-letter-title" hidden>
+            <div class="section-heading compact-section-heading">
+              <h3 id="selected-payment-letter-title">Send payment letter</h3>
+            </div>
+
+            <div id="selected-payment-letter-empty" class="empty-state compact-empty" hidden>
+              This payment has no suppliers available to send.
+            </div>
+
+            <div id="selected-payment-letter-warning" class="payment-letter-warning" hidden></div>
+
+            <div class="payment-letter-bulk-action">
+              <label class="payment-letter-master-check">
+                <input id="selected-payment-letter-toggle-all" type="checkbox">
+                <span>All suppliers</span>
+              </label>
+            </div>
+            <div id="selected-payment-letter-suppliers" class="payment-letter-supplier-list"></div>
+
+            <div class="actions payment-letter-actions">
+              <button id="selected-payment-letter-cancel" class="button secondary compact-action-button" type="button">Cancel</button>
+              <button id="selected-payment-letter-submit" class="button primary compact-action-button" type="button">Send</button>
+            </div>
+          </section>
           <section id="payment-allocation-manager" class="panel widget-popup-panel payment-allocation-manager" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-manager-title" hidden>
             <div class="section-heading compact-section-heading"><div class="payment-allocation-manager-heading-content"><h2 id="payment-allocation-manager-title">Manage payment allocations</h2><button id="payment-allocation-manager-add" class="button secondary compact-action-button" type="button">Add invoice</button></div><button id="payment-allocation-manager-close" class="button secondary compact-action-button payment-allocation-manager-close" type="button" aria-label="Close" title="Close">&times;</button></div>
             <div id="payment-allocation-manager-error" class="form-error" hidden></div>
@@ -1675,12 +1764,17 @@
             <div class="workspace-grid payments-workspace">
               <section class="panel wide-panel">
                 <div class="panel-header"><div><h2>Payment allocations</h2><p class="panel-copy">Browse payment allocations and their related payment, invoice and settlement.</p></div><span id="payment-allocations-count" class="badge subtle">0 allocations</span></div>
-                <div class="filters-grid filters-grid-inline payments-filters-grid">
+                <div class="table-filter-bar payments-filters-grid">
                   <label class="field"><span>Allocation Reference</span><input id="payment-allocation-filter-reference" type="search" placeholder="Allocation reference"></label>
-                  <label class="field"><span>Movement Type</span><select id="payment-allocation-filter-movement-type"><option value="">All movement types</option></select></label>
-                  <label class="field"><span>Payment Reference</span><input id="payment-allocation-filter-payment" type="search" placeholder="Payment reference"></label>
-                  <label class="field"><span>Invoice Number</span><input id="payment-allocation-filter-invoice" type="search" placeholder="Invoice number"></label>
-                  <label class="field"><span>MFSP / Supplier Code</span><input id="payment-allocation-filter-supplier-code" type="search" placeholder="Settlement name"></label>
+                  <details class="table-filters-popover">
+                    <summary>Filters</summary>
+                    <div class="table-filters-panel filters-grid filters-grid-inline">
+                      <label class="field"><span>Movement Type</span><select id="payment-allocation-filter-movement-type"><option value="">All movement types</option></select></label>
+                      <label class="field"><span>Payment Reference</span><input id="payment-allocation-filter-payment" type="search" placeholder="Payment reference"></label>
+                      <label class="field"><span>Invoice Number</span><input id="payment-allocation-filter-invoice" type="search" placeholder="Invoice number"></label>
+                      <label class="field"><span>MFSP / Supplier Code</span><input id="payment-allocation-filter-supplier-code" type="search" placeholder="Settlement name"></label>
+                    </div>
+                  </details>
                 </div>
                 <div id="payment-allocations-empty" class="empty-state">No payment allocations match the current filters.</div>
                 <div id="payment-allocations-table-wrap" class="table-wrap payments-table-wrap" hidden><table class="results-table payments-results-table"><thead><tr><th>Allocation Reference</th><th>Movement Type</th><th>Payment</th><th>Invoice</th><th>MFSP</th><th>Supplier</th><th>Settlement Code</th><th class="numeric-cell">Allocated</th></tr></thead><tbody id="payment-allocations-table-body"></tbody></table></div>
@@ -1904,23 +1998,28 @@
               </section>
 
               <div id="payment-accounts-browser">
-                <div id="payment-accounts-filters" class="filters-grid filters-grid-inline payment-accounts-filters-grid">
+                <div id="payment-accounts-filters" class="table-filter-bar payment-accounts-filters-grid">
                   <label class="field">
                     <span>Search</span>
                     <input id="payment-account-filter-query" type="search" placeholder="Account name or email">
                   </label>
-                  <label class="field">
-                    <span>Supplier</span>
-                    <select id="payment-account-filter-supplier"></select>
-                  </label>
-                  <label class="field">
-                    <span>MFSP</span>
-                    <input id="payment-account-filter-mfsp" type="search" placeholder="MFSP reference">
-                  </label>
-                  <label class="field">
-                    <span>Status</span>
-                    <select id="payment-account-filter-mapping-status"></select>
-                  </label>
+                  <details class="table-filters-popover">
+                    <summary>Filters</summary>
+                    <div class="table-filters-panel filters-grid filters-grid-inline">
+                      <label class="field">
+                        <span>Supplier</span>
+                        <select id="payment-account-filter-supplier"></select>
+                      </label>
+                      <label class="field">
+                        <span>MFSP</span>
+                        <input id="payment-account-filter-mfsp" type="search" placeholder="MFSP reference">
+                      </label>
+                      <label class="field">
+                        <span>Status</span>
+                        <select id="payment-account-filter-mapping-status"></select>
+                      </label>
+                    </div>
+                  </details>
                 </div>
 
                 <div id="payment-accounts-empty" class="empty-state">
@@ -2039,19 +2138,24 @@
                 </div>
               </div>
 
-              <div class="filters-grid filters-grid-inline payments-filters-grid">
-                <label class="field">
-                  <span>Date From</span>
-                  <input id="accounting-entry-filter-date-from" type="date">
-                </label>
-                <label class="field">
-                  <span>Date To</span>
-                  <input id="accounting-entry-filter-date-to" type="date">
-                </label>
+              <div class="table-filter-bar payments-filters-grid">
                 <label class="field">
                   <span>Name</span>
                   <input id="accounting-entry-filter-name" type="text" placeholder="Accounting entry name">
                 </label>
+                <details class="table-filters-popover">
+                  <summary>Filters</summary>
+                  <div class="table-filters-panel filters-grid filters-grid-inline">
+                    <label class="field">
+                      <span>Date From</span>
+                      <input id="accounting-entry-filter-date-from" type="date">
+                    </label>
+                    <label class="field">
+                      <span>Date To</span>
+                      <input id="accounting-entry-filter-date-to" type="date">
+                    </label>
+                  </div>
+                </details>
               </div>
 
               <div class="bookings-load-action accounting-load-action">
@@ -2101,19 +2205,24 @@
                 </div>
               </div>
 
-              <div class="filters-grid filters-grid-inline payments-filters-grid">
-                <label class="field">
-                  <span>Date From</span>
-                  <input id="accounting-entry-line-filter-date-from" type="date">
-                </label>
-                <label class="field">
-                  <span>Date To</span>
-                  <input id="accounting-entry-line-filter-date-to" type="date">
-                </label>
+              <div class="table-filter-bar payments-filters-grid">
                 <label class="field">
                   <span>Name</span>
                   <input id="accounting-entry-line-filter-name" type="search" placeholder="Accounting entry line name">
                 </label>
+                <details class="table-filters-popover">
+                  <summary>Filters</summary>
+                  <div class="table-filters-panel filters-grid filters-grid-inline">
+                    <label class="field">
+                      <span>Date From</span>
+                      <input id="accounting-entry-line-filter-date-from" type="date">
+                    </label>
+                    <label class="field">
+                      <span>Date To</span>
+                      <input id="accounting-entry-line-filter-date-to" type="date">
+                    </label>
+                  </div>
+                </details>
               </div>
 
               <div class="bookings-load-action accounting-load-action">
@@ -2415,6 +2524,7 @@
     <script src="./scripts/dom.js"></script>
     <script src="./scripts/crm.js"></script>
     <script src="./scripts/render.js"></script>
+    <script src="./scripts/table-columns.js"></script>
     <script src="./scripts/render-invoices.js"></script>
     <script src="./scripts/render-payments.js"></script>
     <script src="./scripts/render-accounting.js"></script>
@@ -2427,8 +2537,11 @@
     <script src="./scripts/bookings.js"></script>
     <script src="./scripts/invoice-create.js"></script>
     <script src="./scripts/supplier-activity.js"></script>
+    <script src="./scripts/invoice-request.js"></script>
     <script src="./scripts/supplier-workspace.js"></script>
     <script src="./scripts/operations.js"></script>
+    <script src="./scripts/ministry-traveller-register.js"></script>
+    <script src="./scripts/invoice-delete.js"></script>
     <script src="./scripts/main.js"></script>
   </body>
 </html>

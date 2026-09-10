@@ -1127,7 +1127,8 @@
       onSelectedPaymentLetterSubmitClick: onSelectedPaymentLetterSubmitClick,
       setSupplierActivityTab: setSupplierActivityTab,
       closeSelectedPaymentLetterPanel: closeSelectedPaymentLetterPanel,
-      renderSelectedPaymentLetterPanel: renderSelectedPaymentLetterPanel
+      renderSelectedPaymentLetterPanel: renderSelectedPaymentLetterPanel,
+      resolvePaymentLetterRecipientForSupplier: resolvePaymentLetterRecipientForSupplier
     };
   };
 }(window));

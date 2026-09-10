@@ -163,6 +163,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
   };
 
+  ns.getWorkspaceStatusValues = function (viewKey, tab, allValues) {
+    if (tab === "all") { return allValues.slice(); }
+    if (viewKey === "payments") {
+      return tab === "closed" ? ["Paid", "Cancelled"] : ["Pending Payment"];
+    }
+    return tab === "closed" ? ["Paid", "Cancelled", "Rejected"] : ["-None-", "Received", "Partially Paid"];
+  };
+
   ns.createInitialState = function () {
     return {
       currentTab: "invoices",
@@ -398,7 +406,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           hasMore: false,
           hasLoaded: false,
           showAttachments: false,
-          view: "open",
+          groupBy: "none",
+          destinationDropdownOpen: false,
+          view: "closed",
           statusDropdownOpen: false,
           detailTab: "basic",
           sort: {
@@ -412,6 +422,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             statusValues: ["-None-", "Received", "Partially Paid", "Paid", "Cancelled", "Rejected"],
             invoiceType: "",
             supplierCode: "",
+            invoiceNumber: "",
+            destinationValues: ["Empty", "Spain", "Portugal"],
+            selfEmployed: "",
             mfsp: ""
           },
           appliedFilters: {
@@ -421,6 +434,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             statusValues: ["-None-", "Received", "Partially Paid", "Paid", "Cancelled", "Rejected"],
             invoiceType: "",
             supplierCode: "",
+            invoiceNumber: "",
+            destinationValues: ["Empty", "Spain", "Portugal"],
+            selfEmployed: "",
             mfsp: ""
           },
           selectedIds: {},
@@ -433,13 +449,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           hasMore: false,
           hasLoaded: false,
           section: "payments",
+          view: "open",
           detailTab: "payment",
           statusDropdownOpen: false,
           filters: {
             datePreset: "last-7-days",
             dateFrom: "",
             dateTo: "",
-            statusValues: ["Paid"],
+            statusValues: ["Planned", "Approved", "Pending Payment", "Cancelled", "Paid", "Reconciled"],
+            paymentName: "",
             supplierCode: "",
             mfsp: ""
           },
@@ -447,7 +465,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             datePreset: "last-7-days",
             dateFrom: "",
             dateTo: "",
-            statusValues: ["Paid"],
+            statusValues: ["Planned", "Approved", "Pending Payment", "Cancelled", "Paid", "Reconciled"],
+            paymentName: "",
             supplierCode: "",
             mfsp: ""
           },

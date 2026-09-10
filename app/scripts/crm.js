@@ -31,6 +31,18 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return zoho && zoho.CRM && zoho.CRM.META;
     }
 
+    function isNoContent(response) {
+      return response && (Number(response.status) === 204 || String(response.code || "").toUpperCase() === "NO_CONTENT");
+    }
+
+    function extractReadRecords(response) {
+      if (isNoContent(response)) { return []; }
+      if (!response || (!Array.isArray(response) && !Array.isArray(response.data))) {
+        throw new Error(response && response.message || "CRM did not return a valid record list.");
+      }
+      return helpers.extractRecords(response);
+    }
+
     async function getRecord(entity, recordId) {
       var response;
       var record;
@@ -44,7 +56,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           Entity: entity,
           RecordID: recordId
         });
-        record = helpers.extractRecords(response)[0] || null;
+        record = extractReadRecords(response)[0] || null;
         debugLog("getRecord response", {
           Entity: entity,
           RecordID: recordId,
@@ -75,13 +87,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           page: page || 1,
           per_page: perPage || 200
         });
-        records = helpers.extractRecords(response);
+        records = extractReadRecords(response);
         debugLog("getAllRecords response", {
           Entity: entity,
           count: records.length
         });
         return records;
       } catch (error) {
+        if (isNoContent(error)) { return []; }
         debugError("getAllRecords failed", error, {
           Entity: entity,
           page: page || 1,
@@ -114,7 +127,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           Type: "criteria",
           Query: criteria
         }, normalizedPage, normalizedPerPage);
-        records = helpers.extractRecords(response);
+        records = extractReadRecords(response);
         debugLog("searchRecord response", {
           Entity: entity,
           Query: criteria,
@@ -124,6 +137,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         });
         return records;
       } catch (error) {
+        if (isNoContent(error)) { return []; }
         debugError("searchRecord failed", error, {
           Entity: entity,
           Type: "criteria",
@@ -211,7 +225,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
     }
 
-    async function updateRecord(entity, recordId, data) {
+    async function updateRecord(entity, recordId, data, options) {
       var payload = Object.assign({
         id: recordId
       }, data || {});
@@ -219,7 +233,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         Entity: entity,
         RecordID: recordId,
         APIData: payload,
-        Trigger: ["workflow"]
+        Trigger: options && Array.isArray(options.trigger) ? options.trigger : ["workflow"]
       };
       var response;
 

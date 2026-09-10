@@ -222,6 +222,110 @@ body {
   font-weight: 600;
 }
 
+/* Shared compact filter drawer for every data table.  The primary text
+ * search remains in the toolbar; secondary fields live behind Filters. */
+.table-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.table-filter-bar > .field {
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+.table-filters-popover {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.table-filters-popover > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-strong, rgba(28, 56, 46, 0.14));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface, #fff);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.table-filters-popover > summary::-webkit-details-marker { display: none; }
+.table-filters-popover > summary::after {
+  width: 0;
+  height: 0;
+  margin-left: 9px;
+  border-top: 6px solid currentColor;
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+  color: var(--muted);
+  content: "";
+  transform: translateY(1px);
+  transition: transform 140ms ease;
+}
+.table-filters-popover[open] > summary::after { transform: translateY(-1px) rotate(180deg); }
+.table-filters-popover > summary:hover,
+.table-filters-popover > summary:focus-visible {
+  border-color: rgba(217, 119, 6, .42);
+  outline: 0;
+}
+.table-filters-popover[open] > summary {
+  border-color: var(--accent, #d97706);
+  background: #fff3e6;
+  color: var(--accent-strong, #b45309);
+  box-shadow: inset 0 1px 2px rgba(180, 83, 9, .12);
+  transform: translateY(1px);
+}
+
+.table-filters-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(560px, calc(100vh - 140px));
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--color-border, rgba(28, 56, 46, 0.12));
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-surface, #fff);
+  box-shadow: 0 14px 30px rgba(49, 37, 23, .16);
+}
+
+.table-filters-panel.filters-grid {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  margin-bottom: 0;
+}
+.table-filters-panel.filters-grid-compact { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+.table-filters-panel .field > span { display: block; }
+.table-filter-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(28, 56, 46, .12));
+}
+.table-filter-actions .button { min-width: 82px; }
+
+@media (max-width: 640px) {
+  .table-filter-bar > .field { flex-basis: 100%; max-width: none; }
+  .table-filters-popover { position: static; }
+  .table-filters-panel { left: 0; right: auto; width: calc(100vw - 32px); }
+  .table-filters-panel.filters-grid,
+  .table-filters-panel.filters-grid-compact { grid-template-columns: 1fr; }
+}
+
 .list-toolbar .bookings-stage-toggle {
   width: 100%;
   justify-content: space-between;
@@ -371,7 +475,7 @@ body {
   border-bottom: 1px solid rgba(28, 56, 46, 0.1);
 }
 
-.detail-subsection {
+.detail-subsection:not(.widget-popup-panel) {
   padding: 10px 0 0;
   border: 0;
   border-radius: 0;

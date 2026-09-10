@@ -37,7 +37,16 @@ body {
 
 .shell {
   max-width: none;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px 18px 48px;
+}
+
+@supports (height: 100dvh) {
+  .shell {
+    height: 100dvh;
+  }
 }
 
 .page-header {

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice request browser check</title>
+  <link rel="stylesheet" href="../app/styles/theme.css">
+  <link rel="stylesheet" href="../app/styles/components.css">
+  <link rel="stylesheet" href="../app/styles/payments.css">
+  <link rel="stylesheet" href="../app/styles/visual-refresh.css">
+</head>
+<body>
+  <button id="trigger">Request invoice</button>
+  <pre id="result">Running...</pre>
+  <script src="../app/scripts/config.js"></script>
+  <script src="../app/scripts/helpers.js"></script>
+  <script src="../app/scripts/invoice-request.js"></script>
+  <script>
+    (async function () {
+      var ns = window.AccountingManagerApp, sendCount = 0, notices = 0, rejectSend = true, pendingSend;
+      var selector = function (value) { return document.querySelector(value); };
+      var tick = function () { return new Promise(function (resolve) { setTimeout(resolve, 0); }); };
+      function check(condition, message) { if (!condition) { throw new Error(message); } }
+      var crm = {
+        updateRecord: async function () { return { data: [{ code: 'SUCCESS' }] }; },
+        getRecord: async function () { return { id: '456', Vendor_Name: 'Corral de la Morería' }; },
+        searchRecordPage: async function (module) {
+          return module === 'Contacts' ? [
+            { Full_Name: 'Accounts', Contact_Type: 'AC - Accounts', Status: 'Active', Email: 'accounts@example.com' },
+            { Full_Name: 'Alternative', Contact_Type: 'Reservations', Status: 'Active', Email: 'alternative@example.com' },
+            { Full_Name: 'No email', Status: 'Active' }
+          ] : [
+            { Service_Date: '2026-10-06', Product_Description: 'Cena y espectáculo flamenco', Guests: 'Cohen' },
+            { Service_Date: '2026-10-07', Product_Description: 'Cena', Guests: 'Cohen' }
+          ];
+        },
+        executeFunction: function (name, args) {
+          sendCount++;
+          check(args.recipientEmail === 'alternative@example.com', 'Edited contact must be sent');
+          check(args.emailSubject === 'Edited subject', 'Edited subject must be sent');
+          return new Promise(function (resolve) { pendingSend = function () { resolve(rejectSend ? { success: false, message: 'Simulated rejection' } : { success: true }); }; });
+        }
+      };
+      var instance = ns.createInvoiceRequestModule({
+        MODULES: ns.MODULES, helpers: ns.helpers, crm: crm,
+        resolveRecipient: async function () { return { email: 'accounts@example.com', message: 'AC - Accounts contact from CRM' }; },
+        hasValidEmailAddress: function (email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); },
+        getFunctionOutputObject: function (response) { return response; },
+        renderer: { showNotice: function () { notices++; } }
+      });
+      var settlement = { id: '123', Supplier: { id: '456' } };
+      var booking = { MFSP_Reference: 'MFSP150857E', Account_Name: { name: 'Cohen' } };
+      try {
+        await instance.open(settlement, booking, selector('#trigger'));
+        check(selector('[role="dialog"]').getClientRects().length > 0, 'Draft dialog opens');
+        check(sendCount === 0, 'Opening must not send');
+        check(selector('[data-request-email]').value === 'accounts@example.com', 'Default contact selected');
+        if (location.search === '?preview') { selector('#result').textContent = 'PREVIEW READY'; return; }
+        selector('[data-request-contacts]').click();
+        await tick();
+        check(selector('[data-contact-index="2"]').disabled, 'Contact without email cannot be selected');
+        selector('[data-contact-index="1"]').click();
+        check(selector('[data-request-email]').value === 'alternative@example.com', 'Other contact selected');
+        selector('[data-request-subject]').value = 'Edited subject';
+        selector('[data-request-send]').click();
+        selector('[data-request-send]').click();
+        check(sendCount === 1, 'Double click does not send twice');
+        check(selector('[data-request-close]').disabled, 'Close is disabled during send');
+        pendingSend();
+        await tick();
+        check(selector('[data-request-warning]').textContent === 'Simulated rejection', 'Failure is shown');
+        check(selector('[data-request-subject]').value === 'Edited subject', 'Failure preserves draft');
+        rejectSend = false;
+        selector('[data-request-send]').click();
+        pendingSend();
+        await tick();
+        check(!selector('[role="dialog"]'), 'Successful send closes draft');
+        check(notices === 1, 'Successful send is confirmed');
+        check(document.activeElement === selector('#trigger'), 'Focus restored');
+        var opening = instance.open(settlement, booking, selector('#trigger'));
+        instance.close();
+        await opening;
+        check(!selector('[role="dialog"]'), 'Late load does not reopen closed draft');
+        selector('#result').textContent = 'PASS: open, no automatic send, default recipient, contact selection, disabled invalid contact, double-send guard, error preservation, successful send, focus restoration, stale load';
+      } catch (error) {
+        selector('#result').textContent = 'FAIL: ' + error.message;
+      }
+    }());
+  </script>
+</body>
+</html>

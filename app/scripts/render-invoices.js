@@ -326,7 +326,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         setTextWithTitle(elements.selectedInvoiceAccountingPostedAt, helpers.textValue(view.selectedInvoice.Accounting_Posted_At));
       }
       elements.selectedInvoiceDeletePanel.hidden = !state.invoiceDeletion.isOpen;
-      elements.selectedInvoiceDeleteUpdateSettlement.checked = Boolean(state.invoiceDeletion.updateSettlement);
+      elements.selectedInvoiceDeleteUpdateSettlement.checked = true;
       if (elements.selectedInvoiceTabBasic) {
         elements.selectedInvoiceTabBasic.classList.toggle("is-active", isInfoTab);
         elements.selectedInvoiceTabBasic.setAttribute("aria-selected", isInfoTab ? "true" : "false");
@@ -353,9 +353,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (view.selectedInvoiceDeleteImpact) {
-        elements.selectedInvoiceDeleteCopy.textContent = view.selectedInvoiceDeleteImpact.settlementName
-          ? "Delete this invoice? This cannot be undone and may leave settlement totals inconsistent."
-          : "Delete this invoice? This action cannot be undone.";
+        elements.selectedInvoiceDeleteCopy.textContent = "Delete this invoice and its lines, allocations and unposted accounting entries? This action cannot be undone.";
         elements.selectedInvoiceDeleteWarning.textContent = view.selectedInvoiceDeleteImpact.warningMessage;
         elements.selectedInvoiceDeleteWarning.hidden = !view.selectedInvoiceDeleteImpact.warningMessage;
       } else {
@@ -421,6 +419,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function renderInvoiceTable(view, listState, callbacks) {
       var currentToggleAllInvoices;
+      var invoiceColumns = [
+        { key: "supplierCode", label: "Supplier code" }, { key: "mfsp", label: "MFSP" },
+        { key: "invoice", label: "Invoice" }, { key: "attachment", label: "Attachment" },
+        { key: "date", label: "Date" }, { key: "total", label: "Total Payable Amount" },
+        { key: "status", label: "Status" }, { key: "invoiceType", label: "Invoice Type" }
+      ];
+      ns.tableColumns.configure("invoices", invoiceColumns, function () { renderInvoiceTable(view, listState, callbacks); });
+      var visibleInvoiceColumns = ns.tableColumns.visibleOrder("invoices").filter(function (key) { return key !== "attachment" || listState.showAttachments; });
 
       if (!view.filteredRecords.length) {
         elements.invoicesEmpty.textContent = view.emptyMessage;
@@ -436,37 +442,27 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (elements.invoicesTableHead) {
-        elements.invoicesTableHead.innerHTML = listState.showAttachments ? [
-          "<tr>",
-          '  <th class="checkbox-column"><input id="toggle-all-invoices" class="table-checkbox" type="checkbox" aria-label="Select visible invoices"></th>',
-          "  <th data-invoice-sort=\"supplierCode\">Supplier code</th>",
-          "  <th data-invoice-sort=\"mfsp\">MFSP</th>",
-          "  <th data-invoice-sort=\"invoice\">Invoice</th>",
-          '  <th class="invoice-attachment-files-column">Attachment</th>',
-          "  <th data-invoice-sort=\"date\">Date</th>",
-          "  <th class=\"numeric-cell\" data-invoice-sort=\"total\">Total Payable Amount</th>",
-          "  <th data-invoice-sort=\"status\">Status</th>",
-          "  <th data-invoice-sort=\"invoiceType\">Invoice Type</th>",
-          "</tr>"
-        ].join("") : [
-          "<tr>",
-          '  <th class="checkbox-column"><input id="toggle-all-invoices" class="table-checkbox" type="checkbox" aria-label="Select visible invoices"></th>',
-          "  <th data-invoice-sort=\"supplierCode\">Supplier code</th>",
-          "  <th data-invoice-sort=\"mfsp\">MFSP</th>",
-          "  <th data-invoice-sort=\"invoice\">Invoice</th>",
-          "  <th data-invoice-sort=\"date\">Date</th>",
-          "  <th class=\"numeric-cell\" data-invoice-sort=\"total\">Total Payable Amount</th>",
-          "  <th data-invoice-sort=\"status\">Status</th>",
-          "  <th data-invoice-sort=\"invoiceType\">Invoice Type</th>",
-          "</tr>"
-        ].join("");
+        var headers = {
+          supplierCode: '<th data-invoice-sort="supplierCode">Supplier code</th>', mfsp: '<th data-invoice-sort="mfsp">MFSP</th>',
+          invoice: '<th data-invoice-sort="invoice">Invoice</th>', attachment: '<th class="invoice-attachment-files-column">Attachment</th>',
+          date: '<th data-invoice-sort="date">Date</th>', total: '<th class="numeric-cell" data-invoice-sort="total">Total Payable Amount</th>',
+          status: '<th data-invoice-sort="status">Status</th>', invoiceType: '<th data-invoice-sort="invoiceType">Invoice Type</th>'
+        };
+        elements.invoicesTableHead.innerHTML = '<tr><th class="checkbox-column"><input id="toggle-all-invoices" class="table-checkbox" type="checkbox" aria-label="Select visible invoices"></th>' + visibleInvoiceColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, headers[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("invoices") + "</th></tr>";
       }
 
       currentToggleAllInvoices = elements.invoicesTableHead
         ? elements.invoicesTableHead.querySelector("#toggle-all-invoices")
         : elements.toggleAllInvoices;
 
+      var previousGroupKey = null;
       elements.invoicesTableBody.innerHTML = view.visibleRecords.map(function (invoice) {
+        var group = view.getGroup(invoice);
+        var groupHeader = "";
+        if (group && group.key !== previousGroupKey) {
+          groupHeader = '<tr class="invoice-group-row"><th scope="rowgroup" colspan="' + (visibleInvoiceColumns.length + 2) + '">' + helpers.escapeHtml(group.label) + '</th></tr>';
+          previousGroupKey = group.key;
+        }
         var isActive = invoice.id === view.selectedDetailId;
         var isChecked = Boolean(state.views.invoices.selectedIds[invoice.id]);
         var supplierDisplay = view.getSupplierDisplay
@@ -486,30 +482,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           }).join("") + "</div>";
         }
 
-        return (listState.showAttachments ? [
-          '<tr class="is-clickable' + (isActive ? " is-active" : "") + (isChecked ? " is-checked" : "") + '" data-invoice-id="' + helpers.escapeHtml(invoice.id) + '">',
-          '  <td class="checkbox-column"><input class="table-checkbox" type="checkbox" data-invoice-checkbox="' + helpers.escapeHtml(invoice.id) + '"' + (isChecked ? " checked" : "") + ' aria-label="Select invoice"></td>',
-          "  <td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(view.getMfsp(invoice) || "-") + "</td>",
-          '  <td><a class="supplier-inline-link invoice-native-link" href="#" data-invoice-open-native="' + helpers.escapeHtml(invoice.id) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</a></td>",
-          '  <td class="invoice-attachment-files-cell">' + attachmentMarkup + "</td>",
-          "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(formatCandidateCurrency(invoice, fieldCandidates.invoice.totalPayableAmount, fieldCandidates.invoice.invoiceTotal)) + "</td>",
-          "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml(invoice.Status || "-") + "</span></td>",
-          "  <td>" + formatInvoiceTypeBadge(invoice) + "</td>",
-          "</tr>"
-        ] : [
-          '<tr class="is-clickable' + (isActive ? " is-active" : "") + (isChecked ? " is-checked" : "") + '" data-invoice-id="' + helpers.escapeHtml(invoice.id) + '">',
-          '  <td class="checkbox-column"><input class="table-checkbox" type="checkbox" data-invoice-checkbox="' + helpers.escapeHtml(invoice.id) + '"' + (isChecked ? " checked" : "") + ' aria-label="Select invoice"></td>',
-          "  <td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(view.getMfsp(invoice) || "-") + "</td>",
-          '  <td><a class="supplier-inline-link invoice-native-link" href="#" data-invoice-open-native="' + helpers.escapeHtml(invoice.id) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</a></td>",
-          "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(formatCandidateCurrency(invoice, fieldCandidates.invoice.totalPayableAmount, fieldCandidates.invoice.invoiceTotal)) + "</td>",
-          "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml(invoice.Status || "-") + "</span></td>",
-          "  <td>" + formatInvoiceTypeBadge(invoice) + "</td>",
-          "</tr>"
-        ]).join("");
+        var cells = {
+          supplierCode: "<td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>", mfsp: "<td>" + helpers.escapeHtml(view.getMfsp(invoice) || "-") + "</td>",
+          invoice: '<td><a class="supplier-inline-link invoice-native-link" href="#" data-invoice-open-native="' + helpers.escapeHtml(invoice.id) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</a></td>",
+          attachment: '<td class="invoice-attachment-files-cell">' + attachmentMarkup + "</td>", date: "<td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
+          total: '<td class="numeric-cell">' + helpers.escapeHtml(formatCandidateCurrency(invoice, fieldCandidates.invoice.totalPayableAmount, fieldCandidates.invoice.invoiceTotal)) + "</td>",
+          status: "<td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml(invoice.Status || "-") + "</span></td>", invoiceType: "<td>" + formatInvoiceTypeBadge(invoice) + "</td>"
+        };
+        return groupHeader + '<tr class="is-clickable' + (isActive ? " is-active" : "") + (isChecked ? " is-checked" : "") + '" data-invoice-id="' + helpers.escapeHtml(invoice.id) + '"><td class="checkbox-column"><input class="table-checkbox" type="checkbox" data-invoice-checkbox="' + helpers.escapeHtml(invoice.id) + '"' + (isChecked ? " checked" : "") + ' aria-label="Select invoice"></td>' + visibleInvoiceColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
       }).join("");
 
       elements.invoicesEmpty.hidden = true;
@@ -650,6 +630,19 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         onShowAttachmentsChange: onShowAttachmentsChange || function () {}
       };
 
+      if (elements.invoiceFilterNumber) {
+        elements.invoiceFilterNumber.value = view.filters.invoiceNumber || "";
+      }
+      elements.invoiceFilterSelfEmployed.value = view.filters.selfEmployed || "";
+      elements.invoicesGroupBy.value = view.groupBy;
+      var destinationValues = view.filters.destinationValues || ["Empty", "Spain", "Portugal"];
+      elements.invoiceFilterDestinationToggle.textContent = destinationValues.length === 3 ? "All destinations"
+        : destinationValues.length ? destinationValues.join(", ") : "No destinations";
+      elements.invoiceFilterDestinationToggle.setAttribute("aria-expanded", state.views.invoices.destinationDropdownOpen ? "true" : "false");
+      elements.invoiceFilterDestinationMenu.hidden = !state.views.invoices.destinationDropdownOpen;
+      elements.invoiceFilterDestinationMenu.innerHTML = '<div class="status-filter-menu-actions"><button class="status-filter-menu-action" type="button" data-destination-action="select-all">Select all</button><button class="status-filter-menu-action" type="button" data-destination-action="clear-all">Deselect all</button></div>' + ["Empty", "Spain", "Portugal"].map(function (value) {
+        return '<label class="bookings-stage-option"><input type="checkbox" data-destination-value="' + value + '"' + (destinationValues.indexOf(value) !== -1 ? ' checked' : '') + '><span>' + value + '</span></label>';
+      }).join("");
       if (elements.invoiceFilterSupplierCode) {
         elements.invoiceFilterSupplierCode.value = view.filters.supplierCode || "";
       }
@@ -658,7 +651,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
       if (elements.invoiceFilterDatePreset) {
         elements.invoiceFilterDatePreset.value = view.filters.datePreset || "specific";
-        elements.invoiceFilterDatePreset.closest(".filters-grid").classList.toggle("is-custom-date-range", isSpecificDateRange);
+        var invoiceFilterToolbar = elements.invoiceFilterDatePreset.closest(".list-toolbar");
+        if (invoiceFilterToolbar) {
+          invoiceFilterToolbar.classList.toggle("is-custom-date-range", isSpecificDateRange);
+        }
       }
       if (elements.invoiceFilterDateFrom) {
         elements.invoiceFilterDateFrom.value = view.filters.dateFrom || "";

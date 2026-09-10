@@ -12,6 +12,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var getNormalizedStatusFilterValues = deps.getNormalizedStatusFilterValues;
     var hasAnyLoadFilterValue = deps.hasAnyLoadFilterValue;
     var getMfspFromPayment = deps.getMfspFromPayment;
+    var getPaymentMfspValues = deps.getPaymentMfspValues;
     var getPaymentSupplierCodeValues = deps.getPaymentSupplierCodeValues;
     var buildLocalPageSummary = deps.buildLocalPageSummary;
     var buildCombinedStatusOptions = deps.buildCombinedStatusOptions;
@@ -190,10 +191,21 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var selectedPaymentDetailTab = normalizePaymentDetailTab(state.views.payments.detailTab || "payment");
       var hasCurrentFilters = hasAnyLoadFilterValue(filters);
       var selectedStatuses = getNormalizedStatusFilterValues(appliedFilters.statusValues);
+      var paymentView = state.views.payments.view || "open";
+      var hasExplicitStatusFilter = selectedStatuses.length && selectedStatuses.length < PAYMENT_STATUS_FILTER_OPTIONS.length;
       var filteredRecords = records.filter(function (payment) {
         var paymentDate = helpers.toIsoDate(payment.Payment_Date);
+        var status = String(payment.Status || "").trim().toLowerCase();
 
-        if (selectedStatuses.length && selectedStatuses.indexOf(String(payment.Status || "")) === -1) {
+        if (paymentView === "open" && status !== "pending payment") {
+          return false;
+        }
+
+        if (paymentView === "closed" && status !== "paid" && status !== "cancelled") {
+          return false;
+        }
+
+        if (hasExplicitStatusFilter && selectedStatuses.indexOf(String(payment.Status || "")) === -1) {
           return false;
         }
 
@@ -205,15 +217,22 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           return false;
         }
 
-        if (appliedFilters.mfsp && !helpers.matchesText(getMfspFromPayment(payment), appliedFilters.mfsp)) {
+        if (appliedFilters.mfsp && !getPaymentMfspValues(payment).some(function (value) { return helpers.matchesText(value, appliedFilters.mfsp); })) {
+          return false;
+        }
+
+        if (appliedFilters.paymentName && ![
+          helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.reference),
+          payment.Name
+        ].some(function (value) {
+          return helpers.matchesText(value, appliedFilters.paymentName);
+        })) {
           return false;
         }
 
         if (appliedFilters.supplierCode && !getPaymentSupplierCodeValues(payment).some(function (value) {
           return helpers.matchesText(value, appliedFilters.supplierCode);
-        })) {
-          return false;
-        }
+        })) { return false; }
 
         return true;
       });
@@ -257,7 +276,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         countLabel: state.views.payments.hasLoaded
           ? filteredRecords.length + (filteredRecords.length === 1 ? " payment" : " payments")
           : "0 payments",
-        statusOptions: buildCombinedStatusOptions(PAYMENT_STATUS_FILTER_OPTIONS, filteredRecords, "Status"),
+        statusOptions: ns.getWorkspaceStatusValues("payments", paymentView, buildCombinedStatusOptions(PAYMENT_STATUS_FILTER_OPTIONS, records, "Status").map(function (option) { return option.value; }))
+          .map(function (value) { return { value: value, label: value }; }),
         emptyMessage: state.currentTab === "payments" && state.isLoading
           ? "Loading payments..."
           : state.views.payments.hasLoaded || !hasCurrentFilters

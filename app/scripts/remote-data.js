@@ -159,6 +159,20 @@
       return fieldName + " in (" + normalizedValues.join(", ") + ")";
     }
 
+    // COQL requires three or more criteria to be explicitly grouped as binary
+    // expressions. A plain "A or B or C" is rejected as a parsing error.
+    function buildCoqlLogicalClause(operator, clauses) {
+      var normalizedClauses = (clauses || []).filter(Boolean);
+
+      if (!normalizedClauses.length) {
+        return "";
+      }
+
+      return normalizedClauses.reduce(function (combinedClause, clause) {
+        return combinedClause ? "(" + combinedClause + " " + operator + " " + clause + ")" : clause;
+      }, "");
+    }
+
     function buildCoqlPageQuery(moduleName, fields, options) {
       var settings = options || {};
       var page = Math.max(1, Number(settings.page) || 1);
@@ -231,7 +245,20 @@
       var conditions = [];
       var mfsp = String(filters && filters.mfsp || "").trim();
       var supplierCode = String(filters && filters.supplierCode || "").trim();
+      var invoiceNumber = String(filters && filters.invoiceNumber || "").trim();
       var invoiceType = String(filters && filters.invoiceType || "").trim();
+      var destinations = filters && filters.destinationValues;
+      var selfEmployed = String(filters && filters.selfEmployed || "");
+      if (Array.isArray(destinations) && destinations.length < 3) {
+        var destinationConditions = destinations.map(function (value) {
+          return value === "Empty" ? "Supplier.Destination is null"
+            : "Supplier.Destination = '" + escapeCoqlValue(value) + "'";
+        });
+        conditions.push(destinationConditions.length ? buildCoqlLogicalClause("or", destinationConditions) : "id = '__none__'");
+      }
+      if (selfEmployed === "true" || selfEmployed === "false") {
+        conditions.push("Supplier.Is_Self_Employed = " + selfEmployed);
+      }
       var selectedStatuses = getNormalizedStatusFilterValues(filters && filters.statusValues);
       var invoiceView = String(filters && filters.invoiceView || "open").trim().toLowerCase();
       var viewStatuses = invoiceView === "closed"
@@ -242,8 +269,8 @@
       var statusesToLoad;
       var statusFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Status"], "Status");
       var dateFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Date", "Invoice Date"], "Invoice_Date");
-      var supplierCodeFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Supplier_Code", "Supplier Code", "TP_Reference", "Connection_Reference", "Supplier_Connection_Reference", "Supplier Connection Reference"], "Supplier_Code");
       var mfspFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["MFSP_Reference", "MFSP Reference"], "MFSP_Reference");
+      var invoiceNameFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Name", "Invoice_Number", "Invoice Number"], "Name");
       var invoiceTypeFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Type", "Invoice Type"], "Invoice_Type");
 
       if (settings.pendingOnly) {
@@ -275,14 +302,19 @@
       }
 
       if (supplierCode) {
+        var supplierCodeFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Supplier_Code", "Supplier Code", "TP_Reference", "Connection_Reference", "Supplier_Connection_Reference", "Supplier Connection Reference"], "Supplier_Code");
         conditions.push(supplierCodeFieldApi + " like '%" + escapeCoqlValue(supplierCode) + "%'");
+      }
+
+      if (invoiceNumber) {
+        conditions.push(invoiceNameFieldApi + " like '%" + escapeCoqlValue(invoiceNumber) + "%'");
       }
 
       if (mfsp) {
         conditions.push(mfspFieldApi + " like '%" + escapeCoqlValue(mfsp) + "%'");
       }
 
-      return conditions.filter(Boolean).join(" and ");
+      return buildCoqlLogicalClause("and", conditions);
     }
 
     async function buildInvoiceRemoteOrderByClause(sort) {
@@ -311,10 +343,11 @@
       var conditions = [];
       var ids = helpers.uniqueNonEmpty(paymentIds || []);
       var mfsp = String(filters && filters.mfsp || "").trim();
-      var supplierCode = String(filters && filters.supplierCode || "").trim();
+      var paymentName = String(filters && filters.paymentName || "").trim();
       var selectedStatuses = getNormalizedStatusFilterValues(filters && filters.statusValues);
       var statusFieldApi = await resolveFieldApiByCandidates(MODULES.payments, ["Status", "Payment_Status", "Payment Status"], "Status");
       var dateFieldApi = await resolveFieldApiByCandidates(MODULES.payments, ["Payment_Date", "Payment Date"], "Payment_Date");
+      var paymentNameFieldApi = await resolveFieldApiByCandidates(MODULES.payments, ["Name", "Payment_Name", "Payment Name"], "Name");
 
       if (selectedStatuses.length && !hasAllStatusFilterValuesSelected(selectedStatuses, PAYMENT_STATUS_FILTER_OPTIONS)) {
         conditions.push(buildCoqlOrEqualsClause(statusFieldApi, selectedStatuses));
@@ -328,13 +361,17 @@
         conditions.push(dateFieldApi + " <= '" + escapeCoqlValue(filters.dateTo) + "'");
       }
 
+      if (paymentName) {
+        conditions.push(paymentNameFieldApi + " like '%" + escapeCoqlValue(paymentName) + "%'");
+      }
+
       if (ids.length) {
         conditions.push(buildCoqlOrEqualsClause("id", ids));
-      } else if (supplierCode || mfsp) {
+      } else if (mfsp) {
         conditions.push("id = '__none__'");
       }
 
-      return conditions.filter(Boolean).join(" and ");
+      return buildCoqlLogicalClause("and", conditions);
     }
 
     async function buildPaymentRemoteOrderByClause() {

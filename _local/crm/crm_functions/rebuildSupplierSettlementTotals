@@ -47,6 +47,7 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 				else
 				{
 					warningsList = res.get("warnings");
+					res.put("error",true);
 					warningsList.add("Settlement not found: " + settlementId);
 					res.put("warnings",warningsList);
 				}
@@ -82,103 +83,116 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 				allocationCount = 0;
 				distinctPaymentIds = Map();
 
-				invoiceCriteria = "(Supplier_Settlement:equals:" + settlementId + ")";
-
+				// Include both direct invoices and invoices distributed through
+				// Inv_Set_Allocations; never count the full invoice twice.
+				invoiceRecordsById = Map();
+				settlementAmountsByInvoiceId = Map();
+				splitCriteria = "(Vendor_Settlement:equals:" + settlementId + ")";
 				for each pageToken in pageTokens
 				{
-					pageIndex = pageToken.toLong();
-					invoiceBatch = zoho.crm.searchRecords("Supplier_Invoices",invoiceCriteria,pageIndex,200);
-
-					if(invoiceBatch == null || invoiceBatch.isEmpty())
+					splitBatch = zoho.crm.searchRecords("Inv_Set_Allocations",splitCriteria,pageToken.toLong(),200);
+					if(splitBatch == null || splitBatch.isEmpty()) { break; }
+					for each splitRecord in splitBatch
 					{
-						break;
+						if(splitRecord == null || !splitRecord.containKey("id")) { res.put("error",true); res.put("message","Could not read settlement allocations."); return res; }
+						if(ifnull(splitRecord.get("Status"),"") != "Void")
+						{
+						    invoiceLookup = splitRecord.get("Vendor_Invoice");
+						    if(invoiceLookup != null)
+						    {
+						        splitInvoiceId = invoiceLookup.get("id").toString();
+						        settlementAmountsByInvoiceId.put(splitInvoiceId,ifnull(settlementAmountsByInvoiceId.get(splitInvoiceId),0).toDecimal() + ifnull(splitRecord.get("Allocated_Amount"),0).toDecimal());
+						    }
+						}
 					}
-
+					if(splitBatch.size() < 200) { break; }
+					if(pageToken == "25") { res.put("error",true); res.put("message","Settlement allocation pagination limit reached."); return res; }
+				}
+				invoiceCriteria = "(Supplier_Settlement:equals:" + settlementId + ")";
+				for each pageToken in pageTokens
+				{
+					invoiceBatch = zoho.crm.searchRecords("Supplier_Invoices",invoiceCriteria,pageToken.toLong(),200);
+					if(invoiceBatch == null || invoiceBatch.isEmpty()) { break; }
 					for each invoiceRecord in invoiceBatch
 					{
-						if(invoiceRecord == null || !invoiceRecord.containKey("id"))
-						{
-							continue;
-						}
-
-						invoiceCount = invoiceCount + 1;
-						invoiceTotal = 0.0;
-						invoicePaid = ifnull(invoiceRecord.get("Amount_Paid"),0).toDecimal();
-						invoiceType = ifnull(invoiceRecord.get("Invoice_Type"),"").toString().trim();
-						invoiceSign = 1.0;
-
-						if(invoiceRecord.get("Invoice_Total") != null)
-						{
-							invoiceTotal = ifnull(invoiceRecord.get("Invoice_Total"),0).toDecimal();
-						}
-						else if(invoiceRecord.get("Total_Payable_Amount") != null)
-						{
-							invoiceTotal = ifnull(invoiceRecord.get("Total_Payable_Amount"),0).toDecimal();
-						}
-						else if(invoiceRecord.get("Total_Amount") != null)
-						{
-							invoiceTotal = ifnull(invoiceRecord.get("Total_Amount"),0).toDecimal();
-						}
-
-						if(invoiceType == "Credit Note")
-						{
-							invoiceSign = -1.0;
-							creditNoteAmountFromInvoices = creditNoteAmountFromInvoices + invoiceTotal;
-						}
-						else
-						{
-							grossInvoiceAmountFromInvoices = grossInvoiceAmountFromInvoices + invoiceTotal;
-						}
-
-						totalInvoiceFromInvoices = totalInvoiceFromInvoices + (invoiceTotal * invoiceSign);
-						totalPaidFromInvoices = totalPaidFromInvoices + (invoicePaid * invoiceSign);
+						if(invoiceRecord == null || !invoiceRecord.containKey("id")) { res.put("error",true); res.put("message","Could not read settlement invoices."); return res; }
+						invoiceRecordsById.put(invoiceRecord.get("id").toString(),invoiceRecord);
 					}
-
-					if(invoiceBatch.size() < 200)
+					if(invoiceBatch.size() < 200) { break; }
+					if(pageToken == "25") { res.put("error",true); res.put("message","Invoice pagination limit reached."); return res; }
+				}
+				for each splitInvoiceId in settlementAmountsByInvoiceId.keys()
+				{
+					if(!invoiceRecordsById.containKey(splitInvoiceId))
 					{
-						break;
+						splitInvoice = zoho.crm.getRecordById("Supplier_Invoices",splitInvoiceId.toLong());
+						if(splitInvoice == null || !splitInvoice.containKey("id")) { res.put("error",true); res.put("message","An allocated invoice could not be loaded: " + splitInvoiceId); return res; }
+						invoiceRecordsById.put(splitInvoiceId,splitInvoice);
 					}
 				}
-
+				for each invoiceId in invoiceRecordsById.keys()
+				{
+					invoiceRecord = invoiceRecordsById.get(invoiceId);
+					invoiceCount = invoiceCount + 1;
+					fullInvoiceTotal = ifnull(invoiceRecord.get("Invoice_Total"),ifnull(invoiceRecord.get("Total_Payable_Amount"),ifnull(invoiceRecord.get("Total_Amount"),0))).toDecimal();
+					invoiceTotal = fullInvoiceTotal;
+					hasActiveSplits = false;
+					for each pageToken in pageTokens
+					{
+						invoiceSplitBatch = zoho.crm.searchRecords("Inv_Set_Allocations","(Vendor_Invoice:equals:" + invoiceId + ")",pageToken.toLong(),200);
+						if(invoiceSplitBatch == null || invoiceSplitBatch.isEmpty()) { break; }
+						for each invoiceSplit in invoiceSplitBatch
+						{
+						    if(invoiceSplit == null || !invoiceSplit.containKey("id")) { res.put("error",true); res.put("message","Could not read invoice allocations."); return res; }
+						    if(ifnull(invoiceSplit.get("Status"),"") != "Void") { hasActiveSplits = true; }
+						}
+						if(invoiceSplitBatch.size() < 200) { break; }
+						if(pageToken == "25") { res.put("error",true); res.put("message","Invoice allocation pagination limit reached."); return res; }
+					}
+					if(hasActiveSplits) { invoiceTotal = ifnull(settlementAmountsByInvoiceId.get(invoiceId),0).toDecimal(); }
+					invoiceSign = 1.0;
+					if(ifnull(invoiceRecord.get("Invoice_Type"),"") == "Credit Note")
+					{
+						invoiceSign = -1.0;
+						creditNoteAmountFromInvoices = creditNoteAmountFromInvoices + invoiceTotal;
+					}
+					else { grossInvoiceAmountFromInvoices = grossInvoiceAmountFromInvoices + invoiceTotal; }
+					totalInvoiceFromInvoices = totalInvoiceFromInvoices + invoiceTotal * invoiceSign;
+					invoicePaid = ifnull(invoiceRecord.get("Amount_Paid"),0).toDecimal();
+					if(hasActiveSplits && fullInvoiceTotal != 0) { invoicePaid = invoicePaid * invoiceTotal / fullInvoiceTotal; }
+					totalPaidFromInvoices = totalPaidFromInvoices + invoicePaid * invoiceSign;
+				}
 				allocationCriteria = "(Supplier_Settlement:equals:" + settlementId + ")";
-
 				for each pageToken in pageTokens
 				{
-					pageIndex = pageToken.toLong();
-					allocationBatch = zoho.crm.searchRecords("Supplier_Pay_Allocations",allocationCriteria,pageIndex,200);
-
-					if(allocationBatch == null || allocationBatch.isEmpty())
-					{
-						break;
-					}
-
+					allocationBatch = zoho.crm.searchRecords("Supplier_Pay_Allocations",allocationCriteria,pageToken.toLong(),200);
+					if(allocationBatch == null || allocationBatch.isEmpty()) { break; }
 					for each allocationRecord in allocationBatch
 					{
-						if(allocationRecord == null || !allocationRecord.containKey("id"))
-						{
-							continue;
-						}
-
+						if(allocationRecord == null || !allocationRecord.containKey("id")) { res.put("error",true); res.put("message","Could not read payment allocations."); return res; }
 						allocationCount = allocationCount + 1;
-						totalPaidFromAllocations = totalPaidFromAllocations + ifnull(allocationRecord.get("Allocated_Amount"),0).toDecimal();
-						paymentLookup = allocationRecord.get("Supplier_Payment");
-
-						if(paymentLookup != null)
+						allocationSign = 1.0;
+						paidInvoiceLookup = allocationRecord.get("Supplier_Invoice");
+						if(paidInvoiceLookup != null)
 						{
-							paymentId = ifnull(paymentLookup.get("id"),"").toString().trim();
-
-							if(paymentId != "")
-							{
-								distinctPaymentIds.put(paymentId,true);
-							}
+						    paidInvoiceId = paidInvoiceLookup.get("id").toString();
+						    paidInvoice = invoiceRecordsById.get(paidInvoiceId);
+						    if(paidInvoice == null) { paidInvoice = zoho.crm.getRecordById("Supplier_Invoices",paidInvoiceId.toLong()); }
+						    if(paidInvoice == null || !paidInvoice.containKey("id")) { res.put("error",true); res.put("message","A paid invoice could not be loaded: " + paidInvoiceId); return res; }
+						    if(ifnull(paidInvoice.get("Invoice_Type"),"") == "Credit Note") { allocationSign = -1.0; }
 						}
+						totalPaidFromAllocations = totalPaidFromAllocations + ifnull(allocationRecord.get("Allocated_Amount"),0).toDecimal() * allocationSign;
+						paymentLookup = allocationRecord.get("Supplier_Payment");
+						if(paymentLookup != null) { distinctPaymentIds.put(paymentLookup.get("id").toString(),true); }
 					}
-
-					if(allocationBatch.size() < 200)
-					{
-						break;
-					}
+					if(allocationBatch.size() < 200) { break; }
+					if(pageToken == "25") { res.put("error",true); res.put("message","Payment allocation pagination limit reached."); return res; }
 				}
+				grossInvoiceAmountFromInvoices = grossInvoiceAmountFromInvoices.round(2);
+				creditNoteAmountFromInvoices = creditNoteAmountFromInvoices.round(2);
+				totalInvoiceFromInvoices = totalInvoiceFromInvoices.round(2);
+				totalPaidFromInvoices = totalPaidFromInvoices.round(2);
+				totalPaidFromAllocations = totalPaidFromAllocations.round(2);
 
 				hasPaymentMismatch = totalPaidFromAllocations != totalPaidFromInvoices;
 				isOverpaid = false;
@@ -190,36 +204,28 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 				{
 					isOverpaid = true;
 				}
-				nextStatus = currentStatus;
-
-				if(hasPaymentMismatch)
+				// Only use values present in Supplier_Settlements.Admin_Status.
+				// Mismatch/overpayment remain warnings, not invalid picklist values.
+				nextStatus = "Pending Invoice";
+				serviceCost = ifnull(settlementRecord.get("Total_Service_Cost"),0).toDecimal();
+				serviceCount = ifnull(settlementRecord.get("Service_Count"),0).toLong();
+				if(currentStatus == "Cancelled") { nextStatus = "Cancelled"; }
+				else if(totalPaidFromAllocations > 0)
 				{
-					nextStatus = "Payment Mismatch";
-				}
-				else if(isOverpaid)
-				{
-					nextStatus = "Overpaid";
+					if(totalInvoiceFromInvoices > 0 && totalPaidFromAllocations >= totalInvoiceFromInvoices) { nextStatus = "Paid"; }
+					else { nextStatus = "Partially Paid"; }
 				}
 				else if(totalInvoiceFromInvoices > 0)
 				{
-					if(totalPaidFromInvoices >= totalInvoiceFromInvoices)
-					{
-						nextStatus = "Paid";
-					}
-					else if(totalPaidFromInvoices > 0)
-					{
-						nextStatus = "Partially Paid";
-					}
-					else
-					{
-						// Admin_Status is a CRM picklist. "To Be Paid" is not one of
-						// its valid values, which makes CRM reject the whole updateMap
-						// (including Total_Paid and the other recalculated totals).
-						nextStatus = "Pending Invoice";
-					}
+					if(totalInvoiceFromInvoices < serviceCost) { nextStatus = "Partially Accounted"; }
+					else { nextStatus = "Accounted"; }
+				}
+				else if(serviceCount == 0 && serviceCost == 0 && ifnull(settlementRecord.get("Settlement_Type"),"") != "Agent Commission")
+				{
+					nextStatus = "No Services";
 				}
 
-				needsUpdate = currentGrossInvoiceAmount != grossInvoiceAmountFromInvoices || currentCreditNoteAmount != creditNoteAmountFromInvoices || currentTotalInvoice != totalInvoiceFromInvoices || currentTotalPaid != totalPaidFromInvoices || currentStatus != nextStatus;
+				needsUpdate = currentGrossInvoiceAmount != grossInvoiceAmountFromInvoices || currentCreditNoteAmount != creditNoteAmountFromInvoices || currentTotalInvoice != totalInvoiceFromInvoices || currentTotalPaid != totalPaidFromAllocations || currentStatus != nextStatus;
 
 				detail = Map();
 				detail.put("settlement_id",settlementId);
@@ -234,7 +240,7 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 				detail.put("current_total_invoice",currentTotalInvoice);
 				detail.put("new_total_invoice",totalInvoiceFromInvoices);
 				detail.put("current_total_paid",currentTotalPaid);
-				detail.put("new_total_paid",totalPaidFromInvoices);
+				detail.put("new_total_paid",totalPaidFromAllocations);
 				detail.put("allocation_total_paid",totalPaidFromAllocations);
 				detail.put("current_status",currentStatus);
 				detail.put("new_status",nextStatus);
@@ -268,9 +274,18 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 					updateMap.put("Gross_Invoice_Amount",grossInvoiceAmountFromInvoices);
 					updateMap.put("Credit_Note_Amount",creditNoteAmountFromInvoices);
 					updateMap.put("Total_Invoice",totalInvoiceFromInvoices);
-					updateMap.put("Total_Paid",totalPaidFromInvoices);
+					updateMap.put("Total_Paid",totalPaidFromAllocations);
 					updateMap.put("Admin_Status",nextStatus);
-					zoho.crm.updateRecord("Supplier_Settlements",settlementId.toLong(),updateMap);
+					updateMap.put("Closure_Review_Status","Pending review");
+					updateResult = zoho.crm.updateRecord("Supplier_Settlements",settlementId.toLong(),updateMap);
+					if(updateResult == null || !updateResult.containKey("id"))
+					{
+						res.put("error",true);
+						warningsList = res.get("warnings");
+						warningsList.add("Settlement update rejected for " + settlementId + ": " + ifnull(updateResult,Map()).toString());
+						res.put("warnings",warningsList);
+						continue;
+					}
 
 					res.put("updated_count",res.get("updated_count") + 1);
 
@@ -281,6 +296,7 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 			}
 			catch (settlementError)
 			{
+				res.put("error",true);
 				warningsList = res.get("warnings");
 				warningsList.add("Settlement update failed for " + ifnull(settlementRecord.get("id"),"unknown").toString() + ": " + settlementError.toString());
 				res.put("warnings",warningsList);
@@ -300,6 +316,7 @@ string standalone.rebuildSupplierSettlementTotals(String settlementIdsString)
 			scopeLabel = "the requested settlements";
 		}
 
+		if(ifnull(res.get("error"),false)) { modeLabel = "Rebuild incomplete. " + warningsList.toString(); }
 		res.put("message",modeLabel + " Processed " + res.get("processed_count") + " settlement(s) for " + scopeLabel + " and " + updateLabel + res.get("updated_count") + ".");
 	}
 	catch (e)

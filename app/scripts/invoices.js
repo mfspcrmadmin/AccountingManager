@@ -871,6 +871,26 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return "basic";
     }
 
+    function getInvoiceSupplierDestination(invoice) {
+      return String(invoice["Supplier.Destination"] || "").trim();
+    }
+
+    function getInvoiceGroup(invoice) {
+      var groupBy = state.views.invoices.groupBy || "none";
+      var label;
+      if (groupBy === "none") { return null; }
+      if (groupBy === "destination") {
+        label = getInvoiceSupplierDestination(invoice) || "Empty";
+        return { key: label.toLowerCase(), label: label };
+      }
+      if (groupBy === "mfsp") {
+        label = getMfspFromInvoice(invoice) || "No MFSP";
+        return { key: label, label: label };
+      }
+      label = getSupplierNameFromInvoice(invoice) || "No supplier";
+      return { key: String(helpers.getLookupId(invoice.Supplier) || label), label: label };
+    }
+
     function buildInvoicesView() {
       var records = state.records.invoices.slice();
       var filters = cloneFilterState(state.views.invoices.filters);
@@ -883,6 +903,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var filteredRecords = records.filter(function (invoice) {
         var invoiceDate = helpers.toIsoDate(invoice.Invoice_Date);
         var status = String(invoice.Status || "").trim().toLowerCase();
+        var destinations = appliedFilters.destinationValues;
+        if (Array.isArray(destinations) && destinations.length < 3 && !destinations.some(function (value) {
+          return (value === "Empty" ? "" : value.toLowerCase()) === getInvoiceSupplierDestination(invoice).toLowerCase();
+        })) { return false; }
+        if (appliedFilters.selfEmployed === "true" || appliedFilters.selfEmployed === "false") {
+          var selfEmployed = invoice["Supplier.Is_Self_Employed"];
+          if (String(selfEmployed).toLowerCase() !== appliedFilters.selfEmployed) { return false; }
+        }
 
         if (invoiceView === "closed" && status !== "paid" && status !== "cancelled" && status !== "rejected") {
           return false;
@@ -908,7 +936,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           return false;
         }
 
-        if (appliedFilters.supplierCode && !helpers.matchesText(getInvoiceSupplierCodeSortValue(invoice), appliedFilters.supplierCode)) {
+        if (appliedFilters.supplierCode && !helpers.matchesText(getInvoiceSupplierDisplay(invoice).code, appliedFilters.supplierCode)) {
+          return false;
+        }
+
+        if (appliedFilters.invoiceNumber && !helpers.matchesText([
+          helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES),
+          invoice.Name,
+          invoice.Invoice_Number
+        ].join(" "), appliedFilters.invoiceNumber)) {
           return false;
         }
 
@@ -918,6 +954,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         return true;
       }).sort(function (left, right) {
+        var leftGroup = getInvoiceGroup(left);
+        var rightGroup = getInvoiceGroup(right);
+        var groupComparison = leftGroup && rightGroup
+          ? compareValues(leftGroup.label, rightGroup.label, "asc") || compareValues(leftGroup.key, rightGroup.key, "asc") : 0;
+        if (groupComparison) { return groupComparison; }
         if (sort.key === "invoice") {
           return compareValues(
             helpers.getInvoiceDisplayNumber(left, FIELD_CANDIDATES),
@@ -1075,6 +1116,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           : "0 invoices",
         listTab: state.views.invoices.listTab || "basic",
         showAttachments: Boolean(state.views.invoices.showAttachments),
+        groupBy: state.views.invoices.groupBy || "none",
+        getGroup: getInvoiceGroup,
         selectedDetailId: selectedDetailId,
         selectedInvoice: selectedInvoice,
         selectedInvoiceDetailTab: normalizeInvoiceDetailTab(state.views.invoices.detailTab || "basic"),
@@ -1088,7 +1131,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         page: page,
         hasMore: hasMore,
         pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " invoice" : " invoices"),
-        statusOptions: INVOICE_STATUS_FILTER_OPTIONS.map(function (value) {
+        statusOptions: ns.getWorkspaceStatusValues("invoices", invoiceView, INVOICE_STATUS_FILTER_OPTIONS).map(function (value) {
           return { value: value, label: value };
         }),
         emptyMessage: state.currentTab === "invoices" && state.isLoading

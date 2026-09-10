@@ -1,0 +1,38 @@
+string standalone.crm_getTravelersForBooking(String bookingId)
+{
+travellers = List();
+// 1) Relaciones (solo de este booking)
+relations = zoho.crm.searchRecords("PAX_X_Bookings","(Bookings:equals:" + bookingId + ")");
+if(isnull(relations) || relations.isEmpty())
+{
+	return travellers;
+	// lista vacía
+}
+// 2) Sacar ids de PAX
+paxIds = List();
+for each  rel in relations
+{
+	paxRef = rel.get("PAX");
+	// lookup map {id, name}
+	paxId = ifnull(paxRef.get("id"),"");
+	if(paxId != "")
+	{
+		paxIds.add(paxId);
+	}
+}
+if(paxIds.isEmpty())
+{
+	return travellers;
+}
+// 3) Leer registros PAX (campos completos)
+// Nota: Deluge no tiene batch_get nativo fiable en todos los planes, así que lo seguro es loop.
+for each  paxId in paxIds
+{
+	pax = zoho.crm.getRecordById("PAX",paxId);
+	if(!isnull(pax) && !pax.isEmpty() && isnull(pax.get("status")))
+	{
+		travellers.add(pax);
+	}
+}
+return travellers;
+}

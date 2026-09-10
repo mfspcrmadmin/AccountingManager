@@ -151,7 +151,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           : "Rebuild totals";
       }
       if (elements.selectedInvoiceDeleteUpdateSettlement) {
-        elements.selectedInvoiceDeleteUpdateSettlement.disabled = state.isLoading || isInvoiceDeletionBusy || !hasSelectedInvoice;
+        elements.selectedInvoiceDeleteUpdateSettlement.disabled = true;
       }
       if (elements.selectedInvoiceDeleteConfirm) {
         elements.selectedInvoiceDeleteConfirm.disabled = state.isLoading || isInvoiceDeletionBusy || !hasSelectedInvoice;
@@ -164,7 +164,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.paymentsLoad.textContent = state.currentTab === "payments" && state.isLoading ? "Loading..." : "Load";
       }
       if (elements.paymentsRefresh) {
-        elements.paymentsRefresh.hidden = true;
+        elements.paymentsRefresh.disabled = state.isLoading;
       }
       if (elements.paymentAccountsRefresh) {
         elements.paymentAccountsRefresh.disabled = state.isLoading;
@@ -1139,8 +1139,37 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.bookingsFilterAccountingRep.value = state.views.bookings.filters.accountingRep || "";
       }
       if (elements.bookingsLoad) {
-        elements.bookingsLoad.textContent = state.currentTab === "bookings" && state.isLoading ? "Loading..." : "Load";
+        elements.bookingsLoad.classList.toggle("is-loading", state.currentTab === "bookings" && state.isLoading);
+        elements.bookingsLoad.setAttribute("aria-label", state.currentTab === "bookings" && state.isLoading ? "Loading bookings" : "Load bookings");
       }
+
+      var bookingColumns = [
+        {"key": "actions", "label": "Actions", "defaultWidth": 44},
+        {"key": "closureStatus", "label": "Closure Status", "defaultWidth": 200},
+        {"key": "mfsp", "label": "MFSP", "defaultWidth": 140},
+        {"key": "name", "label": "Booking Name", "defaultWidth": 250},
+        {"key": "arrivalDate", "label": "Arrival Date", "defaultWidth": 140},
+        {"key": "departureDate", "label": "Departure Date", "defaultWidth": 140},
+        {"key": "agency", "label": "Agency", "defaultWidth": 200},
+        {"key": "consortia", "label": "Consortia", "defaultWidth": 170},
+        {"key": "iataCode", "label": "IATA Code", "defaultWidth": 130},
+        {"key": "stage", "label": "Stage", "defaultWidth": 220},
+        {"key": "travellersNumber", "label": "Travelers Number", "defaultWidth": 155},
+        {"key": "salesPrice", "label": "Sales Price", "defaultWidth": 170},
+        {"key": "purchasePrice", "label": "Purchase Price", "defaultWidth": 170},
+        {"key": "grossMargin", "label": "Gross Margin", "defaultWidth": 170},
+        {"key": "netMargin", "label": "Net Margin", "defaultWidth": 170},
+        {"key": "balanceAmount", "label": "Balance Amount", "defaultWidth": 170},
+        {"key": "totalPaidAmount", "label": "Total Paid Amount", "defaultWidth": 170},
+        {"key": "totalRefundAmount", "label": "Total Refund Amount", "defaultWidth": 170},
+        {"key": "totalRequestedAmount", "label": "Total Requested Amount", "defaultWidth": 200},
+        {"key": "agentCommissionAmount", "label": "Agent Commission Amount", "defaultWidth": 210},
+        {"key": "accountingRep", "label": "Accounting Rep", "defaultWidth": 190}
+      ];
+      ns.tableColumns.configure("bookings", bookingColumns, function () { renderBookingsWorkspace(view); });
+      var visibleBookingColumns = ns.tableColumns.visibleOrder("bookings");
+      var bookingHeaders = {"actions": "<th class=\"booking-row-actions-heading\" aria-label=\"Actions\"></th>", "closureStatus": "<th>Closure Status</th>", "mfsp": "<th>MFSP</th>", "name": "<th>Booking Name</th>", "arrivalDate": "<th>Arrival Date</th>", "departureDate": "<th>Departure Date</th>", "agency": "<th>Agency</th>", "consortia": "<th>Consortia</th>", "iataCode": "<th>IATA Code</th>", "stage": "<th>Stage</th>", "travellersNumber": "<th class=\"numeric-cell\">Travelers Number</th>", "salesPrice": "<th class=\"numeric-cell\">Sales Price</th>", "purchasePrice": "<th class=\"numeric-cell\">Purchase Price</th>", "grossMargin": "<th class=\"numeric-cell\">Gross Margin</th>", "netMargin": "<th class=\"numeric-cell\">Net Margin</th>", "balanceAmount": "<th class=\"numeric-cell\">Balance Amount</th>", "totalPaidAmount": "<th class=\"numeric-cell\">Total Paid Amount</th>", "totalRefundAmount": "<th class=\"numeric-cell\">Total Refund Amount</th>", "totalRequestedAmount": "<th class=\"numeric-cell\">Total Requested Amount</th>", "agentCommissionAmount": "<th class=\"numeric-cell\">Agent Commission Amount</th>", "accountingRep": "<th>Accounting Rep</th>"};
+      elements.bookingsTableHead.innerHTML = "<tr>" + visibleBookingColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, bookingHeaders[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("bookings") + "</th></tr>";
 
       elements.bookingsCount.textContent = view.countLabel;
 
@@ -1163,34 +1192,33 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           closureStatusValue = "Closure Pending";
         }
 
-        return [
-          '<tr class="booking-row" data-booking-id="' + helpers.escapeHtml(String(record.id || "")) + '" data-booking-closure-mfsp="' + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + '">',
-          '  <td class="booking-row-actions-cell"><details class="booking-row-actions"><summary aria-label="Booking actions" title="Booking actions">&#8942;</summary><div class="booking-row-actions-menu">' +
-          '    <button type="button" data-booking-row-action="trip-closure">Trip Closure</button>' +
-          '    <button type="button" data-booking-row-action="pay-agent-commission">Pay Agent Commission</button>' +
-          "  </div></details></td>",
-          '  <td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(closureStatusValue)) + '">' + helpers.escapeHtml(closureStatusValue) + "</span></td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.name)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.date(record, bookingCandidates.arrivalDate)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.date(record, bookingCandidates.departureDate)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.agency)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.consortia)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.iataCode)) + "</td>",
-          "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(stageValue)) + "\">" + helpers.escapeHtml(stageValue) + "</span></td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.number(record, bookingCandidates.travellersNumber)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.salesPrice)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.purchasePrice)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.grossMargin)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.netMargin)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.balanceAmount)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.totalPaidAmount)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.totalRefundAmount)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.totalRequestedAmount)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.agentCommissionAmount)) + "</td>",
-          "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.accountingRep)) + "</td>",
-          "</tr>"
-        ].join("");
+        var cells = {
+          actions: '  <td class="booking-row-actions-cell"><details class="booking-row-actions"><summary aria-label="Booking actions" title="Booking actions">&#8942;</summary><div class="booking-row-actions-menu">' +
+            '    <button type="button" data-booking-row-action="trip-closure">Trip Closure</button>' +
+            '    <button type="button" data-booking-row-action="pay-agent-commission">Pay Agent Commission</button>' +
+            "  </div></details></td>",
+          closureStatus: '  <td><button type="button" class="status-pill booking-closure-status-button ' + helpers.escapeHtml(helpers.getStatusTone(closureStatusValue)) + '" data-booking-row-action="trip-closure" title="Open trip closure">' + helpers.escapeHtml(closureStatusValue) + "</button></td>",
+          mfsp: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + "</td>",
+          name: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.name)) + "</td>",
+          arrivalDate: "  <td>" + helpers.escapeHtml(view.formatters.date(record, bookingCandidates.arrivalDate)) + "</td>",
+          departureDate: "  <td>" + helpers.escapeHtml(view.formatters.date(record, bookingCandidates.departureDate)) + "</td>",
+          agency: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.agency)) + "</td>",
+          consortia: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.consortia)) + "</td>",
+          iataCode: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.iataCode)) + "</td>",
+          stage: "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(stageValue)) + "\">" + helpers.escapeHtml(stageValue) + "</span></td>",
+          travellersNumber: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.number(record, bookingCandidates.travellersNumber)) + "</td>",
+          salesPrice: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.salesPrice)) + "</td>",
+          purchasePrice: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.purchasePrice)) + "</td>",
+          grossMargin: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.grossMargin)) + "</td>",
+          netMargin: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.netMargin)) + "</td>",
+          balanceAmount: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.balanceAmount)) + "</td>",
+          totalPaidAmount: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.totalPaidAmount)) + "</td>",
+          totalRefundAmount: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.totalRefundAmount)) + "</td>",
+          totalRequestedAmount: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.totalRequestedAmount)) + "</td>",
+          agentCommissionAmount: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.agentCommissionAmount)) + "</td>",
+          accountingRep: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.accountingRep)) + "</td>"
+        };
+        return '<tr class="booking-row" data-booking-id="' + helpers.escapeHtml(String(record.id || "")) + '" data-booking-closure-mfsp="' + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + '">' + visibleBookingColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
       }).join("");
 
       elements.bookingsEmpty.hidden = true;
