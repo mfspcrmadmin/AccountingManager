@@ -373,6 +373,10 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 				paymentMap = Map();
 				paymentMap.put("Name",paymentReference);
 				paymentMap.put("Payment_Amount",totalAllocatedAmount);
+				if(ifnull(paymentData.get("Currency"),"").toString() != "")
+				{
+					paymentMap.put("Currency",paymentData.get("Currency"));
+				}
 				paymentMap.put("Payment_Date",paymentDate);
 				paymentMap.put("Status",paymentStatus);
 				paymentMap.put("Accounting_Status",paymentAccountingStatus);
@@ -410,6 +414,10 @@ string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds,St
 						allocationMap.put("Supplier_Payment",paymentId);
 						allocationMap.put("Supplier_Invoice",invoiceId);
 						allocationMap.put("Allocated_Amount",allocatedAmount);
+						if(ifnull(paymentData.get("Currency"),"").toString() != "")
+						{
+							allocationMap.put("Currency",paymentData.get("Currency"));
+						}
 						allocationMap.put("Allocation_Date",paymentDate);
 
 						if(ifnull(invInfo.get("supplier_id"),"").toString() != "")

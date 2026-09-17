@@ -56,6 +56,19 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var formatFileSize = deps.formatFileSize;
     var getInvoiceCreateDocumentFile = deps.getInvoiceCreateDocumentFile;
     var getInvoiceCreateNumberValue = deps.getInvoiceCreateNumberValue;
+    var invoiceNameDefault = ns.createInvoiceNameDefault(elements.invoiceCreateNumber, function () { return global.ZOHO.CRM.API; }, function (error) {
+      renderer.showError("Could not suggest an invoice number: " + error.message);
+    }, function () { elements.invoiceCreateNumber.setCustomValidity(""); refreshInvoiceCreateActionState(); });
+    function updateInvoiceNameDefault() {
+      var settlement = state.invoiceCreation.selectedSettlement;
+      return invoiceNameDefault.update({
+        type: isInvoiceCreateRefundMode() ? "Credit Note" : elements.invoiceCreateType.value,
+        supplierId: state.supplierId,
+        supplierCode: helpers.getCandidateValue(state.supplier, FIELD_CANDIDATES.supplier.connectionReference) || "",
+        bookingId: helpers.getLookupId(settlement && settlement.Booking),
+        mfsp: getInvoiceCreateSettlementMfsp(settlement)
+      });
+    }
     var isPreviewableImageFile = deps.isPreviewableImageFile;
     var isPreviewablePdfFile = deps.isPreviewablePdfFile;
     var clearInvoiceCreateDocumentFileSelection = deps.clearInvoiceCreateDocumentFileSelection;
@@ -1528,12 +1541,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var isAmountsStep = currentStep === INVOICE_CREATE_STEPS.amounts;
 
       elements.invoiceCreatePanel.hidden = !state.invoiceCreation.isOpen;
+      elements.invoiceCreatePanel.classList.toggle("is-settlement-step", isSettlementStep);
 
       if (!state.invoiceCreation.isOpen) {
         return;
       }
 
       renderInvoiceCreateModeState();
+      updateInvoiceNameDefault();
       renderInvoiceCreateSettlementFilters();
       renderInvoiceCreateSettlementTable();
       renderInvoiceCreateSettlementSummary();
@@ -1946,6 +1961,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function resetInvoiceCreateFormAfterCreate() {
       setInvoiceCreateStep(INVOICE_CREATE_STEPS.settlement);
       elements.invoiceCreateNumber.value = "";
+      invoiceNameDefault.reset();
       elements.invoiceCreateNumber.setCustomValidity("");
       elements.invoiceCreateDate.value = getLocalIsoDate();
       elements.invoiceCreateAmountGross.value = "";
@@ -2628,6 +2644,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         refreshInvoiceCreateActionState();
       });
       elements.invoiceCreateType.addEventListener("change", function () {
+        updateInvoiceNameDefault();
         clearInvoiceCreateValidationState();
         refreshInvoiceCreateActionState();
       });

@@ -1,0 +1,266 @@
+string standalone.notif_sendPrepaymentBankRequest(String action, String prepaymentIds, String recipientEmails, String reviewToken, String ccEmails, String emailBody)
+{
+result = Map();
+result.put("success",false);
+result.put("sent",false);
+try
+{
+	if(action != "prepare" && action != "send")
+	{
+		result.put("message","Invalid action.");
+		return result.toString();
+	}
+	ids = ifnull(prepaymentIds,"").toList("|||").distinct();
+	if(ids.size() == 0 || ids.size() > 25)
+	{
+		result.put("message","Select between 1 and 25 registered prepayments.");
+		return result.toString();
+	}
+	recipients = List();
+	copyRecipients = List();
+	if(action == "send")
+	{
+		recipientList = ifnull(recipientEmails,"").toList(",");
+		for each recipientAddress in recipientList
+		{
+			recipientAddress = recipientAddress.trim();
+			if(!recipientAddress.matches("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$") || recipientAddress.contains("\n") || recipientAddress.contains("\r"))
+			{
+				result.put("message","Enter valid recipient email addresses.");
+				return result.toString();
+			}
+			recipients.add(recipientAddress);
+		}
+		if(recipients.size() == 0)
+		{
+			result.put("message","Enter at least one recipient.");
+			return result.toString();
+		}
+		if(ifnull(ccEmails,"").trim() != "")
+		{
+			copyList = ccEmails.toList(",");
+			for each copyAddress in copyList
+			{
+				copyAddress = copyAddress.trim();
+				if(!copyAddress.matches("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$") || copyAddress.contains("\n") || copyAddress.contains("\r"))
+				{
+					result.put("message","Enter valid CC email addresses.");
+					return result.toString();
+				}
+				copyRecipients.add(copyAddress);
+			}
+		}
+		bodyText = ifnull(emailBody,"").replaceAll("<[^>]*>","").replaceAll("&nbsp;"," ",true).trim();
+		if(bodyText == "")
+		{
+			result.put("message","Enter the email content before sending.");
+			return result.toString();
+		}
+	}
+	groups = Map();
+	totals = Map();
+	selectedByAllocation = Map();
+	alreadyRequested = 0;
+	for each recordId in ids
+	{
+		if(!recordId.matches("^[0-9]+$"))
+		{
+			result.put("message","Invalid prepayment ID.");
+			return result.toString();
+		}
+		p = zoho.crm.getRecordById("Prepayments",recordId.toLong());
+		if(p.get("id") == null || p.get("Accounting_Status") != "Prepayment recorded" || p.get("Prepayment_Request") == null || p.get("Vendor_Invoice") == null || p.get("Vendor_Payment") == null || ifnull(p.get("Amount"),0).toDecimal() <= 0)
+		{
+			result.put("message","Prepayment " + recordId + " must be registered with a request, invoice, payment and positive amount. Refresh before retrying.");
+			return result.toString();
+		}
+		if(!p.containKey("Bank_Payment_Requested"))
+		{
+			result.put("message","Bank_Payment_Requested is unavailable. Check the field API name and permissions.");
+			return result.toString();
+		}
+		if(p.get("Bank_Payment_Requested") == true)
+		{
+			alreadyRequested = alreadyRequested + 1;
+		}
+		requestId = p.get("Prepayment_Request").get("id");
+		invoiceId = p.get("Vendor_Invoice").get("id");
+		paymentId = p.get("Vendor_Payment").get("id");
+		r = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+		invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+		payment = zoho.crm.getRecordById("Supplier_Payments",paymentId.toLong());
+		if(r.get("id") == null || r.get("Supplier") == null || invoice.get("Supplier") == null || invoice.get("Status") == "Cancelled" || payment.get("id") == null || (payment.get("Status") != "Paid" && payment.get("Status") != "Reconciled") || payment.get("Movement_Type") != "Outbound Payment")
+		{
+			result.put("message","The supplier, invoice or recorded payment is unavailable or no longer valid for " + recordId + ".");
+			return result.toString();
+		}
+		supplierId = r.get("Supplier").get("id");
+		currency = ifnull(p.get("Currency"),"EUR");
+		if(invoice.get("Supplier").get("id") != supplierId || ifnull(payment.get("Currency"),"EUR") != currency || ifnull(invoice.get("Currency"),"EUR") != currency)
+		{
+			result.put("message","Supplier or currency mismatch for prepayment " + recordId + ".");
+			return result.toString();
+		}
+		allocations = zoho.crm.searchRecords("Supplier_Pay_Allocations","((Supplier_Payment:equals:" + paymentId + ")and(Supplier_Invoice:equals:" + invoiceId + "))",1,200);
+		accountIds = List();
+		allocated = 0.0;
+		if(allocations.size() >= 200)
+		{
+			result.put("message","Too many allocations to verify this payment.");
+			return result.toString();
+		}
+		for each allocation in allocations
+		{
+			if(allocation.get("id") == null)
+			{
+				result.put("message","Could not read the payment allocations.");
+				return result.toString();
+			}
+			if(ifnull(allocation.get("Allocated_Amount"),0).toDecimal() > 0 && allocation.get("Payment_Account") != null)
+			{
+				accountIds.add(allocation.get("Payment_Account").get("id"));
+				allocated = allocated + allocation.get("Allocated_Amount").toDecimal();
+			}
+		}
+		accountIds = accountIds.distinct();
+		allocationKey = paymentId + "-" + invoiceId;
+		selectedAmount = ifnull(selectedByAllocation.get(allocationKey),0).toDecimal() + p.get("Amount").toDecimal();
+		selectedByAllocation.put(allocationKey,selectedAmount);
+		if(accountIds.size() != 1 || allocated + 0.005 < selectedAmount)
+		{
+			result.put("message","Check the supplier bank account and allocated amount on the recorded payment for " + recordId + ".");
+			return result.toString();
+		}
+		account = zoho.crm.getRecordById("Payment_Accounts",accountIds.get(0).toLong());
+		if(account.get("id") == null || account.get("Owner_Supplier") == null || account.get("Owner_Supplier").get("id") != supplierId || ifnull(account.get("IBAN"),"").trim() == "" || account.get("Status") == "Inactive")
+		{
+			result.put("message","The supplier payment account needs a valid IBAN and supplier owner for " + recordId + ".");
+			return result.toString();
+		}
+		// Escape every CRM value before inserting it into the HTML email.
+		values = Map();
+		values.put("supplier",r.get("Supplier").get("name"));
+		values.put("iban",account.get("IBAN"));
+		values.put("holder",account.get("Bank_Account_Name"));
+		values.put("bank",account.get("Bank_Name"));
+		values.put("mfsp",r.get("MFSP_Reference"));
+		values.put("booking",ifnull(r.get("Booking"),Map()).get("name"));
+		supplierCode = ifnull(r.get("Supplier_Code"),"").toString().trim();
+		if(supplierCode == "")
+		{
+			supplierCode = ifnull(invoice.get("Supplier_Code"),"").toString().trim();
+		}
+		if(supplierCode == "")
+		{
+			supplierRecord = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+			supplierCode = ifnull(supplierRecord.get("TP_Reference"),"").toString().trim();
+			if(supplierCode == "") { supplierCode = ifnull(supplierRecord.get("Connection_Reference"),"").toString().trim(); }
+			if(supplierCode == "") { supplierCode = ifnull(supplierRecord.get("Supplier_Connection_Reference"),"").toString().trim(); }
+		}
+		values.put("reference",supplierCode);
+		values.put("currency",currency);
+		valueKeys = values.keys();
+		for each valueKey in valueKeys
+		{
+			values.put(valueKey,ifnull(values.get(valueKey),"").toString().replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true).replaceAll("\"","&quot;",true).replaceAll("'","&#39;",true));
+		}
+		groupKey = supplierId + "-" + accountIds.get(0) + "-" + currency;
+		if(!groups.containKey(groupKey))
+		{
+			groupData = Map();
+			groupData.put("values",values);
+			groupData.put("rows","");
+			groupData.put("total",0.0);
+			groups.put(groupKey,groupData);
+		}
+		g = groups.get(groupKey);
+		proof = "<span style='display:inline-block;padding:5px 10px;border-radius:12px;background:#f2f4f7;color:#667085;font-size:11px;font-weight:bold;white-space:nowrap;'>No necesario</span>";
+		if(p.get("Bank_Receipt_Needed") == true)
+		{
+			proof = "<span style='display:inline-block;padding:5px 10px;border-radius:12px;background:#fff0d5;color:#965b08;font-size:11px;font-weight:bold;white-space:nowrap;'>Necesario</span>";
+		}
+		cell = "<td style='padding:14px 10px;border-bottom:1px solid #edf0f3;vertical-align:top;'>";
+		g.put("rows",g.get("rows") + "<tr>" + cell + values.get("mfsp") + "</td>" + cell + values.get("booking") + "</td>" + cell + values.get("reference") + "</td>" + cell + "<b>" + p.get("Amount").toDecimal().round(2) + " " + values.get("currency") + "</b></td>" + cell + proof + "</td></tr>");
+		g.put("total",g.get("total") + p.get("Amount").toDecimal());
+		groups.put(groupKey,g);
+		totals.put(currency,ifnull(totals.get(currency),0).toDecimal() + p.get("Amount").toDecimal());
+	}
+	html = "<div style='font-family:Arial,Helvetica,sans-serif;color:#273142;font-size:13px;line-height:1.6;background:#f4f5f7;padding:24px;'><table role='presentation' width='100%' style='max-width:880px;margin:0 auto;border-collapse:collapse;'><tr><td style='padding:28px;background:#ffffff;border-top:4px solid #bd7146;'><p style='margin:0 0 18px;font-size:11px;letter-spacing:2px;color:#9a6749;font-weight:bold;'>MADE FOR SPAIN &amp; PORTUGAL</p><p style='margin:0 0 8px;font-size:18px;font-weight:bold;'>Hola Claudia,</p><p style='margin:0;'>Por favor, tramita los siguientes pagos bancarios.</p></td></tr>";
+	groupKeys = groups.keys();
+	for each groupKey in groupKeys
+	{
+		g = groups.get(groupKey);
+		v = g.get("values");
+		html = html + "<tr><td style='height:16px;'></td></tr><tr><td style='padding:24px;background:#ffffff;border:1px solid #e8ebef;border-radius:12px;'><h3 style='margin:0 0 16px;font-size:19px;color:#202936;'>" + v.get("supplier") + "</h3><table role='presentation' width='100%' style='background:#f8f9fb;border-collapse:collapse;'><tr><td style='padding:14px 16px;'><span style='font-size:10px;color:#7b8493;letter-spacing:1px;'>CUENTA BANCARIA</span><br><strong style='font-family:monospace;font-size:15px;'>" + v.get("iban") + "</strong><br><span style='font-size:12px;color:#667085;'>" + v.get("holder") + " &middot; " + v.get("bank") + "</span></td></tr></table><table width='100%' style='margin-top:16px;border-collapse:collapse;font-size:12px;text-align:left;'><tr style='color:#7b8493;font-size:10px;'><th style='padding:10px;'>MFSP</th><th style='padding:10px;'>BOOKING</th><th style='padding:10px;'>REFERENCIA</th><th style='padding:10px;'>IMPORTE</th><th style='padding:10px;'>JUSTIFICANTE</th></tr>" + g.get("rows") + "</table><p style='text-align:right;margin:16px 0 0;color:#8b5d41;'>Subtotal &nbsp; <strong style='font-size:17px;'>" + g.get("total").round(2) + " " + v.get("currency") + "</strong></p></td></tr>";
+	}
+	html = html + "<tr><td style='height:16px;'></td></tr><tr><td style='padding:22px 28px;background:#263747;color:#ffffff;border-radius:12px;'><p style='margin:0;font-size:11px;letter-spacing:1px;color:#ccd5dd;'>TOTAL SOLICITADO</p>";
+	currencyKeys = totals.keys();
+	for each currency in currencyKeys
+	{
+		html = html + "<p style='margin:4px 0;font-size:27px;font-weight:bold;'>" + totals.get(currency).round(2) + " " + currency.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true) + "</p>";
+	}
+	html = html + "</td></tr><tr><td style='padding:24px 8px;color:#667085;font-size:12px;'><p>Por favor, envía el justificante de los pagos que lo tengan solicitado.</p>";
+	html = html + "<p>Muchas gracias.</p></td></tr></table></div>";
+	token = zoho.encryption.sha256(html);
+	result.put("subject","PREPAGOS | " + zoho.currentdate.toString("dd/MM/yyyy"));
+	if(action == "prepare")
+	{
+		result.put("success",true);
+		result.put("html",html);
+		result.put("token",token);
+		result.put("alreadyRequested",alreadyRequested);
+		return result.toString();
+	}
+	if(reviewToken != token)
+	{
+		result.put("message","The prepayment details changed. Close and review a new email before sending.");
+		return result.toString();
+	}
+	// Revalidate the original CRM snapshot above, then send the user's edited message.
+	html = emailBody;
+	mailRecipients = recipients.distinct();
+	mailCopies = copyRecipients.distinct();
+	mailSubject = result.get("subject");
+	sendmail
+	[
+		from :"crmadmin@madeforspainandportugal.com"
+		to :mailRecipients
+		cc :mailCopies
+		subject :mailSubject
+		message :html
+	]
+	result.put("sent",true);
+	failed = List();
+	requestedUpdate = Map();
+	requestedUpdate.put("Bank_Payment_Requested",true);
+	updateOptions = Map();
+	updateOptions.put("trigger",List());
+	for each recordId in ids
+	{
+		try
+		{
+			updateResponse = zoho.crm.updateRecord("Prepayments",recordId.toLong(),requestedUpdate,updateOptions);
+			if(updateResponse.get("id") == null)
+			{
+				failed.add(recordId);
+			}
+		}
+		catch(updateError)
+		{
+			failed.add(recordId);
+		}
+	}
+	result.put("success",true);
+	result.put("failedIds",failed);
+	result.put("message","Bank payment request sent. Selected prepayments marked as Bank Payment Requested.");
+	if(failed.size() > 0)
+	{
+		result.put("message","The email was sent, but these prepayments could not be marked. Mark them manually without resending: " + failed.toString());
+	}
+}
+catch(e)
+{
+	result.put("message","Could not confirm the operation. Check email delivery before retrying. " + e.toString());
+}
+return result.toString();
+}

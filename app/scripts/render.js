@@ -270,6 +270,35 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
     }
 
+    function showErrorPopup(message, title) {
+      var dialog = global.document.createElement("dialog");
+      var heading = global.document.createElement("h3");
+      var description = global.document.createElement("p");
+      var close = global.document.createElement("button");
+      var previousFocus = global.document.activeElement;
+      dialog.className = "error-popup-dialog";
+      dialog.setAttribute("role", "alertdialog");
+      dialog.setAttribute("aria-label", title || "Error");
+      description.id = "error-popup-message";
+      dialog.setAttribute("aria-describedby", description.id);
+      heading.textContent = title || "Error";
+      description.textContent = message;
+      close.type = "button";
+      close.className = "button primary compact-action-button";
+      close.textContent = "OK";
+      close.addEventListener("click", function () { dialog.close(); });
+      dialog.addEventListener("close", function () {
+        dialog.remove();
+        if (previousFocus && previousFocus.isConnected) { previousFocus.focus(); }
+      });
+      dialog.appendChild(heading);
+      dialog.appendChild(description);
+      dialog.appendChild(close);
+      global.document.body.appendChild(dialog);
+      dialog.showModal();
+      close.focus();
+    }
+
     function setTextWithTitle(element, value) {
       var text = helpers.textValue(value);
 
@@ -865,7 +894,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var supplierInvoiceSortLabels = {
         invoice: "Invoice",
         status: "Status",
-        date: "Date",
+        date: "Invoice Date",
         booking: "Booking",
         total: "Total",
         paid: "Paid",
@@ -965,6 +994,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           "  <td>" + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</td>",
           '  <td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + '">' + helpers.escapeHtml(invoice.Status || "-") + "</span></td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
+          "  <td>" + helpers.escapeHtml(invoice._supplierPaymentDates == null ? "Unavailable" : (invoice._supplierPaymentDates.map(function (date) { return helpers.formatDate(date); }).join(", ") || "-")) + "</td>",
           "  <td>" + helpers.escapeHtml(helpersApi && helpersApi.getInvoiceBooking ? helpersApi.getInvoiceBooking(invoice) : (helpers.getLookupDisplayValue(invoice, fieldCandidates.invoice.booking) || "-")) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(helpers.getInvoiceTotalAmount(invoice, fieldCandidates))) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(invoice.Amount_Paid)) + "</td>",
@@ -1328,6 +1358,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       hideError: hideError,
       hideNotice: hideNotice,
       showError: showError,
+      showErrorPopup: showErrorPopup,
       showNotice: showNotice
     };
   };

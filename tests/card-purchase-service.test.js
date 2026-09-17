@@ -18,6 +18,7 @@ function setup(getRecord) {
   const window = { ZOHO: { CRM: { API: { getRecord } } }, addEventListener() {}, requestAnimationFrame(fn) { fn(); }, setTimeout() {} };
   // Exercise the existing workflow entry point without adding a production test API.
   const source = fs.readFileSync('app/scripts/operations.js', 'utf8').replace('  controls();', '  global.openWorkflowForTest = openWorkflow; global.closeWorkflowForTest = closeWorkflow; controls();');
+  vm.runInNewContext(fs.readFileSync('app/scripts/invoice-name.js', 'utf8'), { window });
   vm.runInNewContext(source, { window, document, Intl });
   return {
     open: purchase => window.openWorkflowForTest(Object.assign({ Amount: 10, Transaction_Type: 'Purchase' }, purchase), 'invoice'),

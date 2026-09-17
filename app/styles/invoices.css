@@ -653,7 +653,7 @@
 }
 
 .invoice-create-document-fields .invoice-document-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1fr) minmax(0, 1.65fr);
   gap: 10px;
 }
 
@@ -764,7 +764,7 @@
 
 @media (max-width: 760px) {
   .invoice-create-document-fields .invoice-document-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .invoice-create-file-strip {
@@ -1021,4 +1021,110 @@
   .payments-table-filters .table-filters-panel.filters-grid { grid-template-columns: 1fr; }
   .invoices-table-filters .table-filters-panel.filters-grid,
   .invoices-table-filters .table-filters-panel.filters-grid-compact { grid-template-columns: 1fr; }
+}
+
+/* Supplier invoice popup fills the widget viewport and keeps fields inside their columns. */
+#invoice-create-panel {
+  inset: 8px;
+  transform: none;
+  box-sizing: border-box;
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  min-width: 0;
+  min-height: 0;
+}
+#invoice-create-panel .panel-header { flex-wrap: wrap; }
+#invoice-create-panel .invoice-create-form-shell,
+#invoice-create-panel .invoice-create-steps-shell,
+#invoice-create-panel .invoice-create-step-panel,
+#invoice-create-panel .invoice-create-document-fields,
+#invoice-create-panel .field {
+  min-width: 0;
+  max-width: none;
+}
+#invoice-create-panel .invoice-create-form-shell { width: 100%; }
+#invoice-create-panel .field input:not([type="checkbox"]):not([type="radio"]),
+#invoice-create-panel .field select {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+#invoice-create-panel .invoice-create-steps-layout {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+#invoice-create-panel .invoice-create-main-amounts-grid,
+#invoice-create-panel .invoice-create-tax-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+}
+@media (max-width: 1100px) {
+  #invoice-create-panel .invoice-create-steps-layout {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+  #invoice-create-panel .invoice-create-step-main,
+  #invoice-create-panel .invoice-create-step-side {
+    overflow: visible;
+    padding-right: 0;
+  }
+  #invoice-create-panel .invoice-create-step-side { order: 1; }
+}
+@media (max-width: 600px) {
+  #invoice-create-panel { inset: 4px; padding: 10px; }
+  #invoice-create-panel .invoice-create-steps-shell { padding: 8px; }
+  #invoice-create-panel .invoice-create-calculated-grid,
+  #invoice-create-panel .invoice-create-calculated-grid.has-additional-vat {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #invoice-create-panel .invoice-create-calculated-grid.has-additional-vat .invoice-create-calculated-field-total { grid-column: auto; }
+}
+
+/* Let Step 1 tables use the remaining height instead of their old 145/200px caps. */
+#invoice-create-panel.is-settlement-step #invoice-create-settlement-table-wrap {
+  height: clamp(240px, 45vh, 640px);
+  max-height: none;
+}
+#invoice-create-panel.is-settlement-step .invoice-create-services-panel {
+  height: auto;
+  max-height: none;
+}
+#invoice-create-panel.is-settlement-step .invoice-create-services-table-wrap {
+  height: clamp(220px, 35vh, 540px);
+  max-height: none;
+}
+@media (min-width: 1101px) {
+  #invoice-create-panel.is-settlement-step .invoice-create-step-main {
+    align-content: stretch;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  #invoice-create-panel.is-settlement-step #invoice-create-step-settlement {
+    display: grid;
+    grid-template-rows: auto auto minmax(180px, 1fr) auto;
+    min-height: 0;
+  }
+  #invoice-create-panel.is-settlement-step .invoice-create-settlement-browser {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+  #invoice-create-panel.is-settlement-step #invoice-create-settlement-table-wrap {
+    height: 100%;
+    min-height: 0;
+  }
+  #invoice-create-panel.is-settlement-step .invoice-create-step-side {
+    display: flex;
+    flex-direction: column;
+  }
+  #invoice-create-panel.is-settlement-step .invoice-create-step-side > .invoice-create-summary-card { flex: 0 0 auto; }
+  #invoice-create-panel.is-settlement-step .invoice-create-services-panel {
+    flex: 1 0 220px;
+    align-self: stretch;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  #invoice-create-panel.is-settlement-step .invoice-create-services-table-wrap {
+    height: 100%;
+    min-height: 0;
+  }
 }

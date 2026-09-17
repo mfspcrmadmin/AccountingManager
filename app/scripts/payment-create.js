@@ -56,6 +56,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var invalidateInvoiceCreateSettlementCache = deps.invalidateInvoiceCreateSettlementCache;
     var ensureInvoiceAllocationsLoaded = deps.ensureInvoiceAllocationsLoaded;
     var supplierAccountRefocusId = "";
+    var syncPaymentOperations = ns.createPaymentOperationSync(crm, assertCrmMutationSucceeded);
 
     function resetInvoicePaymentForm() {
       var paymentDate = "";
@@ -1613,6 +1614,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var allocationResult;
       var allocationWarning = "";
       var paymentAccountsRefreshNeeded = false;
+      var operationWarning = "";
 
       event.preventDefault();
       renderer.showError("");
@@ -1694,6 +1696,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           allocationWarning = " Some allocations could not be created: " + allocationResult.errors.join(" ");
         }
 
+        var operationResult = await syncPaymentOperations(paymentId, paymentData, allocationResult.successfulEntries);
+        if (operationResult.errors.length) {
+          operationWarning = " The payment was created, but some linked prepayments or card requests could not be updated: " + operationResult.errors.join(" ");
+          debugError("payment operation sync incomplete", operationResult.errors, { paymentId: paymentId });
+        }
+        global.dispatchEvent(new global.CustomEvent("accounting-manager-payment-created"));
+
         context.invoices.forEach(function (invoice) {
           delete state.invoiceAllocationsByInvoiceId[invoice.id];
         });
@@ -1729,6 +1738,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         created = true;
         state.paymentCreation.feedback = { isOpen: false, status: "", message: "" };
         renderPaymentCreateFeedback();
+        if (operationWarning || allocationWarning || settlementUpdateMessage) {
+          renderer.showNotice("Payment created." + operationWarning + allocationWarning + settlementUpdateMessage, { tone: "warning" });
+        }
       } catch (error) {
         debugError("onCreateSupplierPaymentSubmit failed", error);
         state.paymentCreation.isBusy = false;

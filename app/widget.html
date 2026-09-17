@@ -27,7 +27,7 @@
           <button class="tab-button" type="button" data-tab-button="accounting">Accounting</button>
         </nav>
         <div class="quick-access" aria-label="Quick access">
-          <button id="booking-actions-toggle" class="button secondary quick-actions-toggle" type="button" aria-expanded="false" aria-controls="booking-actions-popup">Quick actions</button>
+          <button id="booking-actions-toggle" class="button secondary quick-actions-toggle" type="button" aria-label="Quick actions" title="Quick actions" aria-expanded="false" aria-controls="booking-actions-popup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg></button>
         </div>
       </header>
 
@@ -166,7 +166,115 @@
               </div>
             </div>
 
-            <div id="operations-filters" class="table-filter-bar operations-filters-grid">
+            <section id="prepayments-workspace" class="prepayments-workspace" aria-label="Prepayment requests and prepayments">
+              <div class="prepayments-toolbar">
+                <div class="card-purchases-view-switch" role="group" aria-label="Prepayments view">
+                  <button type="button" data-prepayments-view="requests" aria-pressed="false">By request</button>
+                  <button type="button" class="is-active" data-prepayments-view="payments" aria-pressed="true">All prepayments</button>
+                </div>
+                <div class="card-purchases-view-switch" role="group" aria-label="Prepayment registration view">
+                  <button type="button" class="is-active" data-prepayments-status-view="open" aria-pressed="true">Open</button>
+                  <button type="button" data-prepayments-status-view="closed" aria-pressed="false">Closed</button>
+                  <button type="button" data-prepayments-status-view="all" aria-pressed="false">All</button>
+                </div>
+                <button type="button" class="button secondary prepayments-icon-button" data-prepayments-refresh aria-label="Refresh prepayments" title="Refresh prepayments">&#8635;</button>
+              </div>
+              <form class="prepayments-filters" data-prepayments-filters>
+                <label class="field"><span>MFSP Reference</span><input type="search" data-prepayments-mfsp placeholder="MFSP reference"></label>
+                <label class="field"><span>Supplier Code</span><input type="search" data-prepayments-supplier-code placeholder="Supplier code"></label>
+                <label class="field"><span>Due Date</span><select data-prepayments-date-mode><option value="single">Single</option><option value="range">Range</option></select></label>
+                <label class="field"><span data-prepayments-from-label>Date</span><input type="date" data-prepayments-from></label>
+                <label class="field" data-prepayments-to-field hidden><span>To</span><input type="date" data-prepayments-to disabled></label>
+                <label class="field"><span>Accounting Status</span><select data-prepayments-accounting-status><option value="">All statuses</option><option value="Pending invoice">Pending invoice</option><option value="Pending payment record">Pending payment record</option><option value="Prepayment recorded">Prepayment recorded</option><option value="Cancelled">Cancelled</option><option value="Discard - Credit">Discard - Credit</option><option value="Discard - Already Paid">Discard - Already Paid</option><option value="No status">No status</option></select></label>
+                <label class="field"><span>Bank Payment Requested</span><select data-prepayments-bank-requested><option value="">All</option><option value="yes">Requested</option><option value="no">Not requested</option></select></label>
+                <label class="field"><span>Bank Receipt Needed</span><select data-prepayments-bank-receipt><option value="">All</option><option value="yes">Needed</option><option value="no">Not needed</option></select></label>
+                <div class="prepayments-filter-actions"><button type="submit" class="button primary prepayments-icon-button" aria-label="Apply prepayment filters" title="Apply prepayment filters"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.2"></circle><path d="m16 16 4.3 4.3"></path></svg></button></div>
+              </form>
+              <div class="prepayment-bank-toolbar">
+                <span data-prepayments-bank-count aria-live="polite">0 selected</span>
+                <button type="button" class="button secondary" data-prepayments-bank-receipt-bulk disabled>Mark Bank Receipt Needed</button>
+                <button type="button" class="button primary" data-prepayments-bank-open hidden disabled>Send bank payment request</button>
+              </div>
+              <dialog class="prepayment-bank-dialog" data-prepayments-bank-dialog aria-labelledby="prepayment-bank-title">
+                <form data-prepayments-bank-form>
+                  <h3 id="prepayment-bank-title">Send bank payment request</h3>
+                  <div class="prepayment-bank-addresses">
+                    <label>To<input type="text" data-prepayments-bank-recipients required value="claudia@madeforspainandportugal.com" autocomplete="off"></label>
+                    <label>CC<input type="text" data-prepayments-bank-cc value="luciano@madeforspainandportugal.com, andersson@madeforspainandportugal.com" autocomplete="off"></label>
+                  </div>
+                  <p><strong>Subject:</strong> <span data-prepayments-bank-subject></span></p>
+                  <p class="prepayment-bank-editor-hint" id="prepayment-bank-editor-hint">Click inside the email to edit its content before sending.</p>
+                  <div class="prepayment-bank-editor" role="textbox" aria-label="Email content" aria-multiline="true" aria-describedby="prepayment-bank-editor-hint" contenteditable="false" data-prepayments-bank-preview></div>
+                  <p data-prepayments-bank-message role="status" aria-live="polite"></p>
+                  <div class="prepayment-bank-dialog-actions"><button type="button" class="button secondary" data-prepayments-bank-cancel>Close</button><button type="submit" class="button primary" data-prepayments-bank-send disabled>Send request</button></div>
+                </form>
+              </dialog>
+              <div class="prepayments-summary" data-prepayments-summary hidden></div>
+              <p class="prepayments-message" data-prepayments-message role="status" aria-live="polite">Open Operations to load prepayment requests and prepayments.</p>
+              <div class="prepayments-results" data-prepayments-results></div>
+              <dialog class="prepayment-discard-dialog" data-prepayments-discard-dialog aria-labelledby="prepayment-discard-title">
+                <form data-prepayments-discard-form>
+                  <h3 id="prepayment-discard-title">Discard prepayment</h3>
+                  <p data-prepayments-discard-name></p>
+                  <label class="field"><span>Reason</span><select data-prepayments-discard-status required><option value="Discard - Credit">Discard - Credit</option><option value="Discard - Already Paid">Discard - Already Paid</option></select></label>
+                  <p class="operations-file-preview-error" data-prepayments-discard-error role="alert"></p>
+                  <div class="inline-actions"><button class="button secondary" type="button" data-prepayments-discard-cancel>Cancel</button><button class="button primary" type="submit" data-prepayments-discard-submit>Confirm status</button></div>
+                </form>
+              </dialog>
+              <div class="card-purchase-workflow-modal" data-prepayment-workflow hidden>
+                <div class="card-purchase-workflow-backdrop" data-prepayment-workflow-close></div>
+                <aside class="card-purchase-workflow-card" role="dialog" aria-modal="true" aria-labelledby="prepayment-workflow-title">
+                  <header><div><p class="panel-eyebrow">Supplier prepayment</p><h3 id="prepayment-workflow-title" data-prepayment-workflow-title>Register supplier invoice</h3></div><button class="card-purchase-workflow-close" type="button" data-prepayment-workflow-close aria-label="Close">&times;</button></header>
+                  <div class="card-purchase-workflow-context" data-prepayment-workflow-context></div>
+                  <div class="prepayment-documents card-purchase-workflow-context" data-prepayment-workflow-documents></div>
+                  <form class="prepayment-workflow-form" data-prepayment-workflow-form>
+                    <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-fields>
+                      <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-invoice-fields>
+                        <label class="field"><span>Invoice</span><select data-prepayment-workflow-existing></select></label>
+                        <fieldset class="prepayment-workflow-fieldset card-purchase-workflow-fields" data-prepayment-workflow-new-invoice>
+                          <label class="field"><span>Settlement</span><select data-prepayment-workflow-settlement required></select></label>
+                          <label class="field"><span>Invoice type</span><select data-prepayment-workflow-invoice-type required><option value="Proforma" selected>Proforma</option><option value="Final Invoice">Final Invoice</option><option value="Tickets">Tickets</option><option value="Commission">Commission</option></select></label>
+                          <label class="field"><span>Invoice number</span><input data-prepayment-workflow-reference required></label>
+                          <label class="field"><span>Invoice date</span><input type="date" data-prepayment-workflow-date required></label>
+                          <label class="field"><span>Invoice total incl. VAT</span><input type="number" min="0.01" step="0.01" data-prepayment-workflow-amount required></label>
+                          <label class="field"><span>VAT %</span><input type="number" min="0" step="0.01" data-prepayment-workflow-vat value="0" required></label>
+                          <label class="field"><span>IRPF %</span><input type="number" min="0" step="0.01" data-prepayment-workflow-irpf value="0" required></label>
+                          <label class="field"><span>IRPF amount</span><input type="number" step="0.01" data-prepayment-workflow-irpf-amount readonly></label>
+                          <label class="field"><span>Total payable after IRPF</span><input type="number" step="0.01" data-prepayment-workflow-total-payable readonly></label>
+                        </fieldset>
+                      </fieldset>
+                      <fieldset class="prepayment-workflow-fieldset card-purchase-workflow-fields" data-prepayment-workflow-payment-fields hidden disabled>
+                        <label class="field"><span>Payment reference</span><input data-prepayment-workflow-payment-reference readonly></label>
+                        <label class="field"><span>Payment date</span><input type="date" data-prepayment-workflow-payment-date required></label>
+                        <label class="field"><span>Prepayment amount</span><input type="number" data-prepayment-workflow-payment-amount readonly></label>
+                        <label class="field"><span>Payment account (Own)</span><select data-prepayment-workflow-account required></select></label>
+                      </fieldset>
+                      <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-link-payment-fields hidden disabled>
+                        <p>This invoice already has an associated payment. Confirm the link to mark this prepayment as recorded.</p>
+                        <label class="field" data-prepayment-workflow-existing-payment-choice><span>Associated payment</span><select data-prepayment-workflow-existing-payment required></select></label>
+                        <div class="card-purchase-workflow-context" data-prepayment-workflow-existing-payment-details></div>
+                      </fieldset>
+                    </fieldset>
+                    <section class="prepayment-self-employed-confirmation" data-prepayment-workflow-self-employed-confirmation aria-live="polite" hidden>
+                      <h4>Mark vendor as self-employed?</h4>
+                      <p>This vendor is not currently marked as self-employed. Would you like to mark the vendor as self-employed and keep the IRPF?</p>
+                      <div class="inline-actions">
+                        <button class="button primary" type="button" data-prepayment-workflow-self-employed-yes>Yes, mark as self-employed</button>
+                        <button class="button secondary" type="button" data-prepayment-workflow-self-employed-no>No, reset IRPF</button>
+                      </div>
+                    </section>
+                    <div class="inline-actions card-purchase-workflow-actions">
+                      <p class="card-purchase-workflow-message" data-prepayment-workflow-message aria-live="polite"></p>
+                      <span class="card-purchase-workflow-spinner" data-prepayment-workflow-spinner role="status" aria-label="Saving" hidden></span>
+                      <button class="button primary" type="submit" data-prepayment-workflow-submit>Create invoice</button>
+                    </div>
+                  </form>
+                </aside>
+              </div>
+              <div class="pagination-bar" data-prepayments-pager hidden><button type="button" class="button secondary" data-prepayments-previous>Previous</button><span data-prepayments-page-copy></span><button type="button" class="button secondary" data-prepayments-next>Next</button></div>
+            </section>
+
+            <div id="operations-filters" class="table-filter-bar operations-filters-grid" hidden>
               <label id="operations-filter-status-field" class="field">
                 <span>Search</span>
                 <input id="operations-filter-search" type="search" placeholder="Reference, supplier or booking">
@@ -200,33 +308,40 @@
             </div>
 
             <div id="card-purchases-toolbar" class="card-purchases-toolbar" hidden>
-              <div class="card-purchases-view-switch" role="group" aria-label="Card purchase view">
-                <button class="is-active" type="button" data-card-purchase-view="open" aria-pressed="true">Open</button>
-                <button type="button" data-card-purchase-view="closed" aria-pressed="false">Closed</button>
-                <button type="button" data-card-purchase-view="all" aria-pressed="false">All</button>
+              <div class="card-purchases-view-row">
+                <div class="card-purchases-view-switch" role="group" aria-label="Card purchase view">
+                  <button class="is-active" type="button" data-card-purchase-view="open" aria-pressed="true">Open</button>
+                  <button type="button" data-card-purchase-view="closed" aria-pressed="false">Closed</button>
+                  <button type="button" data-card-purchase-view="all" aria-pressed="false">All</button>
+                </div>
               </div>
-              <label class="field card-purchases-search-field">
-                <span>Search</span>
-                <input id="card-purchases-search" type="search" placeholder="Supplier, booking, reference or card purchase">
+              <label class="field">
+                <span>MFSP reference</span>
+                <input id="card-purchases-mfsp-filter" type="text" placeholder="MFSP reference">
               </label>
-              <details class="table-filters-popover card-purchases-filters-popover">
-                <summary>Filters</summary>
-                <div class="table-filters-panel card-purchases-advanced-filters">
+              <label class="field">
+                <span>Supplier code</span>
+                <input id="card-purchases-supplier-code-filter" type="text" placeholder="Supplier code">
+              </label>
+              <label class="field card-purchases-search-field">
+                <span>Card</span>
+                <input id="card-purchases-card-filter" type="text" placeholder="Any part of the card name or number">
+              </label>
               <div class="field card-purchases-status-field">
                 <span>Registration status</span>
                 <div class="card-purchases-status-multiselect">
                   <button id="card-purchases-status-filter" class="card-purchases-status-toggle" type="button" aria-expanded="false" aria-controls="card-purchases-status-menu"><span id="card-purchases-status-filter-label">All statuses</span></button>
                   <div id="card-purchases-status-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden>
-                    <label class="service-multi-filter-option service-multi-filter-option--all"><input type="checkbox" data-card-purchase-status-toggle-all><span>Select / deselect all</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending invoice"><span class="card-purchase-status is-pending-invoice">Pending invoice</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending payment record"><span class="card-purchase-status is-pending-payment">Pending payment record</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Purchase recorded"><span class="card-purchase-status is-purchase-recorded">Purchase recorded</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending credit note"><span class="card-purchase-status is-pending-credit-note">Pending credit note</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Refund pending"><span class="card-purchase-status is-refund-pending">Refund pending</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Pending refund record"><span class="card-purchase-status is-pending-refund">Pending refund record</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Refund recorded"><span class="card-purchase-status is-refund-recorded">Refund recorded</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Needs review"><span class="card-purchase-status is-needs-review">Needs review</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-status-option value="Cancelled"><span class="card-purchase-status is-cancelled">Cancelled</span></label>
+                    <label class="service-multi-filter-option service-multi-filter-option--all"><input type="checkbox" checked data-card-purchase-status-toggle-all><span>Select / deselect all</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Pending invoice"><span class="card-purchase-status is-pending-invoice">Pending invoice</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Pending payment record"><span class="card-purchase-status is-pending-payment">Pending payment record</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Purchase recorded"><span class="card-purchase-status is-purchase-recorded">Purchase recorded</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Pending credit note"><span class="card-purchase-status is-pending-credit-note">Pending credit note</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Refund pending"><span class="card-purchase-status is-refund-pending">Refund pending</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Pending refund record"><span class="card-purchase-status is-pending-refund">Pending refund record</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Refund recorded"><span class="card-purchase-status is-refund-recorded">Refund recorded</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Needs review"><span class="card-purchase-status is-needs-review">Needs review</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-status-option value="Cancelled"><span class="card-purchase-status is-cancelled">Cancelled</span></label>
                   </div>
                 </div>
               </div>
@@ -235,9 +350,9 @@
                 <div class="card-purchases-status-multiselect">
                   <button id="card-purchases-type-filter" class="card-purchases-status-toggle" type="button" aria-expanded="false" aria-controls="card-purchases-type-menu"><span id="card-purchases-type-filter-label">All types</span></button>
                   <div id="card-purchases-type-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden>
-                    <label class="service-multi-filter-option service-multi-filter-option--all"><input type="checkbox" data-card-purchase-type-toggle-all><span>Select / deselect all</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-type-option value="Purchase"><span class="card-purchase-status is-purchase">Purchase</span></label>
-                    <label class="service-multi-filter-option"><input type="checkbox" data-card-purchase-type-option value="Refund"><span class="card-purchase-status is-refund">Refund</span></label>
+                    <label class="service-multi-filter-option service-multi-filter-option--all"><input type="checkbox" checked data-card-purchase-type-toggle-all><span>Select / deselect all</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-type-option value="Purchase"><span class="card-purchase-status is-purchase">Purchase</span></label>
+                    <label class="service-multi-filter-option"><input type="checkbox" checked data-card-purchase-type-option value="Refund"><span class="card-purchase-status is-refund">Refund</span></label>
                   </div>
                 </div>
               </div>
@@ -248,12 +363,9 @@
                   <div id="card-purchases-owner-menu" class="service-multi-filter-menu card-purchases-status-menu" hidden></div>
                 </div>
               </div>
-                </div>
-                <div class="table-filter-actions">
-                  <button id="card-purchases-reset-filters" class="button secondary" type="button">Reset</button>
-                  <button id="card-purchases-apply-filters" class="button primary" type="button">Apply</button>
-                </div>
-              </details>
+              <button id="card-purchases-apply-filters" class="button primary card-purchases-icon-button" type="button" aria-label="Apply card purchase filters" title="Apply card purchase filters">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
+              </button>
               <button id="card-purchases-refresh" class="button secondary card-purchases-icon-button" type="button" aria-label="Refresh card purchases" title="Refresh card purchases">&#8635;</button>
             </div>
 
@@ -300,9 +412,9 @@
               </div>
             </section>
 
-            <div id="operations-empty" class="empty-state operations-empty-state">
-              <h3>Prepayments ready to review</h3>
-              <p>Select “Apply filters” to load prepayment requests and prepayments from Creator.</p>
+            <div id="operations-empty" class="empty-state operations-empty-state" hidden>
+              <h3>Ready to load operations</h3>
+              <p>Apply filters to load the selected report.</p>
             </div>
 
             <div id="operations-table-wrap" class="table-wrap" hidden>
@@ -333,6 +445,7 @@
                 <form id="card-purchase-workflow-form" novalidate>
                   <div id="card-purchase-workflow-invoice-fields" class="card-purchase-workflow-fields">
                     <label class="field"><span id="card-purchase-reference-label">Invoice number</span><input id="card-purchase-reference" required></label>
+                    <label class="field"><span>Invoice type</span><select id="card-purchase-invoice-type"><option value="Tickets" selected>Tickets</option><option value="Final Invoice">Final Invoice</option><option value="Proforma">Proforma</option><option value="Commission">Commission</option></select></label>
                     <label class="field"><span id="card-purchase-date-label">Invoice date</span><input id="card-purchase-date" type="date" required></label>
                     <label class="field"><span>Amount incl. VAT</span><input id="card-purchase-amount" type="number" min="0.01" step="0.01" required></label>
                     <label class="field"><span>VAT %</span><input id="card-purchase-vat" type="number" min="0" step="0.01" value="0"></label>
@@ -340,7 +453,7 @@
                   <div id="card-purchase-workflow-payment-fields" class="card-purchase-workflow-fields" hidden>
                     <label class="field"><span>Payment reference</span><input id="card-purchase-payment-reference" required></label>
                     <label class="field"><span>Payment date</span><input id="card-purchase-payment-date" type="date" required></label>
-                    <label class="field card-purchase-payment-account-field"><span>Supplier payment account</span><select id="card-purchase-payment-account"></select></label>
+                    <label class="field card-purchase-payment-account-field"><span>Payment account (Own)</span><select id="card-purchase-payment-account"></select></label>
                   </div>
                   <div class="card-purchase-workflow-decision-divider" aria-hidden="true"></div>
                   <label class="field"><span>Review notes</span><textarea id="card-purchase-review-notes" rows="3" placeholder="Optional note for accounting or reservations"></textarea></label>
@@ -571,7 +684,8 @@
                       <tr>
                         <th data-supplier-invoice-sort="invoice">Invoice</th>
                         <th data-supplier-invoice-sort="status">Status</th>
-                        <th data-supplier-invoice-sort="date">Date</th>
+                        <th data-supplier-invoice-sort="date">Invoice Date</th>
+                        <th>Payment Dates</th>
                         <th data-supplier-invoice-sort="booking">Booking</th>
                         <th class="numeric-cell" data-supplier-invoice-sort="total">Total</th>
                         <th class="numeric-cell" data-supplier-invoice-sort="paid">Paid</th>
@@ -592,7 +706,7 @@
                       <tr>
                         <th>Payment</th>
                         <th>Status</th>
-                        <th>Date</th>
+                        <th>Payment Date</th>
                         <th>Booking context</th>
                         <th>Payment account</th>
                         <th class="numeric-cell">Amount</th>
@@ -709,10 +823,6 @@
                         </div>
                         <div class="form-grid invoice-document-grid">
                           <label class="field">
-                            <span id="invoice-create-number-label">Invoice Number</span>
-                            <input id="invoice-create-number" name="invoiceNumber" type="text" placeholder="Invoice number">
-                          </label>
-                          <label class="field">
                             <span id="invoice-create-date-label">Invoice Date</span>
                             <input id="invoice-create-date" name="invoiceDate" type="date" required>
                           </label>
@@ -721,6 +831,10 @@
                             <select id="invoice-create-type" required disabled>
                               <option value="">Loading invoice types...</option>
                             </select>
+                          </label>
+                          <label class="field">
+                            <span id="invoice-create-number-label">Invoice Number</span>
+                            <input id="invoice-create-number" name="invoiceNumber" type="text" placeholder="Invoice number">
                           </label>
                           <label class="field" hidden>
                             <span>Status</span>
@@ -998,7 +1112,7 @@
                 <label class="field">
                   <span>Self Employed</span>
                   <select id="invoice-filter-self-employed">
-                    <option value="">All</option>
+                    <option value="">Self employed &amp; not self employed</option>
                     <option value="true">Self employed</option>
                     <option value="false">Not self employed</option>
                   </select>
@@ -2531,14 +2645,21 @@
     <script src="./scripts/remote-data.js"></script>
     <script src="./scripts/invoices.js"></script>
     <script src="./scripts/payments.js"></script>
+    <script src="./scripts/prepayment-request-sync.js"></script>
+    <script src="./scripts/payment-operation-sync.js"></script>
     <script src="./scripts/payment-create.js"></script>
     <script src="./scripts/accounting.js"></script>
     <script src="./scripts/account-create.js"></script>
     <script src="./scripts/bookings.js"></script>
+    <script src="./scripts/invoice-name.js"></script>
     <script src="./scripts/invoice-create.js"></script>
     <script src="./scripts/supplier-activity.js"></script>
     <script src="./scripts/invoice-request.js"></script>
     <script src="./scripts/supplier-workspace.js"></script>
+    <script src="./scripts/quick-settlement-refresh.js"></script>
+    <script src="./scripts/prepayment-bank-request.js"></script>
+    <script src="./scripts/prepayments.js"></script>
+    <script src="./scripts/prepayment-workflow.js"></script>
     <script src="./scripts/operations.js"></script>
     <script src="./scripts/ministry-traveller-register.js"></script>
     <script src="./scripts/invoice-delete.js"></script>

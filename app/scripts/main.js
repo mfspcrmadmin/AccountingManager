@@ -598,6 +598,7 @@ var ns = global.AccountingManagerApp;
     MODULES: MODULES,
     FIELD_CANDIDATES: FIELD_CANDIDATES,
     SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION: SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION,
+    getCurrentUserEmail: getCurrentUserEmail,
     PAYMENT_LETTER_DEFAULT_RECIPIENT: PAYMENT_LETTER_DEFAULT_RECIPIENT,
     GET_SUPPLIER_CONTACT_BY_TYPE_FUNCTION: GET_SUPPLIER_CONTACT_BY_TYPE_FUNCTION,
     PAYMENT_LETTER_CONTACT_TYPE: PAYMENT_LETTER_CONTACT_TYPE,
@@ -3373,6 +3374,13 @@ var ns = global.AccountingManagerApp;
     return result.details && result.details[0] ? result.details[0] : null;
   }
 
+  window.addEventListener("accounting-manager-settlements-rebuilt", function (event) {
+    ((event.detail && event.detail.details) || []).forEach(syncSettlementStateFromRebuildDetail);
+    state.loaded.settlements = false;
+    invalidateInvoiceCreateSettlementCache();
+    renderAll();
+  });
+
   async function recalculateSettlementTotalsForSettlementIds(settlementIds) {
     var result = await rebuildSupplierSettlementTotalsByFunction(settlementIds);
     return result.details || [];
@@ -3949,13 +3957,13 @@ var ns = global.AccountingManagerApp;
           return email;
         }
       } catch (error) {
-        debugWarn("Could not read current user email for Ezus sync", {
+        debugWarn("Could not read current user email", {
           error: error && error.message ? error.message : String(error)
         });
       }
     }
 
-    throw new Error("Could not determine the email of the user starting the Ezus sync.");
+    throw new Error("Could not identify your CRM user email. Please reload the widget and try again.");
   }
 
   var zohoPageLoadReceived = false;
@@ -6485,6 +6493,50 @@ var ns = global.AccountingManagerApp;
   }
 
   async function loadInvoicesForSupplier(supplierId) {
+    var invoices = await loadSupplierInvoiceRecords(supplierId);
+    var datesByInvoiceId = {};
+
+    try {
+      for (var offset = 0; offset < invoices.length; offset += 40) {
+        var ids = invoices.slice(offset, offset + 40).map(function (invoice) {
+          return "'" + escapeCoqlValue(invoice.id) + "'";
+        });
+        var allocations = await loadRecordsByCoql(MODULES.payAllocations, [
+          "id", "Supplier_Invoice", "Payment_Date", "Payment_Status"
+        ], {
+          whereClause: "Supplier_Invoice in (" + ids.join(", ") + ")"
+        });
+
+        allocations.forEach(function (allocation) {
+          var invoiceId = helpers.getLookupId(allocation.Supplier_Invoice);
+          var date = String(allocation.Payment_Date || "").trim();
+          var status = String(allocation.Payment_Status || "").trim().toLowerCase();
+
+          if (!invoiceId || !date || status === "cancelled" || status === "canceled") {
+            return;
+          }
+
+          datesByInvoiceId[invoiceId] = datesByInvoiceId[invoiceId] || [];
+          if (datesByInvoiceId[invoiceId].indexOf(date) === -1) {
+            datesByInvoiceId[invoiceId].push(date);
+          }
+        });
+      }
+
+      invoices.forEach(function (invoice) {
+        invoice._supplierPaymentDates = (datesByInvoiceId[invoice.id] || []).sort();
+      });
+    } catch (error) {
+      debugError("loadInvoicesForSupplier payment dates failed", error, { supplierId: supplierId });
+      invoices.forEach(function (invoice) {
+        invoice._supplierPaymentDates = null;
+      });
+    }
+
+    return invoices;
+  }
+
+  async function loadSupplierInvoiceRecords(supplierId) {
     var escapedId = supplierId.replace(/'/g, "\\'");
     var selectFields = await resolveCoqlFields(MODULES.invoices, INVOICE_COQL_FIELDS);
 

@@ -38,17 +38,8 @@
   table-layout: auto;
 }
 
-#operations-table-wrap.is-card-purchases .operations-results-table th:nth-child(9),
-#operations-table-wrap.is-card-purchases .operations-results-table td:nth-child(9) {
-  min-width: 200px;
-}
-
-#operations-table-wrap.is-card-purchases .operations-results-table th:nth-child(10),
-#operations-table-wrap.is-card-purchases .operations-results-table td:nth-child(10) {
-  min-width: 260px;
-  max-width: 360px;
-  white-space: normal;
-}
+#operations-table-wrap.is-card-purchases .operations-results-table.has-column-widths { min-width: 100%; table-layout: fixed; }
+.operations-results-table .card-purchase-review-cell { width: 48px; }
 
 .operations-panel .operations-empty-state:not([hidden]) {
   flex: 1 1 auto;
@@ -353,16 +344,17 @@
 
 .card-purchases-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: end;
   gap: 12px;
   margin: 14px 0 4px;
 }
 
-.card-purchases-toolbar .field { min-width: 190px; }
-.card-purchases-toolbar .card-purchases-search-field { flex: 1 1 340px; }
-.card-purchases-filters-popover { align-self: end; }
-.card-purchases-advanced-filters { display: grid; grid-template-columns: repeat(3, minmax(190px, 1fr)); gap: 10px; }
-.card-purchases-advanced-filters .field { min-width: 0; }
+.card-purchases-view-row { width: 100%; }
+.card-purchases-toolbar > .field { flex: 1 1 0; min-width: 0; }
+.card-purchases-toolbar > .field > input { width: 100%; min-width: 0; }
+.card-purchases-toolbar > .field > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-purchase-secondary-reference { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
 .card-purchases-view-switch { display: inline-flex; flex: 0 0 auto; overflow: hidden; min-height: 38px; border: 1px solid var(--line); border-radius: 11px; background: #f8faf9; }
 .card-purchases-view-switch button { min-width: 58px; padding: 8px 12px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .card-purchases-view-switch button:last-child { border-right: 0; }
@@ -397,7 +389,8 @@
   background-position: right 15px center, center !important;
   background-size: 12px 8px, 100% 100% !important;
 }
-.card-purchases-icon-button { min-width: 38px; padding: 5px 9px; font-size: 18px; line-height: 1; }
+.card-purchases-icon-button, .prepayments-icon-button { display: inline-grid; flex: 0 0 auto; width: 38px; min-width: 38px; height: 38px; place-items: center; padding: 5px 9px; font-size: 18px; line-height: 1; }
+.card-purchases-icon-button svg, .prepayments-icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .card-purchase-review-button { display: inline-grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 0; border-radius: 7px; background: #f2f4f7; color: #344054; cursor: pointer; }
 .card-purchase-review-button svg { width: 17px; height: 17px; }
 .card-purchase-review-button:hover, .card-purchase-review-button:focus-visible { background: #e4e7ec; color: var(--accent-strong); }
@@ -411,7 +404,14 @@
 .card-purchase-workflow-modal.is-open .card-purchase-workflow-card { opacity: 1; pointer-events: auto; transform: translateX(0); }
 .card-purchase-workflow-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .card-purchase-workflow-card h3 { margin: 0; }
-.quick-actions-toggle { min-height: 36px; padding: 8px 14px; border-radius: 10px; font-weight: 700; }
+.prepayment-workflow-form { margin-top: 24px; }
+.prepayment-self-employed-confirmation { margin-top: 16px; padding: 16px; border: 1px solid #fedf89; border-radius: 10px; background: #fffaeb; }
+.prepayment-self-employed-confirmation h4 { margin: 0 0 8px; }
+.prepayment-self-employed-confirmation p { margin: 0 0 12px; }
+.prepayment-workflow-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.prepayment-workflow-fieldset .prepayment-workflow-fieldset { margin-top: 16px; }
+.button.quick-actions-toggle { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 38px; width: 38px; height: 38px; min-height: 38px; padding: 8px; border-radius: 10px; }
+.quick-actions-toggle svg { display: block; width: 20px; height: 20px; }
 .quick-actions-aside { position: fixed; inset: 0; z-index: 2100; pointer-events: none; }
 .quick-actions-aside:not([hidden]) { display: block; }
 .quick-actions-aside-backdrop { position: absolute; inset: 0; background: rgba(16, 24, 40, .36); opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
@@ -486,9 +486,7 @@
   .quick-actions-aside-card { width: 100%; padding: 18px; }
   .quick-actions-external-links { grid-template-columns: 1fr; }
   .quick-actions-aside .booking-actions-buttons { grid-template-columns: 1fr; }
-  .card-purchases-toolbar { align-items: stretch; flex-direction: column; }
-  .card-purchases-toolbar .field { min-width: 0; }
-  .card-purchases-advanced-filters { grid-template-columns: 1fr; }
+  .card-purchases-toolbar > .field { flex: 1 1 calc(50% - 6px); }
   .card-purchases-view-switch { align-self: flex-start; }
   .card-purchase-workflow-context dl,
   .card-purchase-workflow-fields { grid-template-columns: 1fr; }
@@ -532,4 +530,98 @@
   .operations-header {
     flex-direction: column;
   }
+}
+.prepayments-workspace { min-width: 0; }
+.prepayments-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 6px 0 18px; }
+.prepayments-toolbar > [data-prepayments-refresh] { margin-left: auto; }
+.prepayments-filters { display: flex; flex-wrap: wrap; width: 100%; min-width: 0; gap: 12px; align-items: end; }
+.prepayments-filters > .field, .prepayments-filter-actions { flex: 1 1 150px; min-width: 0; }
+.prepayments-filters > .field > input, .prepayments-filters > .field > select { width: 100%; min-width: 0; max-width: 100%; }
+.prepayments-filter-actions { display: flex; gap: 8px; padding-bottom: 1px; }
+.prepayments-filter-actions > .prepayments-icon-button { flex: 1 1 auto; width: 100%; min-width: 0; }
+.prepayments-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.prepayments-summary > div { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid #eaecf0; border-radius: 10px; background: #f9fafb; }
+.prepayments-summary span { color: var(--muted); font-size: 12px; }
+.prepayments-summary strong { font-size: 19px; overflow-wrap: anywhere; }
+.prepayments-message { margin: 16px 0; color: var(--muted); font-size: 12px; }
+.prepayments-message.is-error { padding: 12px; border-radius: 8px; background: #fff1f0; color: #b42318; }
+.prepayments-results { display: grid; gap: 12px; min-width: 0; }
+.prepayment-request { min-width: 0; border: 1px solid #e4e7ec; border-radius: 10px; background: #fff; overflow: hidden; }
+.prepayment-request > summary { display: grid; grid-template-columns: minmax(240px, 3fr) minmax(90px, .6fr) minmax(150px, 1fr) minmax(100px, .8fr); gap: 16px; padding: 17px 18px; cursor: pointer; background: #fcfcfd; }
+.prepayment-request > summary:hover { background: #fffaf5; }
+.prepayment-request > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.prepayment-request > summary::-webkit-details-marker { display: none; }
+.prepayment-request > summary span { display: grid; gap: 5px; min-width: 0; }
+.prepayment-request > summary strong { font-size: 13px; overflow-wrap: anywhere; }
+.prepayment-request-heading > strong::before { content: '▸'; display: inline-block; margin-right: 8px; color: var(--muted); }
+.prepayment-request[open] .prepayment-request-heading > strong::before { content: '▾'; }
+.prepayment-request small, .prepayment-request-meta small { font-size: 11px; color: var(--muted); }
+.prepayment-request-body { padding: 16px 18px; border-top: 1px solid #eaecf0; }
+.prepayment-request-meta { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 16px; align-items: center; }
+.prepayment-request-meta > div { display: grid; gap: 5px; overflow-wrap: anywhere; }
+.prepayment-request-meta strong { font-size: 12px; }
+.prepayment-request-totals { font-size: 12px; color: #475467; }
+.prepayment-observations { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.card-purchase-workflow-context .prepayment-observations { grid-column: 1 / -1; }
+.card-purchase-workflow-context .prepayment-observations dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.prepayments-table td.prepayment-observations { min-width: 180px; max-width: 340px; }
+.prepayment-request-documents { display: flex; flex-wrap: wrap; gap: 24px; margin: 14px 0; }
+.prepayment-documents { display: grid; gap: 5px; font-size: 12px; }
+.prepayment-documents strong { font-size: 11px; }
+.prepayment-documents small { font-weight: 400; }
+.prepayment-documents .card-purchase-file .prepayment-preview-action { flex: 0 0 auto; margin-left: auto; color: var(--accent); font-size: 11px; }
+.prepayment-record-link { padding: 0; border: 0; background: transparent; color: #2458a6; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.prepayment-record-link:hover { text-decoration: underline; }
+.prepayments-table { width: 100%; min-width: 880px; }
+.prepayments-table th, .prepayments-table td { text-align: center; vertical-align: middle; }
+.prepayments-table td { font-size: 12px; }
+.prepayments-table .prepayment-record-link, .prepayments-table .card-purchase-file { text-align: center; }
+.prepayments-table .prepayment-row-actions { justify-content: center; }
+.prepayments-table .prepayment-documents { justify-items: center; }
+.prepayments-table td > small { display: block; max-width: 240px; margin: 5px auto 0; color: var(--muted); font-size: 11px; }
+.prepayment-status { display: inline-flex; white-space: nowrap; border-radius: 20px; padding: 4px 8px; font-size: 11px; font-weight: 600; }
+.prepayment-status.is-pending-invoice { color: #fff; background: #f27e22; }
+.prepayment-status.is-pending-payment { color: #3d3000; background: #f5c72f; }
+.prepayment-status.is-paid { color: #fff; background: #25b52a; }
+.prepayment-status.is-cancelled { color: #fff; background: #eb4d4d; }
+.prepayment-status.is-neutral { color: #475467; background: #f2f4f7; }
+.prepayment-status.is-receipt-needed { color: #965b08; background: #fff0d5; }
+.prepayment-status.is-discard-credit { color: #6941c6; background: #f4ebff; }
+.prepayment-status.is-discard-paid { color: #175cd3; background: #eff8ff; }
+.prepayment-row-actions { display: flex; align-items: center; gap: 6px; }
+.prepayment-row-actions .card-purchase-review-button { flex-shrink: 0; }
+.prepayment-discard-button { color: #b54708; }
+.prepayment-discard-dialog { width: min(420px, calc(100vw - 32px)); padding: 24px; border: 1px solid #eaecf0; border-radius: 14px; color: var(--text); box-shadow: 0 20px 50px rgba(16, 24, 40, .2); }
+.prepayment-discard-dialog::backdrop { background: rgba(16, 24, 40, .36); }
+.prepayment-discard-dialog h3 { margin: 0; }
+.prepayment-select, .prepayment-select-space { width: 16px; height: 16px; flex: 0 0 16px; margin: 0 5px 0 0; accent-color: var(--accent); }
+.prepayment-bank-toggle { display: inline-block; position: relative; cursor: pointer; margin: 0; }
+.prepayment-bank-toggle > input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.prepayment-bank-toggle > span { display: flex; align-items: center; gap: 5px; padding: 6px 9px; border: 1px solid #dfe3e8; border-radius: 20px; background: #f8f9fb; color: #667085; font-size: 11px; white-space: nowrap; }
+.prepayment-bank-toggle svg { width: 17px; height: 17px; }
+.prepayment-bank-toggle .bank-requested-yes { display: none; }
+.prepayment-bank-toggle input:checked + span { background: #ecf8ef; color: #247342; border-color: #b9ddc3; }
+.prepayment-bank-toggle input:checked + span .bank-requested-yes { display: inline; }
+.prepayment-bank-toggle input:checked + span .bank-requested-no { display: none; }
+.prepayment-bank-toggle input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 3px; }
+.prepayment-bank-toggle input:disabled + span { opacity: .5; }
+.prepayment-receipt-toggle input:checked + span { background: #fff7e6; color: #975a16; border-color: #f4d49a; }
+.prepayment-bank-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; font-size: 12px; color: var(--muted); }
+.prepayment-bank-toolbar [data-prepayments-bank-open] { margin-left: auto; }
+.prepayment-bank-dialog { width: min(1050px, calc(100vw - 40px)); max-height: calc(100vh - 40px); overflow: auto; box-sizing: border-box; padding: 24px; border: 1px solid #eaecf0; border-radius: 14px; color: var(--text); box-shadow: 0 20px 50px #10182833; }
+.prepayment-bank-dialog::backdrop { background: #10182866; }
+.prepayment-bank-dialog h3 { margin: 0 0 18px; }
+.prepayment-bank-dialog label { display: grid; gap: 6px; }
+.prepayment-bank-dialog input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #dfe3e8; border-radius: 7px; }
+.prepayment-bank-addresses { display: grid; gap: 12px; }
+.prepayment-bank-editor-hint { color: #667085; font-size: 12px; }
+.prepayment-bank-editor { display: block; min-height: 260px; max-height: 52vh; overflow: auto; border: 1px solid #e4e7ec; border-radius: 12px; background: #f4f5f7; }
+.prepayment-bank-editor:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prepayment-bank-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.prepayment-overdue, .prepayments-table .prepayment-overdue > small, .prepayment-warning { color: #b42318; }
+.prepayment-no-payments { color: var(--muted); font-size: 13px; padding: 12px 0; }
+@media (max-width: 720px) {
+  .prepayments-summary, .prepayment-request > summary, .prepayment-request-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prepayment-request-heading { grid-column: 1 / -1; }
+  .prepayments-summary strong { font-size: 16px; }
 }

@@ -16,9 +16,12 @@
   }
 
   function setupColumnWidths(tableKey) {
+    var buttons = document.querySelectorAll('[data-table-columns-button="' + tableKey + '"]');
+    Array.prototype.forEach.call(buttons, function (button) { setupTableColumnWidths(tableKey, button.closest("table")); });
+  }
+
+  function setupTableColumnWidths(tableKey, table) {
     var definition = tables[tableKey];
-    var button = document.querySelector('[data-table-columns-button="' + tableKey + '"]');
-    var table = button && button.closest("table");
     if (!table || !table.getBoundingClientRect().width) { return; }
     var headers = Array.prototype.slice.call(table.tHead.rows[0].cells);
     var previousGroup = table.querySelector("colgroup[data-column-widths]");
@@ -203,10 +206,16 @@
       if (!definition.visible.length) { definition.visible = [definition.order[0]]; }
       definition.onChange = onChange;
       tables[key] = definition;
-      if (["bookings", "tripClosure", "invoices", "payments"].indexOf(key) !== -1) {
+      if (["bookings", "tripClosure", "invoices", "payments", "cardPurchases", "prepayments", "prepaymentsByRequest"].indexOf(key) !== -1) {
         global.cancelAnimationFrame(definition.resizeFrame);
         definition.resizeFrame = global.requestAnimationFrame(function () { setupColumnWidths(key); });
       }
+    },
+    refreshWidths: function (key) {
+      var definition = tables[key];
+      if (!definition) { return; }
+      global.cancelAnimationFrame(definition.resizeFrame);
+      definition.resizeFrame = global.requestAnimationFrame(function () { setupColumnWidths(key); });
     },
     resizableHeader: function (key, html) {
       return html.replace("<th", '<th data-resizable-column="' + key + '"');

@@ -174,7 +174,8 @@
       workbookXml = buildSpreadsheetWorkbookXml("Supplier Invoices", [
         "Invoice",
         "Status",
-        "Date",
+        "Invoice Date",
+        "Payment Dates",
         "Booking",
         "Total",
         "Paid",
@@ -184,6 +185,7 @@
           { value: helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES), type: "String" },
           { value: invoice.Status || "", type: "String" },
           { value: helpers.formatDate(invoice.Invoice_Date), type: "String" },
+          { value: invoice._supplierPaymentDates == null ? "Unavailable" : (invoice._supplierPaymentDates.map(function (date) { return helpers.formatDate(date); }).join(", ") || "-"), type: "String" },
           { value: getInvoiceBookingDisplay(invoice), type: "String" },
           { value: helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES), type: "Number" },
           { value: Number(invoice.Amount_Paid) || 0, type: "Number" },
@@ -218,7 +220,7 @@
       workbookXml = buildSpreadsheetWorkbookXml("Supplier Payments", [
         "Payment",
         "Status",
-        "Date",
+        "Payment Date",
         "Booking context",
         "Payment account",
         "Amount"
@@ -1019,6 +1021,7 @@
     }
 
     async function onSelectedPaymentLetterSubmitClick() {
+      if (state.paymentLetter.isBusy) { return; }
       var paymentId = String(state.paymentLetter.paymentId || "");
       var payment = state.records.payments.find(function (item) {
         return String(item && item.id || "") === paymentId;
@@ -1076,11 +1079,16 @@
       });
 
       try {
+        var actingUserEmail = String(await deps.getCurrentUserEmail() || "").trim().toLowerCase();
+        if (!hasValidEmailAddress(actingUserEmail)) {
+          throw new Error("Could not identify your CRM user email. No payment letters were sent. Please reload the widget and try again.");
+        }
         response = await crm.executeFunction(SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION, {
           paymentId: paymentId,
           supplierIds: supplierIds.join("|||"),
           recipientEmail: PAYMENT_LETTER_DEFAULT_RECIPIENT,
-          supplierEmailMapStr: JSON.stringify(supplierEmailMap)
+          supplierEmailMapStr: JSON.stringify(supplierEmailMap),
+          actingUserEmail: actingUserEmail
         });
         result = getPaymentLetterFunctionResult(response);
 
@@ -1106,7 +1114,7 @@
           paymentId: paymentId,
           supplierIds: supplierIds
         });
-        renderer.showError(error.message || "Could not send the payment letter.");
+        renderer.showErrorPopup(error.message || "Could not send the payment letter.", "Payment letter could not be sent");
       }
     }
 
