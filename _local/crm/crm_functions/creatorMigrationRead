@@ -1,0 +1,51 @@
+string standalone.creatorMigrationRead(String reportName, String criteria, String recordCursor)
+{
+if(!reportName.matches("^[A-Za-z][A-Za-z0-9_]*$"))
+{
+	throw "Invalid Creator report link name.";
+}
+params = Map();
+params.put("max_records",200);
+params.put("field_config","all");
+params.put("criteria",criteria);
+headers = Map();
+if(ifnull(recordCursor,"") != "")
+{
+	headers.put("record_cursor",recordCursor);
+}
+response = invokeurl
+[
+	url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/" + reportName
+	type :GET
+	parameters :params
+	headers :headers
+	connection :"administrationmanager"
+	detailed :true
+];
+body = response.get("responseText").toString().toMap();
+records = List();
+code = ifnull(body.get("code"),0).toLong();
+if(code == 3000 && response.get("responseCode") == 200 && body.containKey("data"))
+{
+	records = body.get("data");
+}
+else if(code != 3100)
+{
+	throw "Creator read failed for " + reportName + ": " + body.toString();
+}
+nextCursor = "";
+responseHeaders = ifnull(response.get("responseHeader"),Map());
+for each headerName in responseHeaders.keys()
+{
+	if(headerName.toLowerCase() == "record_cursor")
+	{
+		nextCursor = ifnull(responseHeaders.get(headerName),"").toString();
+	}
+}
+if(nextCursor != "" && nextCursor == recordCursor)
+{
+	throw "Creator returned a repeated cursor.";
+}
+migrationResponse = {"records":records,"next_cursor":nextCursor};
+return migrationResponse.toString();
+}

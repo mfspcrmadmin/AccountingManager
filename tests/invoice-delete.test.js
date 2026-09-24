@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const window = {};
-for (const file of ['config.js', 'invoice-delete.js', 'crm.js']) {
+for (const file of ['config.js', 'prepayment-allocations.js', 'payment-operation-sync.js', 'invoice-delete.js', 'crm.js']) {
   vm.runInNewContext(fs.readFileSync('app/scripts/' + file, 'utf8'), { window });
 }
 const ns = window.AccountingManagerApp, M = ns.MODULES;
@@ -27,10 +27,12 @@ function setup(extra = {}) {
     Card_Purchases: [{ id: 'card1', Vendor_Invoice: lookup('i1'), Vendor_Payment: lookup('p1'), Invoice_Number: 'INV1', Accounting_Status: 'Purchase recorded', Accounting_Processed_At: '2026-01-01' }],
     ...extra
   };
+  if (!data.Prepayment_Invoice_Allocations) data.Prepayment_Invoice_Allocations = (data.Prepayments || []).filter(p => p.Vendor_Invoice).map(p => { p.Amount ||= 100; p.Currency ||= 'EUR'; return { id:'link-'+p.id, Prepayment:lookup(p.id), Vendor_Invoice:p.Vendor_Invoice, Allocated_Amount:p.Amount, Currency:p.Currency }; });
   const writes = [], reads = [], saved = new Map();
   const storage = { getItem: k => saved.get(k) || null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k) };
   let fail;
   const crm = {
+    async getFields() { return { fields: [{ api_name: "Vendor_Invoice", data_type: "lookup" }, { api_name: "Vendor_Payment", data_type: "lookup" }] }; },
     async getRecord(module, id) { return structuredClone((data[module] || []).find(r => r.id === id)); },
     async getAllRecords(module, page, size) { return structuredClone((data[module] || []).slice((page - 1) * size, page * size)); },
     async searchRecordPage(module, criteria, page, size) {
@@ -48,7 +50,9 @@ function setup(extra = {}) {
     async updateRecord(module, id, fields, options) {
       if (fail?.(module, id, 'update')) { return { code: 'ERROR', message: 'simulated rejection' }; }
       assert.equal(options.trigger.length, 0);
-      const schema = JSON.parse(fs.readFileSync('_local/crm/modules/modules_fields/' + module + '_fields')).fields;
+      const schema = JSON.parse(fs.readFileSync('_local/crm/modules/' + module + '_fields')).fields;
+      // Lookup fields are discovered from live metadata; the exported schema predates them.
+      if (module === "Prepayments") schema.push({ api_name: "Vendor_Invoice", data_type: "lookup" }, { api_name: "Vendor_Payment", data_type: "lookup" });
       for (const [key, value] of Object.entries(fields)) {
         const field = schema.find(f => f.api_name === key);
         assert.ok(field, `Unknown field ${module}.${key}`);
@@ -92,7 +96,7 @@ test('shared payment survives with remaining amount, counts and pending accounti
   assert.equal(p.Accounting_Status, 'Pending'); assert.equal(p.Status, 'Paid');
   assert.equal(f.data[M.invoices][0].Amount_Paid, 40); assert.equal(f.data[M.invoices][0].Status, 'Partially Paid');
   assert.equal(f.data[M.settlements][0].Total_Invoice, 80); assert.equal(f.data[M.settlements][0].Total_Paid, 40);
-  assert.equal(f.data.Card_Purchases[0].Vendor_Payment.id, 'p1');
+  assert.equal(f.data.Card_Purchases[0].Vendor_Payment, null);
 });
 
 test('recalculates every settlement including invoice splits without double counting', async () => {
@@ -197,9 +201,48 @@ test('a resumed deletion checks accounting locks again', async () => {
 
 test('Deluge rebuild uses only valid settlement picklist states and checks update responses', () => {
   const text = fs.readFileSync('_local/crm/crm_functions/rebuildSupplierSettlementTotals', 'utf8');
-  const schema = JSON.parse(fs.readFileSync('_local/crm/modules/modules_fields/Supplier_Settlements_fields')).fields;
+  const schema = JSON.parse(fs.readFileSync('_local/crm/modules/Supplier_Settlements_fields')).fields;
   const values = schema.find(f => f.api_name === 'Admin_Status').pick_list_values.map(v => v.actual_value);
   for (const match of text.matchAll(/nextStatus = "([^"]+)"/g)) { assert.ok(values.includes(match[1]), match[1]); }
   assert.match(text, /updateResult == null \|\| !updateResult.containKey\("id"\)/);
   assert.match(text, /updateMap.put\("Total_Paid",totalPaidFromAllocations\)/);
+});
+
+
+test('invoice undo resets linked prepayments and synchronizes requests, with resumable failure', async () => {
+  const f = setup({ Prepayments: [{ id: 'pre1', Vendor_Invoice: lookup('i1'), Vendor_Payment: lookup('p1'), Prepayment_Request: lookup('r1'), Accounting_Status: 'Prepayment recorded', Payment_Date: '2026-09-22' }] });
+  let attempts = 0;
+  ns.syncPrepaymentRequest = async (crm, requestId) => {
+    assert.equal(requestId, 'r1');
+    assert.equal(f.data.Prepayments[0].Accounting_Status, 'Pending invoice');
+    if (++attempts === 1) throw new Error('request update failed');
+  };
+  await assert.rejects(f.service.execute('i1'), /request update failed/);
+  assert.equal(f.data[M.invoices].length, 1);
+  await f.create().execute('i1');
+  assert.equal(attempts, 2);
+  assert.equal(f.data.Prepayment_Invoice_Allocations.length, 0);
+  assert.equal(f.data.Prepayments[0].Vendor_Payment, null);
+  assert.equal(f.data.Prepayments[0].Payment_Date, null);
+  assert.equal(f.data[M.invoices].length, 0);
+});
+
+test('deleting one invoice removes only its prepayment allocation and reopens the incomplete prepayment', async () => {
+  const f = setup({
+    Prepayments:[{id:'pre1',Amount:300,Currency:'EUR',Vendor_Payment:lookup('p1'),Accounting_Status:'Prepayment recorded'}],
+    Prepayment_Invoice_Allocations:[
+      {id:'link1',Prepayment:lookup('pre1'),Vendor_Invoice:lookup('i1'),Allocated_Amount:100,Currency:'EUR'},
+      {id:'link2',Prepayment:lookup('pre1'),Vendor_Invoice:lookup('i2'),Allocated_Amount:200,Currency:'EUR'}
+    ]
+  });
+  f.data[M.invoices].push({id:'i2',Invoice_Total:200,Amount_Paid:200,Status:'Paid'});
+  f.data[M.payAllocations].push({id:'a2',Supplier_Invoice:lookup('i2'),Supplier_Payment:lookup('p1'),Allocated_Amount:200});
+  f.data[M.payments][0].Payment_Amount=300;
+  await f.service.execute('i1');
+  assert.equal(f.data.Prepayment_Invoice_Allocations.length,1);
+  assert.equal(f.data.Prepayment_Invoice_Allocations[0].Vendor_Invoice.id,'i2');
+  assert.equal(f.data.Prepayments[0].Accounting_Status,'Pending invoice');
+  assert.equal(f.data.Prepayments[0].Vendor_Payment,null);
+  assert.equal(f.data[M.payments].length,1);
+  assert.equal(f.data[M.payments][0].Payment_Amount,200);
 });

@@ -1124,6 +1124,7 @@
     }
 
     return {
+      getPaymentLetterSuppliers: getPaymentLetterSuppliers,
       refreshSupplierRelatedActivity: refreshSupplierRelatedActivity,
       onSelectedPaymentSendLetterClick: onSelectedPaymentSendLetterClick,
       onSupplierInvoicesExportClick: onSupplierInvoicesExportClick,

@@ -1,0 +1,47 @@
+string standalone.migrateCreatorPrepaymentsAuto(String mode, String paymentDateFrom, String paymentDateTo, String proformaReport, String creatorDateFormat)
+{
+result = Map();
+result.put("success",false);
+result.put("complete",false);
+result.put("progress_saved",false);
+try
+{
+	allowedModes = {"simulate","migrate","verify"};
+	if(!allowedModes.contains(mode))
+	{
+		throw "Use simulate, migrate or verify.";
+	}
+	config = mode + "|" + paymentDateFrom + "|" + paymentDateTo + "|" + proformaReport + "|" + creatorDateFormat;
+	checkpoint = standalone.creatorMigrationProgress("load",config,"").toMap();
+	if(checkpoint.get("complete") == true)
+	{
+		result.put("success",true);
+		result.put("complete",true);
+		result.put("progress_saved",true);
+		result.put("summary",checkpoint.get("summary"));
+		result.put("message","This migration run is already complete.");
+	}
+	else
+	{
+		// Confirm write access before invoking any migration mutations.
+		progressResponse = standalone.creatorMigrationProgress("save",config,checkpoint.toString());
+		result = standalone.migrateCreatorPrepayments(mode,paymentDateFrom,paymentDateTo,proformaReport,creatorDateFormat,checkpoint.get("resume_state")).toMap();
+		result.put("progress_saved",false);
+		if(result.containKey("next_state"))
+		{
+			checkpoint.put("resume_state",result.get("next_state"));
+			checkpoint.put("complete",result.get("success") == true && result.get("complete") == true);
+			checkpoint.put("summary",result.get("summary"));
+			progressResponse = standalone.creatorMigrationProgress("save",config,checkpoint.toString());
+			result.put("progress_saved",true);
+		}
+	}
+}
+catch(error)
+{
+	result.put("success",false);
+	result.put("complete",false);
+	result.put("message",error.toString());
+}
+return result.toString();
+}

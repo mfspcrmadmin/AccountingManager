@@ -1,0 +1,590 @@
+string standalone.migrateCreatorPrepayments(String mode, String paymentDateFrom, String paymentDateTo, String proformaReport, String creatorDateFormat, String resumeState)
+{
+result = {"success":false,"complete":false};
+details = List();
+warnings = List();
+state = Map();
+try
+{
+	allowedModes = {"simulate","migrate","verify"};
+	dateFormats = {"dd-MMM-yyyy","dd/MM/yyyy","yyyy-MM-dd"};
+	if(!allowedModes.contains(mode))
+	{
+		throw "Use simulate, migrate or verify.";
+	}
+	if(!paymentDateFrom.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") || !paymentDateTo.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))
+	{
+		throw "Both date limits are required in yyyy-MM-dd format.";
+	}
+	fromDate = paymentDateFrom.toDate("yyyy-MM-dd");
+	toDate = paymentDateTo.toDate("yyyy-MM-dd");
+	if(fromDate.toString("yyyy-MM-dd") != paymentDateFrom || toDate.toString("yyyy-MM-dd") != paymentDateTo || fromDate > toDate)
+	{
+		throw "Invalid date range.";
+	}
+	if(!dateFormats.contains(creatorDateFormat) || !proformaReport.matches("^[A-Za-z][A-Za-z0-9_]*$"))
+	{
+		throw "Specify the real Creator proforma report link name and date format (dd-MMM-yyyy, dd/MM/yyyy or yyyy-MM-dd).";
+	}
+	config = mode + "|" + paymentDateFrom + "|" + paymentDateTo + "|" + proformaReport + "|" + creatorDateFormat;
+	state = Map();
+	state.put("config",config);
+	state.put("record_cursor","");
+	state.put("row_index",0);
+	state.put("expected_payment_id","");
+	countedProformas = List();
+	state.put("counted_proforma_ids",countedProformas);
+	state.put("selected_prepayments",0);
+	state.put("candidates_reviewed",0);
+	state.put("invalid_mfsp_candidates",0);
+	if(ifnull(resumeState,"").trim() != "" && resumeState.trim() != "{}")
+	{
+		state = resumeState.toMap();
+		if(state.get("config") != config || !state.containKey("record_cursor") || !state.containKey("row_index"))
+		{
+			throw "Resume state belongs to another mode, range or configuration. Start with an empty state.";
+		}
+	}
+	if(!state.containKey("counted_proforma_ids") || !state.containKey("selected_prepayments") || !state.containKey("candidates_reviewed") || !state.containKey("invalid_mfsp_candidates"))
+	{
+		throw "This resume state predates migration totals. Restart simulate with empty resumeState to obtain an accurate total.";
+	}
+	// Return this same state on errors, including errors after a confirmed creation.
+	summary = Map();
+	summary.put("selected_proformas",state.get("counted_proforma_ids").size());
+	summary.put("selected_prepayments",state.get("selected_prepayments"));
+	summary.put("candidates_reviewed",state.get("candidates_reviewed"));
+	summary.put("invalid_mfsp_candidates",state.get("invalid_mfsp_candidates"));
+	summary.put("is_final",false);
+	result.put("summary",summary);
+	result.put("next_state",state.toString());
+	criteria = "Payment_Date >= '" + fromDate.toString(creatorDateFormat) + "' && Payment_Date <= '" + toDate.toString(creatorDateFormat) + "'";
+	batchResults = List();
+	processedParentIds = List();
+	result.put("batch_limit",25);
+	result.put("processed_in_batch",0);
+	result.put("batch_results",batchResults);
+	loadedCursor = "__not_loaded__";
+	for each batchPosition in {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25}
+	{
+	// Preserve the failing candidate's state, not the beginning of the batch.
+	result.put("next_state",state.toString());
+	result.remove("message");
+	result.remove("missing");
+	result.remove("children_in_proforma");
+	result.remove("action");
+	if(loadedCursor != state.get("record_cursor"))
+	{
+		page = standalone.creatorMigrationRead("All_Pre_Payments",criteria,state.get("record_cursor")).toMap();
+		loadedCursor = state.get("record_cursor");
+	}
+	candidates = page.get("records");
+	rowIndex = state.get("row_index").toLong();
+	if(rowIndex < 0 || (candidates.size() > 0 && rowIndex >= candidates.size()))
+	{
+		throw "Invalid resume row. Creator data or report ordering may have changed. Restart the scan.";
+	}
+	if(candidates.isEmpty())
+	{
+		if(rowIndex != 0 || ifnull(state.get("expected_payment_id"),"") != "")
+		{
+			throw "Creator selection changed while resuming. Restart the scan.";
+		}
+		result.put("success",true);
+		result.put("complete",true);
+		summary.put("is_final",true);
+		result.put("summary",summary);
+		result.put("message","No more Creator prepayments match the date range.");
+		break;
+	}
+	candidate = candidates.get(rowIndex);
+	candidateId = ifnull(candidate.get("ID"),"").toString();
+	if(!candidateId.matches("^[0-9]+$") || (ifnull(state.get("expected_payment_id"),"") != "" && state.get("expected_payment_id") != candidateId))
+	{
+		throw "Creator page changed while resuming. Restart the scan; unique source IDs prevent duplicate records.";
+	}
+	// Verify the selected date independently of the report filter.
+	selectedDate = ifnull(candidate.get("Payment_Date"),"").toString().toDate(creatorDateFormat);
+	if(selectedDate < fromDate || selectedDate > toDate)
+	{
+		throw "Creator returned a candidate outside the requested date range.";
+	}
+	parentId = ifnull(ifnull(candidate.get("Proforma_Associated"),Map()).get("ID"),"").toString();
+	if(!parentId.matches("^[0-9]+$"))
+	{
+		throw "Creator payment " + candidateId + " has no readable Proforma_Associated.ID.";
+	}
+	result.put("selected_creator_payment_id",candidateId);
+	result.put("creator_proforma_id",parentId);
+	parentPage = standalone.creatorMigrationRead(proformaReport,"ID == " + parentId,"").toMap();
+	if(parentPage.get("records").size() != 1 || parentPage.get("records").get(0).get("ID").toString() != parentId)
+	{
+		throw "Could not read the exact Creator proforma. Check the report and its permissions.";
+	}
+	parent = parentPage.get("records").get(0);
+	if(!parent.containKey("MFSP_Reference"))
+	{
+		throw "The Creator proforma report must expose MFSP_Reference.";
+	}
+	reference = ifnull(parent.get("MFSP_Reference"),"").toString();
+	result.put("mfsp_reference",reference);
+	if(!reference.matches("^[A-Za-z]{4}[0-9]{7}$"))
+	{
+		result.put("action","skipped_invalid_mfsp");
+		result.put("message","MFSP Reference must be exactly four ASCII letters followed by seven digits, without spaces.");
+	}
+	else if(processedParentIds.contains(parentId))
+	{
+		result.put("action","skipped_proforma_in_batch");
+	}
+	else
+	{
+		// Do not silently lose fields omitted from a report's quick/detail views.
+		for each requiredField in {"Service_ID","Supplier_Id","Supplier_Reference","Total_Proforma_Amount","Transaction_Type","Requested_Date","Requested_by","Observations","Proforma_Attached","Invoice_Attached"}
+		{
+			if(!parent.containKey(requiredField))
+			{
+				throw "Expose " + requiredField + " in the Creator proforma report before migration.";
+			}
+		}
+		serviceId = ifnull(parent.get("Service_ID"),"").toString();
+		if(!serviceId.matches("^[0-9]+$"))
+		{
+			throw "Proforma has no valid CRM Service_ID. Resolve it explicitly before migrating.";
+		}
+		service = zoho.crm.getRecordById("Booking_Services",serviceId.toLong());
+		if(ifnull(service.get("id"),"").toString() != serviceId)
+		{
+			throw "The Creator Service_ID is not a readable CRM Booking Service.";
+		}
+		bookingId = ifnull(ifnull(service.get("Booking"),Map()).get("id"),"").toString();
+		supplierId = ifnull(ifnull(service.get("Supplier"),Map()).get("id"),"").toString();
+		if(bookingId == "" || supplierId == "")
+		{
+			throw "The CRM service needs a Booking and Supplier before migration.";
+		}
+		booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+		supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+		if(ifnull(booking.get("id"),"").toString() != bookingId || ifnull(booking.get("MFSP_Reference"),"").toString() != reference || ifnull(supplier.get("id"),"").toString() != supplierId)
+		{
+			throw "CRM booking reference or supplier does not match the Creator service context.";
+		}
+		legacySupplierId = ifnull(parent.get("Supplier_Id"),"").toString();
+		if(legacySupplierId != "" && legacySupplierId != supplierId)
+		{
+			throw "Creator Supplier_Id conflicts with the CRM service supplier.";
+		}
+		// The date range selects the parent. All of its children are fetched, with no date restriction.
+		children = List();
+		childIds = List();
+		childCursor = "";
+		childrenComplete = false;
+		for each batch in {1,2,3,4,5,6,7,8,9,10}
+		{
+			childPage = standalone.creatorMigrationRead("All_Pre_Payments","Proforma_Associated == " + parentId,childCursor).toMap();
+			for each child in childPage.get("records")
+			{
+				childId = ifnull(child.get("ID"),"").toString();
+				if(!childId.matches("^[0-9]+$") || childIds.contains(childId) || ifnull(ifnull(child.get("Proforma_Associated"),Map()).get("ID"),"").toString() != parentId)
+				{
+					throw "Invalid, repeated or unrelated Creator prepayment in the child query.";
+				}
+				childIds.add(childId);
+				children.add(child);
+			}
+			childCursor = childPage.get("next_cursor");
+			if(childCursor == "")
+			{
+				childrenComplete = true;
+				break;
+			}
+		}
+		if(!childrenComplete || !childIds.contains(candidateId))
+		{
+			throw "Could not confirm all Creator prepayments for this proforma. Nothing has been created.";
+		}
+		allChildrenMigrated = true;
+		for each child in children
+		{
+			if(child.get("Status") != "Migrated")
+			{
+				allChildrenMigrated = false;
+			}
+		}
+		if(mode == "migrate" && allChildrenMigrated)
+		{
+			result.put("action","skipped_already_migrated");
+			result.put("children_in_proforma",children.size());
+		}
+		else
+		{
+		// Migrated is a transport marker, not a paid/unpaid accounting status.
+		originalStatuses = Map();
+		for each child in children
+		{
+			if(child.get("Status") == "Migrated")
+			{
+				childId = child.get("ID").toString();
+				query = {"select_query":"select id, Creator_Original_Status from Prepayments where Creator_Record_ID = '" + childId + "' limit 2"};
+				response = invokeurl
+				[
+					url :"https://www.zohoapis.eu/crm/v8/coql"
+					type :POST
+					parameters :query.toString()
+					headers :{"Content-Type":"application/json"}
+					connection :"crm_oauth_connection"
+				];
+				if(ifnull(response.get("data"),List()).size() != 1)
+				{
+					throw "Cannot recover the original status of Migrated Creator prepayment " + childId + ". Check its CRM source ID.";
+				}
+				originalStatuses.put(childId,ifnull(response.get("data").get(0).get("Creator_Original_Status"),""));
+			}
+		}
+		paymentPlans = List();
+		activeCount = 0;
+		paidCount = 0;
+		sumAmount = 0.0;
+		for each child in children
+		{
+			for each requiredField in {"Amount","Percent","When_To_Be_Paid","Payment_Date","Status","Accounted","Bank_Receipt","Payment_Proof"}
+			{
+				if(!child.containKey(requiredField))
+				{
+					throw "Expose " + requiredField + " in All_Pre_Payments before migration.";
+				}
+			}
+			childId = child.get("ID").toString();
+			amount = child.get("Amount").toString().toDecimal();
+			if(amount <= 0)
+			{
+				throw "Prepayment " + childId + " does not have a positive amount.";
+			}
+			legacyStatus = ifnull(child.get("Status"),"").toString();
+			if(legacyStatus == "Migrated")
+			{
+				legacyStatus = ifnull(originalStatuses.get(childId),"").toString();
+			}
+			status = "";
+			if(legacyStatus == "Paid")
+			{
+				status = "Prepayment recorded";
+				paidCount = paidCount + 1;
+			}
+			else if(legacyStatus == "Not Paid")
+			{
+				status = "Pending invoice";
+			}
+			else if(legacyStatus == "Cancelled")
+			{
+				status = "Cancelled";
+			}
+			else
+			{
+				throw "Unknown Creator payment status: " + legacyStatus;
+			}
+			if(legacyStatus != "Cancelled")
+			{
+				activeCount = activeCount + 1;
+				sumAmount = sumAmount + amount;
+			}
+			timing = child.get("When_To_Be_Paid").toString();
+			if(timing == "On a specific date")
+			{
+				timing = "Specific Date";
+			}
+			validTiming = {"Specific Date","Within 1 day","Within 2 days","Within 3 days","10 days prior to service date","15 days prior to service date","20 days prior to service date","30 days prior to service date"};
+			if(!validTiming.contains(timing))
+			{
+				throw "Unknown payment timing: " + timing;
+			}
+			accounted = ifnull(child.get("Accounted"),false).toString().toLowerCase();
+			booleanValues = {"true","false","yes","no"};
+			if(!booleanValues.contains(accounted))
+			{
+				throw "Unknown Accounted checkbox value for Creator payment " + childId;
+			}
+			paymentPayload = {"Name":"CREATOR-PREPAY-" + childId,"Currency":"EUR","Amount":amount,"Accounting_Status":status,"Creator_Original_Status":legacyStatus,"Accounted":accounted == "true" || accounted == "yes","When_To_Be_Paid":timing};
+			if(ifnull(child.get("Percent"),"").toString() != "")
+			{
+				percent = child.get("Percent").toString().replaceAll("%","").toDecimal();
+				if(percent < 0 || percent > 100)
+				{
+					throw "Invalid prepayment percentage.";
+				}
+				paymentPayload.put("Percent",percent);
+			}
+			if(ifnull(child.get("Payment_Date"),"").toString() != "")
+			{
+				paymentPayload.put("Due_Date",child.get("Payment_Date").toString().toDate(creatorDateFormat).toString("yyyy-MM-dd"));
+			}
+			child.put("Status",legacyStatus);
+			paymentPlans.add({"creator_id":childId,"payload":paymentPayload,"source":child});
+		}
+		requestStatus = "To Be Paid";
+		if(activeCount == 0)
+		{
+			requestStatus = "Cancelled";
+		}
+		else if(paidCount == activeCount)
+		{
+			requestStatus = "Fully Paid";
+		}
+		else if(paidCount > 0)
+		{
+			requestStatus = "Partially Paid";
+		}
+		requestAmount = parent.get("Total_Proforma_Amount").toString().toDecimal();
+		if(requestAmount <= 0)
+		{
+			throw "The proforma total amount must be positive.";
+		}
+		if((sumAmount - requestAmount).abs() > 0.005)
+		{
+			warnings.add("The proforma total differs from its non-cancelled prepayments. Original amounts are preserved.");
+		}
+		transactionType = ifnull(parent.get("Transaction_Type"),"").toString();
+		transactionTypes = {"Full Payment","Partial Payment"};
+		if(!transactionTypes.contains(transactionType))
+		{
+			throw "Unknown proforma transaction type.";
+		}
+		requestPayload = {"Name":"CREATOR-PROFORMA-" + parentId,"Currency":"EUR","Supplier":{"id":supplierId},"Booking":{"id":bookingId},"MFSP_Reference":reference,"Supplier_Code":ifnull(parent.get("Supplier_Reference"),""),"Transaction_Type":transactionType,"Amount":requestAmount,"Status":requestStatus,"Observations":ifnull(parent.get("Observations"),"")};
+		if(ifnull(parent.get("Requested_by"),"") != "")
+		{
+			requestPayload.put("Requested_By_2",parent.get("Requested_by"));
+		}
+		if(ifnull(parent.get("Requested_Date"),"").toString() != "")
+		{
+			requestPayload.put("Requested_Date",parent.get("Requested_Date").toString().toDate(creatorDateFormat).toString("yyyy-MM-dd") + "T00:00:00+00:00");
+		}
+		// Preflight all target schemas and existing data before performing the first write.
+		preflightMode = "simulate";
+		if(mode == "verify")
+		{
+			preflightMode = "verify";
+		}
+		requestCheck = standalone.creatorMigrationEnsure(preflightMode,"Prepayment_Requests",parentId,requestPayload.toString()).toMap();
+		preflightId = ifnull(requestCheck.get("id"),"").toString();
+		if(preflightId == "")
+		{
+			preflightId = "0";
+		}
+		for each plan in paymentPlans
+		{
+			payload = plan.get("payload");
+			payload.put("Prepayment_Request",{"id":preflightId});
+			check = standalone.creatorMigrationEnsure(preflightMode,"Prepayments",plan.get("creator_id"),payload.toString()).toMap();
+		}
+		linkPayload = {"Prepayment_Request":{"id":preflightId},"Booking_Service":{"id":serviceId}};
+		linkCheck = standalone.creatorMigrationEnsure(preflightMode,"Prepayment_Request_Services",preflightId + "-" + serviceId,linkPayload.toString()).toMap();
+		requestResult = standalone.creatorMigrationEnsure(mode,"Prepayment_Requests",parentId,requestPayload.toString()).toMap();
+		requestId = requestResult.get("id");
+		details.add(requestResult);
+		missing = if(requestId == "",1,0);
+		for each sourceField in {"Proforma_Attached","Invoice_Attached","__snapshot"}
+		{
+			filesJson = ifnull(parent.get(sourceField),"").toString();
+			if(sourceField == "__snapshot")
+			{
+				filesJson = parent.toString();
+			}
+			documents = standalone.creatorMigrationFiles(mode,"Prepayment_Requests",requestId,proformaReport,parentId,sourceField,filesJson).toMap();
+			details.add({"source_field":sourceField,"documents":documents});
+			missing = missing + documents.get("missing");
+			if(mode == "migrate")
+			{
+				verified = standalone.creatorMigrationFiles("verify","Prepayment_Requests",requestId,proformaReport,parentId,sourceField,filesJson).toMap();
+				if(verified.get("missing") > 0)
+				{
+					throw "Request documents could not be verified. Retry the same state.";
+				}
+			}
+		}
+		for each plan in paymentPlans
+		{
+			childId = plan.get("creator_id");
+			payload = plan.get("payload");
+			payload.put("Prepayment_Request",{"id":if(requestId == "","0",requestId)});
+			paymentResult = standalone.creatorMigrationEnsure(mode,"Prepayments",childId,payload.toString()).toMap();
+			paymentId = paymentResult.get("id");
+			details.add(paymentResult);
+			if(paymentId == "")
+			{
+				missing = missing + 1;
+			}
+			for each sourceField in {"Payment_Proof","__snapshot"}
+			{
+				filesJson = ifnull(plan.get("source").get(sourceField),"").toString();
+				if(sourceField == "__snapshot")
+				{
+					filesJson = plan.get("source").toString();
+				}
+				documents = standalone.creatorMigrationFiles(mode,"Prepayments",paymentId,"All_Pre_Payments",childId,sourceField,filesJson).toMap();
+				details.add({"creator_payment_id":childId,"source_field":sourceField,"documents":documents});
+				missing = missing + documents.get("missing");
+				if(mode == "migrate")
+				{
+					verified = standalone.creatorMigrationFiles("verify","Prepayments",paymentId,"All_Pre_Payments",childId,sourceField,filesJson).toMap();
+					if(verified.get("missing") > 0)
+					{
+						throw "Payment documents could not be verified. Retry the same state.";
+					}
+				}
+			}
+		}
+		linkParent = if(requestId == "","0",requestId);
+		linkPayload.put("Prepayment_Request",{"id":linkParent});
+		linkResult = standalone.creatorMigrationEnsure(mode,"Prepayment_Request_Services",linkParent + "-" + serviceId,linkPayload.toString()).toMap();
+		details.add(linkResult);
+		if(linkResult.get("id") == "")
+		{
+			missing = missing + 1;
+		}
+		if(requestId != "")
+		{
+			requestRecord = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+			if(ifnull(requestRecord.get("Status"),"") != requestStatus)
+			{
+				if(mode == "migrate")
+				{
+					if(requestRecord.get("Status") != "To Be Paid")
+					{
+						throw "Existing request status conflicts with Creator. It was not overwritten.";
+					}
+					update = zoho.crm.updateRecord("Prepayment_Requests",requestId.toLong(),{"Status":requestStatus},{"trigger":List()});
+					requestRecord = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+					if(ifnull(update.get("id"),"").toString() != requestId || requestRecord.get("Status") != requestStatus)
+					{
+						throw "The final request status was not confirmed.";
+					}
+				}
+				else
+				{
+					missing = missing + 1;
+					details.add({"action":"request_status_mismatch","expected":requestStatus,"actual":requestRecord.get("Status")});
+				}
+			}
+		}
+		// Only acknowledge Creator after the entire proforma is verified in CRM.
+		for each plan in paymentPlans
+		{
+			childId = plan.get("creator_id");
+			freshPage = standalone.creatorMigrationRead("All_Pre_Payments","ID == " + childId,"").toMap();
+			if(freshPage.get("records").size() != 1 || freshPage.get("records").get(0).get("ID").toString() != childId)
+			{
+				throw "Could not verify the Creator migration marker for " + childId;
+			}
+			freshStatus = ifnull(freshPage.get("records").get(0).get("Status"),"").toString();
+			if(freshStatus != "Migrated" && freshStatus != plan.get("payload").get("Creator_Original_Status"))
+			{
+				throw "Creator payment status changed during migration. Review " + childId + " before retrying.";
+			}
+			if(freshStatus != "Migrated")
+			{
+				if(mode == "migrate")
+				{
+					markerPayload = {"data":{"Status":"Migrated"},"skip_workflow":{"all"}};
+					markerResponse = invokeurl
+					[
+						url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/All_Pre_Payments/" + childId
+						type :PATCH
+						parameters :markerPayload.toString()
+						headers :{"Content-Type":"application/json"}
+						connection :"administrationmanager"
+					];
+					if(ifnull(markerResponse.get("code"),0).toLong() != 3000)
+					{
+						throw "CRM migration is complete but Creator could not be marked Migrated. Retry the same state. " + markerResponse.toString();
+					}
+					confirmed = standalone.creatorMigrationRead("All_Pre_Payments","ID == " + childId,"").toMap();
+					if(confirmed.get("records").size() != 1 || confirmed.get("records").get(0).get("ID").toString() != childId || confirmed.get("records").get(0).get("Status") != "Migrated")
+					{
+						throw "Creator did not confirm Migrated for " + childId + ". Retry the same state.";
+					}
+					details.add({"creator_payment_id":childId,"action":"marked_migrated"});
+				}
+				else
+				{
+					details.add({"creator_payment_id":childId,"action":"creator_marker_missing"});
+					if(mode == "verify")
+					{
+						missing = missing + 1;
+					}
+				}
+			}
+		}
+		result.put("missing",missing);
+		result.put("children_in_proforma",children.size());
+		result.put("action",mode);
+		if(mode == "verify" && missing > 0)
+		{
+			result.put("message","Verification found missing records, documents or status. Continue inspecting the remaining proformas; do not retire Creator yet.");
+		}
+	}
+	}
+	// Count each eligible proforma once, including ALL its children, regardless of their dates.
+	countedProformas = state.get("counted_proforma_ids");
+	if(result.get("action") == "skipped_invalid_mfsp")
+	{
+		state.put("invalid_mfsp_candidates",state.get("invalid_mfsp_candidates") + 1);
+	}
+	else if(!countedProformas.contains(parentId))
+	{
+		countedProformas.add(parentId);
+		state.put("counted_proforma_ids",countedProformas);
+		state.put("selected_prepayments",state.get("selected_prepayments") + children.size());
+	}
+	state.put("candidates_reviewed",state.get("candidates_reviewed") + 1);
+	// Advance only after a fully processed or intentionally excluded candidate.
+	rowIndex = rowIndex + 1;
+	if(rowIndex < candidates.size())
+	{
+		state.put("row_index",rowIndex);
+		state.put("expected_payment_id",candidates.get(rowIndex).get("ID").toString());
+	}
+	else
+	{
+		state.put("record_cursor",page.get("next_cursor"));
+		state.put("row_index",0);
+		state.put("expected_payment_id","");
+		result.put("complete",page.get("next_cursor") == "");
+	}
+	summary = Map();
+	summary.put("selected_proformas",countedProformas.size());
+	summary.put("selected_prepayments",state.get("selected_prepayments"));
+	summary.put("candidates_reviewed",state.get("candidates_reviewed"));
+	summary.put("invalid_mfsp_candidates",state.get("invalid_mfsp_candidates"));
+	summary.put("is_final",result.get("complete"));
+	result.put("summary",summary);
+	result.put("next_state",state.toString());
+	result.put("success",mode != "verify" || ifnull(result.get("missing"),0) == 0);
+	batchItem = Map();
+	batchItem.put("creator_payment_id",candidateId);
+	batchItem.put("creator_proforma_id",parentId);
+	batchItem.put("action",result.get("action"));
+	batchItem.put("children_in_proforma",ifnull(result.get("children_in_proforma"),0));
+	batchItem.put("missing",ifnull(result.get("missing"),0));
+	if((result.get("action") == mode || result.get("action") == "skipped_already_migrated") && result.get("success") == true)
+	{
+		processedParentIds.add(parentId);
+	}
+	batchResults.add(batchItem);
+	result.put("batch_results",batchResults);
+	result.put("processed_in_batch",batchResults.size());
+	if(result.get("complete") == true || result.get("success") == false)
+	{
+		break;
+	}
+	}
+}
+catch (error)
+{
+	result.put("message",error.toString());
+	result.put("success",false);
+	result.put("complete",false);
+}
+result.put("details",details);
+result.put("warnings",warnings);
+return result.toString();
+}

@@ -49,7 +49,7 @@ form Pre_Payments_Form
 	(
 		type = picklist
 		maxchar = 100
-		values = {"Not Paid","Paid","Cancelled"}
+		values = {"Not Paid","Paid","Cancelled","Migrated"}
 		initial value = "Not Paid"
 	 	row = 1
 	 	column = 1   

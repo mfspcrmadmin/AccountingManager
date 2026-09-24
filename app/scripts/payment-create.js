@@ -607,8 +607,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var supplierRecord;
       var defaultPaymentAccountId;
       var supplierAccounts;
-      var normalizedPaymentAccountId;
-      var paymentAccountRecord;
 
       if (!normalizedSupplierId) {
         return "";
@@ -629,16 +627,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       if (supplierAccounts.length) {
         return String(supplierAccounts[0].id || "");
-      }
-
-      if (supplierRecord) {
-        normalizedPaymentAccountId = String(defaultPaymentAccountId || "").trim();
-        if (normalizedPaymentAccountId) {
-          paymentAccountRecord = getPaymentAccountRecordById(normalizedPaymentAccountId);
-          if (paymentAccountRecord) {
-            return normalizedPaymentAccountId;
-          }
-        }
       }
 
       return "";
@@ -1158,7 +1146,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             selectedAccountId = fallbackAccountId;
             state.paymentCreation.form.paymentAccountsBySupplier[supplierContext.id] = fallbackAccountId;
           } else {
-            paymentAccountsBySupplier.__error = "Selected payment account for " + supplierContext.name + " is no longer available.";
+            paymentAccountsBySupplier.__error = "The selected payment account for " + supplierContext.name + " is unavailable, inactive, not enabled for supplier payments, or assigned to another supplier. Choose an available account in the supplier row, or review its Status, Allowed For Supplier Payments and Owner Supplier in CRM, then reload the widget.";
             return;
           }
         }

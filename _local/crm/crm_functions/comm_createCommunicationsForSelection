@@ -1,0 +1,164 @@
+string standalone.comm_createCommunicationsForSelection(String serviceIds,String communicationPurpose,String actingUserJson)
+{
+res = Map();
+res.put("success",false);
+try 
+{
+	buildResult = standalone.comm_buildModelsForSelection(serviceIds,communicationPurpose,actingUserJson).toMap();
+	if(buildResult.get("success") != true)
+	{
+		res.put("message",ifnull(buildResult.get("message"),"Could not prepare Communications."));
+		return res.toString();
+	}
+	actingUser = Map();
+	if(!isnull(actingUserJson) && actingUserJson.trim() != "")
+	{
+		try 
+		{
+			actingUser = actingUserJson.toMap();
+		}
+		catch (actingUserError)
+		{
+		}
+	}
+	senderName = ifnull(actingUser.get("name"),ifnull(zoho.loginuser,"")).toString().trim();
+	senderEmail = ifnull(actingUser.get("email"),ifnull(zoho.loginuserid,"")).toString().trim();
+	created = List();
+	errors = List();
+	for each  model in buildResult.get("models")
+	{
+		booking = ifnull(model.get("booking"),Map());
+		supplier = ifnull(model.get("supplier"),Map());
+		supplierContact = ifnull(model.get("supplier_contact"),Map());
+		purpose = ifnull(model.get("communication_purpose"),communicationPurpose).toString();
+		bookingName = ifnull(booking.get("name"),"Booking").toString();
+		supplierName = ifnull(supplier.get("name"),"Supplier").toString();
+		recipientEmail = ifnull(supplierContact.get("email"),"").toString().trim();
+		templateCode = ifnull(model.get("template_code"),"").toString();
+		supplierNameNormalized = supplierName.toLowerCase().trim();
+		if(supplierNameNormalized.contains("viajes abreu"))
+		{
+			templateCode = "ABREU_AVAILABILITY_REQUEST";
+			model.put("template_code",templateCode);
+		}
+		info "Communication template selection | purpose=" + purpose + " | supplierName=" + supplierName + " | templateCode=" + templateCode;
+		templateResult = standalone.templ_getActiveTemplate(templateCode).toMap();
+		if(templateResult.get("success") != true)
+		{
+			errors.add(ifnull(templateResult.get("message"),"No active Template is configured for " + templateCode + "."));
+			continue;
+		}
+		template = templateResult.get("template");
+		payload = Map();
+		payload.put("Name",purpose + " | " + bookingName + " | " + supplierName);
+		payload.put("Audience","Supplier");
+		payload.put("Communication_Type","Email");
+		payload.put("Communication_Purpose",purpose);
+		payload.put("Recipient_Name",ifnull(supplierContact.get("full_name"),supplierName));
+		payload.put("Recipient_To",recipientEmail);
+		payload.put("Recipient_CC",senderEmail);
+		payload.put("Sender_Name",senderName);
+		payload.put("Sender_Email",senderEmail);
+		payload.put("Render_Model_JSON",model.toString());
+		payload.put("Render_Status","Pending");
+		payload.put("Communication_Status","Draft");
+		payload.put("Delivery_Action","Original");
+		templateLookup = Map();
+		templateLookup.put("id",template.get("id").toLong());
+		payload.put("Template",templateLookup);
+		bookingId = ifnull(booking.get("id"),"").toString();
+		if(bookingId != "")
+		{
+			bookingLookup = Map();
+			bookingLookup.put("id",bookingId.toLong());
+			payload.put("Booking",bookingLookup);
+		}
+		try 
+		{
+			createResult = zoho.crm.createRecord("Communications",payload);
+			if(createResult != null && createResult.get("id") != null)
+			{
+				communicationId = createResult.get("id").toString();
+				linkedServiceIds = List();
+				for each  serviceId in ifnull(model.get("selected_service_ids"),List())
+				{
+					serviceIdText = ifnull(serviceId,"").toString().trim();
+					if(serviceIdText == "")
+					{
+						continue;
+					}
+					linkPayload = Map();
+					linkSuffix = " | " + serviceIdText;
+					linkPrefix = payload.get("Name").toString();
+					linkPrefixLimit = 120 - linkSuffix.length();
+					if(linkPrefix.length() > linkPrefixLimit)
+					{
+						linkPrefix = linkPrefix.subString(0,linkPrefixLimit);
+					}
+					linkPayload.put("Name",linkPrefix + linkSuffix);
+					communicationLookup = Map();
+					communicationLookup.put("id",communicationId.toLong());
+					linkPayload.put("Communication",communicationLookup);
+					serviceLookup = Map();
+					serviceLookup.put("id",serviceIdText.toLong());
+					linkPayload.put("Booking_Service",serviceLookup);
+					linkResult = zoho.crm.createRecord("Communication_Services",linkPayload);
+					if(linkResult != null && linkResult.get("id") != null)
+					{
+						linkedServiceIds.add(serviceIdText);
+					}
+					else
+					{
+						linkError = "Communication " + communicationId + " was created but could not be linked to Booking Service " + serviceIdText + ".";
+						if(linkResult != null)
+						{
+							linkError = linkError + " CRM: " + ifnull(linkResult.get("code"),"UNKNOWN_ERROR").toString();
+							linkError = linkError + " - " + ifnull(linkResult.get("message"),"No error message returned.").toString();
+							linkError = linkError + " Details: " + ifnull(linkResult.get("details"),Map()).toString();
+						}
+						else
+						{
+							linkError = linkError + " CRM returned no response when creating Communication_Services.";
+						}
+						errors.add(linkError);
+					}
+				}
+				createdRow = Map();
+				createdRow.put("id",communicationId);
+				createdRow.put("name",payload.get("Name"));
+				createdRow.put("template_code",templateCode);
+				createdRow.put("model",model);
+				draftResult = standalone.comm_createDraftForCommunication(communicationId).toMap();
+				createdRow.put("render_status",if(draftResult.get("success") == true,"Ready","Failed"));
+				createdRow.put("draft_id",ifnull(draftResult.get("draft_id"),""));
+				if(draftResult.get("success") != true)
+				{
+					errors.add("Communication was created but its draft could not be rendered: " + ifnull(draftResult.get("message"),"Unknown error."));
+				}
+				createdRow.put("booking_service_ids",linkedServiceIds);
+				created.add(createdRow);
+			}
+			else
+			{
+				errors.add("CRM did not create Communication for " + supplierName + ".");
+			}
+		}
+		catch (createError)
+		{
+			errors.add("Could not create Communication for " + supplierName + ": " + createError.toString());
+		}
+	}
+	res.put("success",!created.isEmpty());
+	res.put("communications",created);
+	res.put("errors",errors);
+	if(created.isEmpty())
+	{
+		res.put("message","No Communications were created.");
+	}
+}
+catch (e)
+{
+	res.put("message",e.toString());
+}
+return res.toString();
+}

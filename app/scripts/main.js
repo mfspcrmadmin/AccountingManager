@@ -67,7 +67,7 @@ var ns = global.AccountingManagerApp;
   var SYNC_PROJECT_FROM_EZUS_FUNCTION = "syncprojectfromezus";
   var RECALCULATE_SUPPLIER_SETTLEMENTS_FOR_BOOKING_FUNCTION = "recalculatesuppliersettlementsforbooking";
   var SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION = "sendsupplierpaymentletter";
-  var REQUEST_SUPPLIER_ACCOUNTING_ACCOUNT_EMAIL_FUNCTION = "requestsupplieraccountingaccountemail";
+  var REQUEST_SUPPLIER_ACCOUNTING_ACCOUNT_EMAIL_FUNCTION = "email_requestsupplieraccountingaccountemail";
   var GET_SUPPLIER_CONTACT_BY_TYPE_FUNCTION = "getSupplierContactByType";
   var PAYMENT_LETTER_CONTACT_TYPE = "AC - Accounts";
   var PAYMENT_LETTER_DEFAULT_RECIPIENT = "";
@@ -621,6 +621,16 @@ var ns = global.AccountingManagerApp;
     downloadFileFromText: downloadFileFromText,
     sanitizeDownloadFileName: sanitizeDownloadFileName,
     hasValidEmailAddress: hasValidEmailAddress
+  });
+  var paymentLetterBatch = ns.createPaymentLetterBatch({
+    document: document, state: state, helpers: helpers, crm: crm,
+    ensureAllocations: ensurePayAllocationsLoaded,
+    getSuppliers: supplierActivityModule.getPaymentLetterSuppliers,
+    resolveRecipient: supplierActivityModule.resolvePaymentLetterRecipientForSupplier,
+    getCurrentUserEmail: getCurrentUserEmail, validEmail: hasValidEmailAddress,
+    parseResult: getPaymentLetterFunctionResult,
+    functionName: SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION,
+    defaultRecipient: PAYMENT_LETTER_DEFAULT_RECIPIENT
   });
   var invoiceRequestModule = ns.createInvoiceRequestModule({
     MODULES: MODULES,
@@ -5153,6 +5163,7 @@ var ns = global.AccountingManagerApp;
     state.paymentUndo.isLoading = true;
     state.paymentUndo.isBusy = false;
     state.paymentUndo.mode = "confirmation";
+    state.paymentUndo.operationRecords = JSON.parse(global.sessionStorage.getItem("accountingManager.paymentUndo.operations." + paymentId) || "null");
     state.paymentUndo.paymentId = paymentId;
     state.paymentUndo.allocations = [];
     state.paymentUndo.resultMessage = "";
@@ -5225,6 +5236,9 @@ var ns = global.AccountingManagerApp;
         return helpers.getLookupId(allocation.Supplier_Invoice);
       }));
       relatedSettlementIds = getUniqueSettlementIdsFromAllocations(relatedAllocations);
+      // Retain links across retries after CRM clears the original lookups.
+      if (!undo.operationRecords) { undo.operationRecords = await ns.preparePaymentOperationUndo(crm, paymentId); }
+      global.sessionStorage.setItem("accountingManager.paymentUndo.operations." + paymentId, JSON.stringify(undo.operationRecords));
       undo.isBusy = true;
       undo.mode = "loading";
       renderPaymentUndoConfirmation();
@@ -5289,12 +5303,15 @@ var ns = global.AccountingManagerApp;
         delete state.invoiceAllocationsByInvoiceId[invoiceId];
       }
 
+      await ns.applyPaymentOperationUndo(crm, undo.operationRecords, assertCrmMutationSucceeded);
       assertCrmMutationSucceeded(
         await crm.deleteRecord(MODULES.payments, paymentId),
         "Zoho CRM did not confirm deletion of payment " + paymentId + "."
       );
 
       invalidateInvoiceCreateSettlementCache();
+      global.sessionStorage.removeItem("accountingManager.paymentUndo.operations." + paymentId);
+      global.dispatchEvent(new Event("accounting-manager-operation-undone"));
       await recalculateSettlementTotalsForSettlementIds(helpers.uniqueNonEmpty(relatedSettlementIds));
       state.views.payments.selectedId = "";
       await refreshInvoicesAndPaymentsAfterSupplierPayment();
@@ -7489,7 +7506,7 @@ var ns = global.AccountingManagerApp;
     );
     renderer.renderPaymentsWorkspaceSections(normalizePaymentsSection(state.views.payments.section));
     renderStatusFilterControl("payments", getStatusFilterOptionsForView("payments"));
-    renderer.renderPaymentsWorkspace(paymentsView, selectPayment);
+    renderer.renderPaymentsWorkspace(paymentsView, selectPayment, paymentLetterBatch);
     renderer.renderPaymentAllocationsWorkspace(paymentAllocationsView, selectPaymentAllocation);
     renderer.renderSelectedPayment(paymentsView.selectedRecord, {
       getPaymentReference: paymentsView.getPaymentReference,

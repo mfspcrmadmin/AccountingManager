@@ -32,17 +32,29 @@
     accounts.sort(function (a, b) { return String(a.Name || a.id).localeCompare(String(b.Name || b.id)); });
     return { accounts: accounts, defaultAccountId: accounts.some(function (account) { return id(account) === String(preferredId || ""); }) ? String(preferredId) : "" };
   };
-  ns.discardPrepayment = async function (api, recordId, status) {
+  ns.discardPrepayment = async function (api, recordId, status, meta) {
     if (["Discard - Credit", "Discard - Already Paid"].indexOf(status) === -1) { throw new Error("Select a discard reason."); }
     var response = await api.getRecord({ Entity: PAYMENTS, RecordID: recordId });
     var payment = response && response.data && response.data[0];
     if (!payment || id(payment) !== String(recordId)) { throw new Error("Could not read this prepayment."); }
-    if (isClosed(payment) || id(payment.Vendor_Payment)) { throw new Error("This prepayment is already closed or linked to a payment. Refresh its details."); }
+    if ((isClosed(payment) && payment.Accounting_Status !== status) || id(payment.Vendor_Payment)) { throw new Error("This prepayment is already closed or linked to a payment. Refresh its details."); }
     response = await api.updateRecord({ Entity: PAYMENTS, APIData: { id: recordId, Accounting_Status: status }, Trigger: ["workflow"] });
     var result = response && response.data && response.data[0];
     if (!result || (result.code !== "SUCCESS" && result.status !== "success")) { throw new Error(result && result.message || "CRM did not confirm the status change."); }
+    if (id(payment.Prepayment_Request)) {
+      try { await ns.syncPrepaymentRequestFromSDK(api, meta, id(payment.Prepayment_Request)); }
+      catch (error) { throw new Error("Discard saved, but request/services status could not be synchronized. Retry to synchronize: " + error.message); }
+    }
   };
   function isPending(payment) { return ["Pending invoice", "Pending payment record", "No status"].indexOf(accountingStatus(payment)) !== -1; }
+  ns.updatePrepaymentDueDate = async function (api, recordId, value) {
+    if (!recordId || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
+      throw new Error("Enter a valid due date.");
+    }
+    var response = await api.updateRecord({ Entity: PAYMENTS, APIData: { id: recordId, Due_Date: value }, Trigger: ["workflow"] });
+    var result = response && response.data && response.data[0];
+    if (!result || (result.code !== "SUCCESS" && result.status !== "success")) { throw new Error(result && result.message || "CRM did not confirm the due date change."); }
+  };
   function paymentSort(a, b) { return (day(a.Due_Date) || "9999").localeCompare(day(b.Due_Date) || "9999") || String(a.Name || a.id).localeCompare(String(b.Name || b.id)); }
   function totals(payments, predicate) {
     var sums = {}, missing = 0;
@@ -75,7 +87,7 @@
   function filterGroups(groups, filters, currentDay) {
     var mfsp = String(filters.mfsp || "").trim().toLowerCase();
     var supplierCode = String(filters.supplierCode || "").trim().toLowerCase();
-    var paymentFilter = filters.from || filters.to || filters.accountingStatus || filters.bankRequested || filters.bankReceipt || filters.statusView === "closed";
+    var paymentFilter = filters.dueToday || filters.from || filters.to || filters.paymentFrom || filters.paymentTo || filters.accountingStatus || filters.bankRequested || filters.bankReceipt || filters.statusView === "closed";
     return groups.map(function (group) {
       var r = group.request || {};
       var parentMatch = (!mfsp || String(r.MFSP_Reference || "").toLowerCase().indexOf(mfsp) !== -1) &&
@@ -83,8 +95,11 @@
       var visible = group.payments.filter(function (p) {
         return parentMatch &&
           (filters.statusView === "open" ? !isClosed(p) : filters.statusView === "closed" ? isClosed(p) : true) &&
-          (!filters.from || (day(p.Due_Date) && day(p.Due_Date) >= filters.from)) &&
-          (!filters.to || (day(p.Due_Date) && day(p.Due_Date) <= filters.to)) &&
+          (filters.dueToday ? day(p.Due_Date) === currentDay :
+            (!filters.from || (day(p.Due_Date) && day(p.Due_Date) >= filters.from)) &&
+            (!filters.to || (day(p.Due_Date) && day(p.Due_Date) <= filters.to))) &&
+          (!filters.paymentFrom || (day(p.Payment_Date) && day(p.Payment_Date) >= filters.paymentFrom)) &&
+          (!filters.paymentTo || (day(p.Payment_Date) && day(p.Payment_Date) <= filters.paymentTo)) &&
           (!filters.accountingStatus || accountingStatus(p) === filters.accountingStatus) &&
           (!filters.bankRequested || (p.Bank_Payment_Requested === true) === (filters.bankRequested === "yes")) &&
           (!filters.bankReceipt || (p.Bank_Receipt_Needed === true) === (filters.bankReceipt === "yes"));
@@ -132,7 +147,15 @@
   function discardButton(payment) {
     if (isClosed(payment) || id(payment.Vendor_Payment)) { return ""; }
     var title = "Discard prepayment: " + (payment.Name || id(payment));
-    return '<button class="card-purchase-review-button prepayment-discard-button" type="button" data-prepayment-discard="' + esc(id(payment)) + '" aria-label="' + esc(title) + '" title="' + esc(title) + '"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m5.5 5.5 9 9"/></svg></button>';
+    return '<button class="prepayment-discard-button" type="button" data-prepayment-discard="' + esc(id(payment)) + '" aria-label="' + esc(title) + '">Discard</button>';
+  }
+  function deleteButton(payment) {
+    var blocked = id(payment.Vendor_Invoice) || id(payment.Vendor_Payment) || payment.Accounting_Status === "Prepayment recorded";
+    return id(payment) ? '<button type="button" class="button tertiary compact-action-button" data-prepayment-delete="' + esc(id(payment)) + '" aria-label="Delete ' + esc(payment.Name || id(payment)) + '" title="' + (blocked ? 'Cannot delete: associated invoice or payment' : 'Delete prepayment') + '"' + (blocked ? ' disabled' : '') + '>Delete</button>' : '';
+  }
+  function actionsMenu(payment, showRequest) {
+    var menuId = 'prepayment-actions-' + (showRequest ? 'all-' : 'request-') + id(payment);
+    return '<button class="card-purchase-review-button" type="button" data-prepayment-actions popovertarget="' + esc(menuId) + '" aria-label="Actions for ' + esc(payment.Name || id(payment)) + '" title="More actions"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button><div id="' + esc(menuId) + '" class="prepayment-actions-menu" popover="auto" aria-label="Prepayment actions">' + discardButton(payment) + deleteButton(payment) + '</div>';
   }
   function paymentTable(rows, currentDay, showRequest, statusView, onColumnsChanged) {
     var definitions = [
@@ -141,7 +164,7 @@
       ...(showRequest ? [["Request", "Request / supplier / booking"]] : []),
       ["Observations", "Observations"], ["Accounting_Status", "Accounting Status"], ["Due_Date", "Due date"],
       ["Amount", "Amount"], ["Percent", "%"], ["Payment_Date", "Payment date"],
-      ["Payment_Proof", "Payment proof"], ["Proforma", "Proforma"]
+      ["Payment_Proof", "Payment proof"], ["Proforma", "Proforma"], ["Reported_By", "Reported By"]
     ];
     var manager = ns.tableColumns, tableKey = showRequest ? "prepayments" : "prepaymentsByRequest";
     if (manager) { manager.configure(tableKey, definitions.map(function (column) { return { key: column[0], label: column[1], defaultWidth: column[0] === "Name" ? 300 : column[0] === "Request" ? 360 : column[0] === "Observations" || column[0] === "Proforma" ? 260 : column[0] === "Amount" ? 120 : 180 }; }), onColumnsChanged); }
@@ -150,32 +173,41 @@
     order = bankColumns.filter(function (key) { return order.indexOf(key) !== -1; }).concat(order.filter(function (key) { return bankColumns.indexOf(key) === -1; }));
     if (statusView === "open") { order = order.filter(function (key) { return key !== "Bank_Payment_Requested"; }); }
     var labels = Object.fromEntries(definitions);
-    var head = '<th aria-label="Actions"></th>' + order.map(function (key) {
+    var head = '<th aria-label="Actions"><input class="prepayment-select" type="checkbox" data-prepayment-select-all aria-label="Select all payments in this table" title="Select or deselect all payments in this table"></th>' + order.map(function (key) {
       var html = '<th>' + esc(labels[key]) + '</th>';
       return manager ? manager.resizableHeader(key, html) : html;
     }).join('') + (manager ? '<th class="table-columns-gear-cell">' + manager.button(tableKey) + '</th>' : '');
     return '<div class="table-wrap"><table class="results-table prepayments-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows.map(function (row) {
       var p = row.payment, r = row.group.request || {}, late = overdue(p, currentDay);
+      var dueToday = !isClosed(p) && Boolean(day(p.Due_Date)) && day(p.Due_Date) === currentDay;
       var select = id(p) ? '<input class="prepayment-select" type="checkbox" data-prepayment-select value="' + esc(id(p)) + '" aria-label="Select ' + esc(p.Name || id(p)) + '">' : '<span class="prepayment-select-space"></span>';
       var requested = p.Bank_Payment_Requested === true;
       var bank = '<label class="prepayment-bank-toggle" title="Bank Payment Requested — click to mark or unmark manually"><input type="checkbox" data-prepayment-bank-requested value="' + esc(id(p)) + '"' + (requested ? ' checked' : '') + ' aria-label="Bank Payment Requested: ' + esc(p.Name || id(p)) + '"><span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 7l8-4 8 4H2Zm2 2v6m4-6v6m4-6v6m4-6v6M2 17h16"/></svg><span class="bank-requested-yes">Requested</span><span class="bank-requested-no">Not requested</span></span></label>';
       var receipt = '<label class="prepayment-bank-toggle prepayment-receipt-toggle" title="Bank Receipt Needed - click to mark or unmark manually"><input type="checkbox" data-prepayment-bank-receipt value="' + esc(id(p)) + '"' + (p.Bank_Receipt_Needed === true ? ' checked' : '') + ' aria-label="Bank Receipt Needed: ' + esc(p.Name || id(p)) + '"><span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2.5 7 4l3-1.5L13 4l2-1.5v15L13 16l-3 1.5L7 16l-2 1.5zM8 7h4M8 10h4M8 13h2"/></svg><span class="bank-requested-yes">Needed</span><span class="bank-requested-no">Not needed</span></span></label>';
       var proformas = ns.operationsDocuments ? ns.operationsDocuments.files(r.Proforma_Attached) : [];
+      var proofs = Array.isArray(p.Payment_Proof) ? p.Payment_Proof : [];
+      var proofLinks = proofs.map(function (file, index) {
+        var title = typeof file === "string" ? "Payment proof" : file.File_Name__s || file.File_Name || file.file_Name || file.file_name || file.filename || file.fileName || file.name || "Payment proof";
+        return '<div><button class="card-purchase-file" type="button" data-prepayment-proof-preview="' + esc(id(p)) + '" data-proof-index="' + index + '" title="Preview ' + esc(title) + '">' + esc(title) + '</button></div>';
+      }).join('');
+      var proofAction = proofs.length ? 'Edit' : 'Attach';
+      var proofIcon = proofs.length ? 'M12 3l5 5M3 17l4-1L17 6a2.1 2.1 0 0 0-3-3L4 13z' : 'm7 11 5-5a2 2 0 0 1 3 3l-6 6a3.5 3.5 0 0 1-5-5l6-6';
       var cells = {
         Name: recordButton(PAYMENTS, id(p), p.Name || id(p)) + '<small>' + esc(p.When_To_Be_Paid === "-None-" ? "" : p.When_To_Be_Paid) + '</small>',
-        Request: recordButton(REQUESTS, id(r) || row.group.requestId, r.Name || row.group.label) + '<small>' + esc([name(r.Supplier), r.MFSP_Reference || name(r.Booking)].filter(Boolean).join(' ? ')) + '</small>',
+        Request: recordButton(REQUESTS, id(r) || row.group.requestId, r.Name || row.group.label) + '<small>' + esc([name(r.Supplier), r.MFSP_Reference || name(r.Booking)].filter(Boolean).join(' · ')) + '</small>',
         Observations: esc(p.Observations || r.Observations || '-'),
         Accounting_Status: '<span class="prepayment-status ' + accountingStatusClass(p) + '">' + esc(accountingStatus(p)) + '</span>',
-        Due_Date: date(p.Due_Date) + (late ? '<small>Overdue</small>' : ''),
+        Due_Date: (id(p) ? '<button type="button" class="prepayment-record-link prepayment-due-edit" data-prepayment-due-edit="' + esc(id(p)) + '" aria-label="Edit due date for ' + esc(p.Name || id(p)) + '" title="Edit due date">' + date(p.Due_Date) + ' <span aria-hidden="true">✎</span></button>' : date(p.Due_Date)) + (dueToday ? '<small class="prepayment-due-today-label">Due today</small>' : late ? '<small>Overdue</small>' : ''),
         Amount: esc(money(p.Amount, p.Currency)),
         Percent: number(p.Percent) === null ? '?' : esc(p.Percent) + '%',
         Payment_Date: date(p.Payment_Date),
+        Reported_By: esc(r.Requested_By_2 || '-'),
         Bank_Payment_Requested: bank,
         Bank_Receipt_Needed: receipt,
-        Payment_Proof: documents(p.Payment_Proof, PAYMENTS, id(p), 'Proof') || '-',
+        Payment_Proof: '<div class="prepayment-receipt-actions">' + (proofLinks || (p.Bank_Receipt_Needed === true && id(p) ? '' : '-')) + (p.Bank_Receipt_Needed === true && id(p) ? '<button class="prepayment-proof-button" type="button" data-prepayment-proof="' + esc(id(p)) + '" title="' + proofAction + ' payment proof" aria-label="' + proofAction + ' payment proof for ' + esc(p.Name || id(p)) + '"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="' + proofIcon + '"/></svg>' + (proofs.length ? '' : 'Attach') + '</button>' : '') + '</div>',
         Proforma: proformas.map(function (file, index) { return '<div><button class="card-purchase-file" type="button" data-prepayment-proforma="' + esc(row.group.key || id(r)) + '" data-proforma-index="' + index + '" title="Preview ' + esc(file.name) + '">' + esc(file.name) + '</button></div>'; }).join('') || 'No proforma associated.'
       };
-      return '<tr><td class="card-purchase-review-cell"><div class="prepayment-row-actions">' + select + registrationButton(p) + discardButton(p) + '</div></td>' + order.map(function (key) {
+      return '<tr' + (dueToday ? ' class="prepayment-due-today"' : '') + '><td class="card-purchase-review-cell"><div class="prepayment-row-actions">' + select + registrationButton(p) + actionsMenu(p, showRequest) + '</div></td>' + order.map(function (key) {
         var cls = key === 'Amount' ? 'numeric-cell' : key === 'Observations' ? 'prepayment-observations' : key === 'Due_Date' && late ? 'prepayment-overdue' : '';
         return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + cells[key] + '</td>';
       }).join('') + (manager ? '<td class="table-columns-gear-cell"></td>' : '') + '</tr>';
@@ -184,12 +216,43 @@
   ns.prepaymentsModel = { today: today, paymentTable: paymentTable, isClosed: isClosed, isPending: isPending, groupRecords: groupRecords, filterGroups: filterGroups, totals: totals, loadModule: loadModule, overdue: overdue };
   ns.createPrepaymentsWorkspace = function (panel, zoho) {
     var groups = [], loaded = false, busy = false, generation = 0, view = "payments", statusView = "open", page = 1, expanded = new Set();
-    var applied = { mfsp: "", supplierCode: "", from: "", to: "", accountingStatus: "", bankRequested: "", bankReceipt: "" };
+    var dueDateSaves = new Set();
+    var deletion = ns.createPrepaymentDeletionService ? ns.createPrepaymentDeletionService(zoho, global.localStorage) : null;
+    var deleteBusy = false;
+    function closeActionsMenus() {
+      panel.querySelectorAll('.prepayment-actions-menu:popover-open').forEach(function (menu) { menu.hidePopover(); });
+    }
+    // Capture clicks before action handlers or other widget controls stop propagation.
+    global.addEventListener("click", function (event) {
+      if (event.target.closest && event.target.closest('[data-prepayment-actions]')) { return; }
+      closeActionsMenus();
+    }, true);
+    var dueTodayOnly = false;
+    var applied = { mfsp: "", supplierCode: "", from: "", to: "", paymentFrom: "", paymentTo: "", accountingStatus: "", bankRequested: "", bankReceipt: "" };
     var find = function (key) { return panel.querySelector('[data-prepayments-' + key + ']'); };
     var message = find("message"), results = find("results"), summary = find("summary"), pager = find("pager"), refresh = find("refresh");
     var workflow = ns.createPrepaymentWorkflow(panel, zoho, load);
     var bankActions = ns.createPrepaymentBankActions ? ns.createPrepaymentBankActions(panel, zoho, load, showError) : null;
+    var proofDialog = ns.createPrepaymentProofDialog ? ns.createPrepaymentProofDialog(panel, zoho, function (updated) {
+      groups.forEach(function (group) { group.payments.forEach(function (payment) { if (id(payment) === id(updated)) { Object.assign(payment, updated); } }); });
+      render();
+    }) : null;
     var discardDialog = find("discard-dialog"), discardId = "", discardBusy = false;
+    var deleteDialog = find("delete-dialog"), deleteId = "";
+    find("delete-cancel").addEventListener("click", function () { if (!deleteBusy) { deleteDialog.close(); } });
+    deleteDialog.addEventListener("cancel", function (event) { if (deleteBusy) { event.preventDefault(); } });
+    find("delete-form").addEventListener("submit", async function (event) {
+      event.preventDefault();
+      if (deleteBusy || !deleteId || !deletion) { return; }
+      deleteBusy = true; find("delete-submit").disabled = true; find("delete-cancel").disabled = true;
+      find("delete-error").textContent = "";
+      try {
+        await deletion.remove(deleteId);
+        deleteDialog.close(); await load();
+        if (loaded) { message.textContent = "Prepayment and its unused relationships deleted."; }
+      } catch (error) { find("delete-error").textContent = error.message + " If deletion started, confirm again to finish the remaining steps."; }
+      finally { deleteBusy = false; find("delete-submit").disabled = false; find("delete-cancel").disabled = false; }
+    });
     find("discard-cancel").addEventListener("click", function () { if (!discardBusy) { discardDialog.close(); } });
     discardDialog.addEventListener("cancel", function (event) { if (discardBusy) { event.preventDefault(); } });
     find("discard-form").addEventListener("submit", async function (event) {
@@ -197,7 +260,7 @@
       discardBusy = true; find("discard-submit").disabled = true; find("discard-cancel").disabled = true; find("discard-status").disabled = true;
       find("discard-error").textContent = "";
       try {
-        await ns.discardPrepayment(zoho.CRM.API, discardId, find("discard-status").value);
+        await ns.discardPrepayment(zoho.CRM.API, discardId, find("discard-status").value, zoho.CRM.META);
         discardDialog.close(); await load();
       } catch (error) { find("discard-error").textContent = error.message || "Could not change the status."; }
       finally { discardBusy = false; find("discard-submit").disabled = false; find("discard-cancel").disabled = false; find("discard-status").disabled = false; }
@@ -207,7 +270,7 @@
       panel.querySelectorAll('[data-prepayments-status-view]').forEach(function (button) { var active = button.dataset.prepaymentsStatusView === statusView; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
       panel.querySelectorAll('[data-prepayments-view]').forEach(function (button) { var active = button.dataset.prepaymentsView === view; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
       if (!loaded) { return; }
-      var currentDay = today(), filtered = filterGroups(groups, Object.assign({}, applied, { statusView: statusView }), currentDay);
+      var currentDay = today(), filtered = filterGroups(groups, Object.assign({}, applied, { statusView: statusView, dueToday: dueTodayOnly }), currentDay);
       var rows = [];
       filtered.forEach(function (group) { group.visible.forEach(function (payment) { rows.push({ payment: payment, group: group }); }); });
       rows.sort(function (a, b) { return paymentSort(a.payment, b.payment); });
@@ -250,6 +313,7 @@
       try {
         if (!zoho || !zoho.CRM || !zoho.CRM.API) { throw new Error("CRM is not available. Open this widget in Zoho CRM and refresh."); }
         var data = await Promise.all([loadModule(zoho.CRM.API, REQUESTS), loadModule(zoho.CRM.API, PAYMENTS)]);
+        if (deletion) { deletion.pending().forEach(function (payment) { if (!data[1].some(function (p) { return id(p) === id(payment); })) { data[1].push(payment); } }); }
         if (token !== generation) { return; }
         groups = groupRecords(data[0], data[1]); loaded = true; page = 1; render();
       } catch (error) { if (token === generation) { showError(error); } }
@@ -257,25 +321,132 @@
     }
     function applyFilters() {
       var from = find("from").value, to = find("date-mode").value === "single" ? from : find("to").value;
-      if (from && to && from > to) { showError(new Error("Due date from must be on or before due date to.")); return; }
-      applied = { mfsp: find("mfsp").value, supplierCode: find("supplier-code").value, accountingStatus: find("accounting-status").value, bankRequested: find("bank-requested").value, bankReceipt: find("bank-receipt").value, from: from, to: to };
+      var paymentFrom = find("payment-from").value, paymentTo = find("payment-date-mode").value === "single" ? paymentFrom : find("payment-to").value;
+      if (!dueTodayOnly && from && to && from > to) { showError(new Error("Due date from must be on or before due date to.")); return; }
+      if (paymentFrom && paymentTo && paymentFrom > paymentTo) { showError(new Error("Payment date from must be on or before payment date to.")); return; }
+      // Native date inputs return an empty value after a date segment is cleared.
+      // Clear the remaining segments too, so an empty filter means all dates.
+      if (!from) { find("from").value = ""; }
+      if (!to) { find("to").value = ""; }
+      if (!paymentFrom) { find("payment-from").value = ""; }
+      if (!paymentTo) { find("payment-to").value = ""; }
+      applied = { mfsp: find("mfsp").value, supplierCode: find("supplier-code").value, accountingStatus: find("accounting-status").value, bankRequested: find("bank-requested").value, bankReceipt: find("bank-receipt").value, from: from, to: to, paymentFrom: paymentFrom, paymentTo: paymentTo };
       message.classList.remove("is-error"); message.textContent = "";
       page = 1; render();
+      if (!loaded && !busy) { load(); }
     }
-    find("date-mode").addEventListener("change", function () {
-      var range = find("date-mode").value === "range";
-      find("from-label").textContent = range ? "From" : "Date";
-      find("to-field").hidden = !range;
-      find("to").disabled = !range;
-      find("to").value = "";
+    function syncDueTodayControls() {
+      find("date-mode").disabled = dueTodayOnly;
+      find("from").disabled = dueTodayOnly;
+      find("to").disabled = dueTodayOnly || find("date-mode").value !== "range";
+    }
+    function resetFilters(todayOnly) {
+      find("filters").reset();
+      ["", "payment-"].forEach(function (prefix) {
+        find(prefix + "date-mode").value = "single";
+        find(prefix + "from-label").textContent = "Date";
+        find(prefix + "from").value = "";
+        find(prefix + "to").value = "";
+        find(prefix + "to").disabled = true;
+        find(prefix + "to-field").hidden = true;
+      });
+      dueTodayOnly = Boolean(todayOnly); find("due-today").checked = dueTodayOnly;
+      syncDueTodayControls(); applyFilters();
+    }
+    find("reset").addEventListener("click", function () { resetFilters(false); });
+    find("due-today").addEventListener("change", function () {
+      dueTodayOnly = Boolean(find("due-today").checked);
+      syncDueTodayControls(); page = 1; render();
+    });
+    ["", "payment-"].forEach(function (prefix) {
+      find(prefix + "date-mode").addEventListener("change", function () {
+        var range = find(prefix + "date-mode").value === "range";
+        find(prefix + "from-label").textContent = range ? "From" : "Date";
+        find(prefix + "to-field").hidden = !range;
+        find(prefix + "to").disabled = !range;
+        find(prefix + "to").value = "";
+        if (!prefix) { syncDueTodayControls(); }
+      });
     });
     find("filters").addEventListener("submit", function (event) { event.preventDefault(); applyFilters(); });
     refresh.addEventListener("click", load);
     global.addEventListener("accounting-manager-payment-created", function () { loaded = false; });
+    ["accounting-manager-invoice-deleted", "accounting-manager-operation-undone"].forEach(function (event) { global.addEventListener(event, function () { loaded = false; }); });
     find("previous").addEventListener("click", function () { page -= 1; render(); });
     find("next").addEventListener("click", function () { page += 1; render(); });
     results.addEventListener("toggle", function (event) { var key = event.target.getAttribute("data-prepayment-group"); if (key) { if (event.target.open) { expanded.add(key); if (ns.tableColumns) { ns.tableColumns.refreshWidths("prepaymentsByRequest"); } } else { expanded.delete(key); } } }, true);
+    results.addEventListener("submit", async function (event) {
+      var form = event.target.closest('[data-prepayment-due-form]');
+      if (!form) { return; }
+      event.preventDefault();
+      var recordId = form.getAttribute('data-prepayment-due-form');
+      if (busy || dueDateSaves.has(recordId) || !form.reportValidity()) { return; }
+      var value = form.querySelector('input').value;
+      dueDateSaves.add(recordId);
+      form.querySelectorAll('input, button').forEach(function (control) { control.disabled = true; });
+      form.querySelector('[role="status"]').textContent = "Saving...";
+      try {
+        await ns.updatePrepaymentDueDate(zoho.CRM.API, recordId, value);
+        groups.forEach(function (group) {
+          group.payments.forEach(function (payment) { if (id(payment) === recordId) { payment.Due_Date = value; } });
+          group.payments.sort(paymentSort);
+        });
+        render();
+        message.textContent = "Due date saved. The list now reflects the current date filters.";
+      } catch (error) {
+        form.querySelector('[role="status"]').textContent = error.message || "Could not save the due date.";
+        showError(error);
+      } finally {
+        dueDateSaves.delete(recordId);
+        form.querySelectorAll('input, button').forEach(function (control) { control.disabled = false; });
+      }
+    });
     panel.addEventListener("click", async function (event) {
+      if (deleteBusy) { return; }
+      var actions = event.target.closest('[data-prepayment-actions]');
+      if (actions) {
+        var menu = panel.querySelector('#' + actions.getAttribute('popovertarget'));
+        var rect = actions.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(rect.left, global.innerWidth - 176)) + 'px';
+        menu.style.top = Math.max(8, Math.min(rect.bottom + 6, global.innerHeight - 110)) + 'px';
+        return;
+      }
+      var deleteAction = event.target.closest('[data-prepayment-delete]');
+      if (deleteAction) {
+        if (busy || discardBusy || dueDateSaves.size || deleteAction.disabled || !deletion) { return; }
+        deleteId = deleteAction.getAttribute('data-prepayment-delete');
+        var deletePayment = groups.reduce(function (all, group) { return all.concat(group.payments); }, []).find(function (p) { return id(p) === deleteId; });
+        if (!deletePayment) { return; }
+        find("delete-name").textContent = deletePayment.Name || deleteId;
+        find("delete-error").textContent = "";
+        deleteDialog.showModal();
+        return;
+      }
+      var dueCancel = event.target.closest('[data-prepayment-due-cancel]');
+      if (dueCancel) { render(); return; }
+      var dueEdit = event.target.closest('[data-prepayment-due-edit]');
+      if (dueEdit) {
+        var dueId = dueEdit.getAttribute('data-prepayment-due-edit');
+        if (busy || dueDateSaves.has(dueId)) { return; }
+        var duePayment = groups.reduce(function (all, group) { return all.concat(group.payments); }, []).find(function (payment) { return id(payment) === dueId; });
+        if (!duePayment) { return; }
+        var cell = dueEdit.closest('td');
+        cell.innerHTML = '<form class="prepayment-due-form" data-prepayment-due-form="' + esc(dueId) + '"><input type="date" required value="' + esc(day(duePayment.Due_Date)) + '" aria-label="Due date for ' + esc(duePayment.Name || dueId) + '"><div><button type="submit" class="button secondary compact-action-button">Save</button> <button type="button" class="button secondary compact-action-button" data-prepayment-due-cancel>Cancel</button></div><small role="status" aria-live="polite"></small></form>';
+        cell.querySelector('input').focus(); return;
+      }
+      var proofPreview = event.target.closest('[data-prepayment-proof-preview]');
+      if (proofPreview && ns.operationsDocuments) {
+        var proofPayment = groups.reduce(function (all, group) { return all.concat(group.payments); }, []).find(function (payment) { return id(payment) === proofPreview.getAttribute('data-prepayment-proof-preview'); });
+        var proofFile = proofPayment && ns.operationsDocuments.files(proofPayment.Payment_Proof)[Number(proofPreview.getAttribute('data-proof-index'))];
+        if (proofFile) { ns.operationsDocuments.preview(proofFile); }
+        return;
+      }
+      var proof = event.target.closest('[data-prepayment-proof]');
+      if (proof && proofDialog) {
+        var proofId = proof.getAttribute('data-prepayment-proof');
+        var proofRecord = groups.reduce(function (all, group) { return all.concat(group.payments); }, []).find(function (payment) { return id(payment) === proofId; });
+        await proofDialog.open(proofId, proofRecord); return;
+      }
       var proforma = event.target.closest('[data-prepayment-proforma]');
       if (proforma) {
         var group = groups.find(function (item) { return item.key === proforma.getAttribute('data-prepayment-proforma'); });
@@ -308,8 +479,11 @@
       } catch (error) { showError(error); }
     });
     return {
-      activate: function () { panel.hidden = false; view = "payments"; page = 1; render(); if (!loaded && !busy) { load(); } },
-      hide: function () { workflow.close(); panel.hidden = true; },
+      activate: function () {
+        panel.hidden = false; view = "payments"; statusView = "open";
+        resetFilters(true);
+      },
+      hide: function () { closeActionsMenus(); workflow.close(); panel.hidden = true; },
       load: load
     };
   };

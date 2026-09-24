@@ -7,8 +7,8 @@ Actualizar la función standalone `notif_sendPrepaymentBankRequest` con API name
 - Habilitar ejecución para los perfiles que usarán el widget.
 - Comprobar el checkbox **Prepayments.Bank_Payment_Requested**, visible y editable para esos perfiles.
 - Comprobar que **Prepayments.Bank_Receipt_Needed** sea el API name del checkbox Bank Receipt Needed y que sea visible para esos perfiles. La columna Justificante del correo usa ?nicamente ese checkbox.
-- Confirmar los API names de los lookups de Prepayments: **Vendor_Invoice** y **Vendor_Payment**. Si difieren en CRM, sustituirlos en la función.
-- La conexión existente **crm_oauth_connection** necesita lectura de Prepayment_Requests y de sus archivos. El endpoint utiliza el centro de datos europeo (`zohoapis.eu`).
+- Confirmar **Prepayments.Vendor_Payment** y los campos **Prepayment**, **Vendor_Invoice**, **Allocated_Amount** y **Currency** de **Prepayment_Invoice_Allocations**. El lookup antiguo a factura ya no se utiliza.
+- La conexión **crm_oauth_connection** necesita lectura COQL de **Prepayment_Invoice_Allocations** y **Supplier_Pay_Allocations**. El endpoint utiliza el centro de datos europeo (`zohoapis.eu`).
 - Verificar el remitente **crmadmin@madeforspainandportugal.com** para `sendmail`.
 - Por defecto, To es `claudia@madeforspainandportugal.com`; CC incluye `luciano@madeforspainandportugal.com` y `andersson@madeforspainandportugal.com`. Los campos son editables. CC se valida y se pasa a `sendmail` sin archivos adjuntos.
 
@@ -28,7 +28,7 @@ Correspondencias con Creator:
 | --- | --- |
 | Proforma_Associated | Prepayments.Prepayment_Request |
 | Supplier_Name | Prepayment_Requests.Supplier |
-| Supplier_Bank_Account | Payment_Account de Supplier_Pay_Allocations que enlaza el Vendor_Payment y Vendor_Invoice del prepago |
+| Supplier_Bank_Account | Payment_Account de Supplier_Pay_Allocations que enlaza el Vendor_Payment del prepago con cada Vendor_Invoice de Prepayment_Invoice_Allocations |
 | MFSP_Reference / Booking_Name | Prepayment_Requests.MFSP_Reference / Booking.name |
 | Referencia (supplier code) | Prepayment_Requests.Supplier_Code; si falta, Supplier_Invoices.Supplier_Code; después Vendors.TP_Reference / Connection_Reference / Supplier_Connection_Reference |
 | Bank Receipt Needed | Prepayments.Bank_Receipt_Needed (checkbox de cada prepago) |
@@ -50,3 +50,7 @@ Los timeouts no se reintentan automáticamente: pueden producirse después del e
 6. Probar con un perfil habitual y comprobar los permisos de función, archivos y checkbox. Un fallo descargando una proforma debe impedir el correo completo.
 
 Pruebas locales: `node --test tests/prepayment-bank-request.test.js tests/prepayments.test.js tests/prepayment-workflow.test.js`. El entorno local no compila ni ejecuta Deluge; validar la función en el editor CRM antes de usarla.
+
+## Varias facturas por prepago
+
+Consultar [el despliegue coordinado de ambos widgets](../../../docs/prepayment-multiple-invoices.md). La suma de las asignaciones del prepago debe cubrir su importe y las asignaciones del pago deben cubrir cada factura. Todas deben resolver una misma cuenta bancaria de proveedor. No se utiliza Prepayments.Vendor_Invoice como fallback.

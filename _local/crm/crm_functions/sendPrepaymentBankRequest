@@ -69,7 +69,7 @@ try
 			return result.toString();
 		}
 		p = zoho.crm.getRecordById("Prepayments",recordId.toLong());
-		if(p.get("id") == null || p.get("Accounting_Status") != "Prepayment recorded" || p.get("Prepayment_Request") == null || p.get("Vendor_Invoice") == null || p.get("Vendor_Payment") == null || ifnull(p.get("Amount"),0).toDecimal() <= 0)
+		if(p.get("id") == null || p.get("Accounting_Status") != "Prepayment recorded" || p.get("Prepayment_Request") == null || p.get("Vendor_Payment") == null || ifnull(p.get("Amount"),0).toDecimal() <= 0)
 		{
 			result.put("message","Prepayment " + recordId + " must be registered with a request, invoice, payment and positive amount. Refresh before retrying.");
 			return result.toString();
@@ -84,53 +84,95 @@ try
 			alreadyRequested = alreadyRequested + 1;
 		}
 		requestId = p.get("Prepayment_Request").get("id");
-		invoiceId = p.get("Vendor_Invoice").get("id");
-		paymentId = p.get("Vendor_Payment").get("id");
-		r = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
-		invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
-		payment = zoho.crm.getRecordById("Supplier_Payments",paymentId.toLong());
-		if(r.get("id") == null || r.get("Supplier") == null || invoice.get("Supplier") == null || invoice.get("Status") == "Cancelled" || payment.get("id") == null || (payment.get("Status") != "Paid" && payment.get("Status") != "Reconciled") || payment.get("Movement_Type") != "Outbound Payment")
-		{
-			result.put("message","The supplier, invoice or recorded payment is unavailable or no longer valid for " + recordId + ".");
-			return result.toString();
-		}
-		supplierId = r.get("Supplier").get("id");
-		currency = ifnull(p.get("Currency"),"EUR");
-		if(invoice.get("Supplier").get("id") != supplierId || ifnull(payment.get("Currency"),"EUR") != currency || ifnull(invoice.get("Currency"),"EUR") != currency)
-		{
-			result.put("message","Supplier or currency mismatch for prepayment " + recordId + ".");
-			return result.toString();
-		}
-		allocations = zoho.crm.searchRecords("Supplier_Pay_Allocations","((Supplier_Payment:equals:" + paymentId + ")and(Supplier_Invoice:equals:" + invoiceId + "))",1,200);
-		accountIds = List();
-		allocated = 0.0;
-		if(allocations.size() >= 200)
-		{
-			result.put("message","Too many allocations to verify this payment.");
-			return result.toString();
-		}
-		for each allocation in allocations
-		{
-			if(allocation.get("id") == null)
-			{
-				result.put("message","Could not read the payment allocations.");
-				return result.toString();
-			}
-			if(ifnull(allocation.get("Allocated_Amount"),0).toDecimal() > 0 && allocation.get("Payment_Account") != null)
-			{
-				accountIds.add(allocation.get("Payment_Account").get("id"));
-				allocated = allocated + allocation.get("Allocated_Amount").toDecimal();
-			}
-		}
-		accountIds = accountIds.distinct();
-		allocationKey = paymentId + "-" + invoiceId;
-		selectedAmount = ifnull(selectedByAllocation.get(allocationKey),0).toDecimal() + p.get("Amount").toDecimal();
-		selectedByAllocation.put(allocationKey,selectedAmount);
-		if(accountIds.size() != 1 || allocated + 0.005 < selectedAmount)
-		{
-			result.put("message","Check the supplier bank account and allocated amount on the recorded payment for " + recordId + ".");
-			return result.toString();
-		}
+        paymentId = p.get("Vendor_Payment").get("id");
+        r = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+        payment = zoho.crm.getRecordById("Supplier_Payments",paymentId.toLong());
+        currency = ifnull(p.get("Currency"),"EUR");
+        if(r.get("id") == null || r.get("Supplier") == null || payment.get("id") == null || (payment.get("Status") != "Paid" && payment.get("Status") != "Reconciled") || payment.get("Movement_Type") != "Outbound Payment" || ifnull(payment.get("Currency"),"EUR") != currency)
+        {
+            result.put("message","The supplier or recorded payment is no longer valid for " + recordId + ".");
+            return result.toString();
+        }
+        supplierId = r.get("Supplier").get("id");
+        linkQuery = Map();
+        linkQuery.put("select_query","select id, Prepayment, Vendor_Invoice, Allocated_Amount, Currency from Prepayment_Invoice_Allocations where Prepayment = '" + recordId + "' order by id asc limit 200");
+        linkResponse = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/coql"
+            type :POST
+            parameters :linkQuery.toString()
+            headers :{"Content-Type":"application/json"}
+            connection :"crm_oauth_connection"
+        ];
+        if(linkResponse == null || !linkResponse.containKey("data") || linkResponse.get("data").size() == 0 || ifnull(ifnull(linkResponse.get("info"),Map()).get("more_records"),true))
+        {
+            result.put("message","Could not read all invoice allocations for " + recordId + ". Complete the migration and check module permissions.");
+            return result.toString();
+        }
+        accountIds = List();
+        seenInvoices = List();
+        invoiceCodes = List();
+        totalApplied = 0.0;
+        for each link in linkResponse.get("data")
+        {
+            invoiceId = ifnull(ifnull(link.get("Vendor_Invoice"),Map()).get("id"),"").toString();
+            applied = ifnull(link.get("Allocated_Amount"),0).toDecimal();
+            if(invoiceId == "" || seenInvoices.contains(invoiceId) || applied <= 0 || link.get("Currency") != currency || ifnull(ifnull(link.get("Prepayment"),Map()).get("id"),"").toString() != recordId)
+            {
+                result.put("message","Invalid or duplicate invoice allocation for " + recordId + ".");
+                return result.toString();
+            }
+            seenInvoices.add(invoiceId);
+            totalApplied = totalApplied + applied;
+            invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+            if(invoice.get("id") == null || invoice.get("Status") == "Cancelled" || invoice.get("Status") == "Rejected" || invoice.get("Invoice_Type") == "Credit Note" || ifnull(ifnull(invoice.get("Supplier"),Map()).get("id"),"") != supplierId || ifnull(invoice.get("Currency"),"EUR") != currency || ifnull(ifnull(invoice.get("Booking"),Map()).get("id"),"") != ifnull(ifnull(r.get("Booking"),Map()).get("id"),""))
+            {
+                result.put("message","Invoice supplier, booking, currency or status mismatch for " + recordId + ".");
+                return result.toString();
+            }
+            invoiceCode = ifnull(invoice.get("Supplier_Code"),"").toString().trim();
+            if(invoiceCode != "" && !invoiceCodes.contains(invoiceCode)) { invoiceCodes.add(invoiceCode); }
+            allocationQuery = Map();
+            allocationQuery.put("select_query","select id, Supplier_Payment, Supplier_Invoice, Allocated_Amount, Payment_Account from Supplier_Pay_Allocations where (Supplier_Payment = '" + paymentId + "' and Supplier_Invoice = '" + invoiceId + "') limit 200");
+            allocationResponse = invokeurl
+            [
+                url :"https://www.zohoapis.eu/crm/v8/coql"
+                type :POST
+                parameters :allocationQuery.toString()
+                headers :{"Content-Type":"application/json"}
+                connection :"crm_oauth_connection"
+            ];
+            if(allocationResponse == null || !allocationResponse.containKey("data") || ifnull(ifnull(allocationResponse.get("info"),Map()).get("more_records"),true))
+            {
+                result.put("message","Could not read all payment allocations for " + recordId + ".");
+                return result.toString();
+            }
+            allocated = 0.0;
+            for each allocation in allocationResponse.get("data")
+            {
+                if(ifnull(allocation.get("Allocated_Amount"),0).toDecimal() <= 0 || allocation.get("Payment_Account") == null)
+                {
+                    result.put("message","A payment allocation has no positive amount or supplier account.");
+                    return result.toString();
+                }
+                accountIds.add(allocation.get("Payment_Account").get("id"));
+                allocated = allocated + allocation.get("Allocated_Amount").toDecimal();
+            }
+            allocationKey = paymentId + "-" + invoiceId;
+            selectedAmount = ifnull(selectedByAllocation.get(allocationKey),0).toDecimal() + applied;
+            selectedByAllocation.put(allocationKey,selectedAmount);
+            if(allocated + 0.005 < selectedAmount)
+            {
+                result.put("message","The recorded payment does not cover invoice " + invoiceId + " for the selected prepayments.");
+                return result.toString();
+            }
+        }
+        accountIds = accountIds.distinct();
+        if(accountIds.size() != 1 || (totalApplied - p.get("Amount").toDecimal()).abs() > 0.005)
+        {
+            result.put("message","Invoice allocations must cover the full prepayment and use one supplier bank account for " + recordId + ".");
+            return result.toString();
+        }
 		account = zoho.crm.getRecordById("Payment_Accounts",accountIds.get(0).toLong());
 		if(account.get("id") == null || account.get("Owner_Supplier") == null || account.get("Owner_Supplier").get("id") != supplierId || ifnull(account.get("IBAN"),"").trim() == "" || account.get("Status") == "Inactive")
 		{
@@ -148,7 +190,7 @@ try
 		supplierCode = ifnull(r.get("Supplier_Code"),"").toString().trim();
 		if(supplierCode == "")
 		{
-			supplierCode = ifnull(invoice.get("Supplier_Code"),"").toString().trim();
+			supplierCode = invoiceCodes.toString(" / ");
 		}
 		if(supplierCode == "")
 		{

@@ -3,12 +3,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const window = {};
-for (const file of ['invoice-name.js', 'quick-settlement-refresh.js', 'prepayments.js', 'prepayment-workflow.js']) {
+for (const file of ['invoice-name.js', 'quick-settlement-refresh.js', 'prepayments.js', 'prepayment-allocations.js', 'prepayment-workflow.js']) {
   vm.runInNewContext(fs.readFileSync('app/scripts/' + file, 'utf8'), { window, Intl });
 }
 const ns = window.AccountingManagerApp;
 function fixture() {
   const db = {
+    Prepayment_Invoice_Allocations: [], Prepayment_Request_Services: [], Booking_Services: [],
     Prepayments: [{ id: 'p1', Name: 'Deposit', Amount: 300, Currency: 'EUR', Accounting_Status: 'Pending invoice', Prepayment_Request: { id: 'r1' } }],
     Prepayment_Requests: [{ id: 'r1', Supplier: { id: 's1', name: 'Hotel' }, Supplier_Code: 'SUP-001', Booking: { id: 'b1' } }],
     Vendors: [{ id: 's1', Is_Self_Employed: false }],
@@ -26,7 +27,12 @@ function fixture() {
       const clauses = [...Query.matchAll(/\((\w+):equals:([^()]+)\)/g)];
       return { data: db[Entity].filter(r => clauses.every(([, key, value]) => (r[key] && r[key].id || r[key]) === value)).map(clone) };
     },
+    async deleteRecord({ Entity, RecordID }) {
+      db[Entity] = db[Entity].filter(row => row.id !== RecordID);
+      return {data:[{code:'SUCCESS'}]};
+    },
     async insertRecord({ Entity, APIData }) {
+      APIData = Array.isArray(APIData) ? APIData : [APIData];
       calls.push({ Entity, create: clone(APIData[0]) });
       const record = { ...clone(APIData[0]), id: Entity + '-' + (db[Entity].length + 1) };
       db[Entity].push(record);
@@ -39,7 +45,7 @@ function fixture() {
       return { data: [{ code: 'SUCCESS' }] };
     }
   };
-  const zoho = { CRM: { API: api, META: { async getFields() { return { fields: [
+  const zoho = { CRM: { API: api, META: { async getFields({ Entity } = {}) { if (Entity === "Prepayment_Invoice_Allocations") return {fields:[{api_name:"Name",unique:{casesensitive:false}}]}; return { fields: [
     { api_name: 'Vendor_Invoice', data_type: 'lookup', lookup: { module: { api_name: 'Supplier_Invoices' } } },
     { api_name: 'Vendor_Payment', data_type: 'lookup', lookup: { module: { api_name: 'Supplier_Payments' } } }
   ] }; } }, FUNCTIONS: { async execute(name, args) {
@@ -50,17 +56,180 @@ function fixture() {
     }
     const payment = JSON.parse(input.paymentDataString);
     calls.push({ function: name, input, payment });
-    const invoice = db.Supplier_Invoices.find(r => r.id === input.supplierInvoiceIds);
-    const amount = payment.allocations[invoice.id];
-    db.Supplier_Payments.push({ id: 'pay1', Currency: payment.Currency, Payment_Amount: amount, Status: 'Paid' });
-    db.Supplier_Pay_Allocations.push({ id: 'alloc1', Supplier_Payment: { id: 'pay1' }, Supplier_Invoice: { id: invoice.id }, Allocated_Amount: amount });
-    invoice.Amount_Paid += amount;
-    return { details: { output: JSON.stringify({ payment_id: 'pay1', error: false, allocation_ids: ['alloc1'] }) } };
+    const invoices = input.supplierInvoiceIds.split('|||').map(id => db.Supplier_Invoices.find(r => r.id === id));
+    const amount = Object.values(payment.allocations).reduce((a,b) => a+b,0);
+    db.Supplier_Payments.push({ id: 'pay1', Currency: payment.Currency, Payment_Date: '2026-09-23', Payment_Amount: amount, Status: 'Paid' });
+    invoices.forEach((invoice,index) => { db.Supplier_Pay_Allocations.push({ id: 'alloc' + (index+1), Supplier_Payment: { id: 'pay1' }, Supplier_Invoice: { id: invoice.id }, Allocated_Amount: payment.allocations[invoice.id] }); invoice.Amount_Paid += payment.allocations[invoice.id]; });
+    return { details: { output: JSON.stringify({ payment_id: 'pay1', error: false, allocation_ids: invoices.map((_,index) => 'alloc' + (index+1)) }) } };
   } } } };
   return { db, calls, api, zoho, storage, service: ns.createPrepaymentWorkflowService(zoho, storage) };
 }
 const invoiceInput = { reference: 'INV-1', date: '2026-09-11', amount: 1000, vat: 21, settlementId: 'st1' };
 const paymentInput = { date: '2026-09-11', accountId: 'a1' };
+
+test('prepayment creation lets CRM assign today and copies the saved date instead of form or old prepayment dates', async () => {
+  const f = fixture();
+  f.db.Prepayments[0].Payment_Date = '2020-01-01';
+  await f.service.saveInvoice('p1', invoiceInput);
+  const ui = workflowUI(f);
+  await ui.workflow.open('p1');
+  assert.equal(ui.element('payment-date').readOnly,true);
+  assert.notEqual(ui.element('payment-date').value,'2020-01-01');
+  await f.service.savePayment('p1',{...paymentInput,date:'2000-01-01'});
+  assert.equal(Object.hasOwn(f.calls.find(c=>c.payment).payment,'Payment_Date'),false);
+  assert.equal(f.db.Prepayments[0].Payment_Date,'2026-09-23');
+});
+
+test('retrying the prepayment link preserves the original saved payment date', async () => {
+  const f = fixture();
+  await f.service.saveInvoice('p1',invoiceInput);
+  const update=f.api.updateRecord;
+  f.api.updateRecord=async args=>{if(args.APIData.Vendor_Payment) throw Error('Link failed'); return update(args);};
+  await assert.rejects(f.service.savePayment('p1',paymentInput),/Link failed/);
+  f.api.updateRecord=update;
+  await ns.createPrepaymentWorkflowService(f.zoho,f.storage).savePayment('p1',{...paymentInput,date:'2026-10-01'});
+  assert.equal(f.db.Supplier_Payments.length,1);
+  assert.equal(f.db.Prepayments[0].Payment_Date,'2026-09-23');
+});
+
+test('two final invoices split one prepayment into one payment with two verified allocations', async () => {
+  const f = fixture();
+  let ctx = await f.service.saveInvoice('p1', { ...invoiceInput, reference:'A', amount:100, allocatedAmount:100, invoiceType:'Final Invoice' });
+  assert.equal(ctx.allocations.remaining, 200);
+  assert.equal(ctx.payment.Accounting_Status, 'Pending invoice');
+  await assert.rejects(f.service.savePayment('p1', paymentInput), /full prepayment/);
+  ctx = await f.service.saveInvoice('p1', { ...invoiceInput, reference:'B', amount:500, allocatedAmount:200, invoiceType:'Final Invoice' });
+  assert.equal(ctx.allocations.complete, true);
+  assert.equal(f.db.Prepayment_Invoice_Allocations.length, 2);
+  assert.equal(ctx.payment.Vendor_Invoice, undefined);
+  assert.deepEqual(f.db.Supplier_Invoices.map(row => row.Invoice_Type), ['Final Invoice','Final Invoice']);
+  await f.service.savePayment('p1', paymentInput);
+  const call = f.calls.find(row => row.payment);
+  assert.equal(call.input.supplierInvoiceIds, f.db.Supplier_Invoices.map(row => row.id).join('|||'));
+  assert.deepEqual(Object.values(call.payment.allocations), [100,200]);
+  assert.equal(f.db.Supplier_Payments.length, 1);
+  assert.equal(f.db.Supplier_Payments[0].Payment_Amount, 300);
+  assert.equal(f.db.Prepayments[0].Accounting_Status, 'Prepayment recorded');
+});
+
+test('two-invoice form remains on invoice entry until fully allocated and displays both associations', async () => {
+  const f = fixture(), ui = workflowUI(f);
+  await f.service.saveInvoice('p1', { ...invoiceInput, reference:'A', allocatedAmount:100 });
+  await ui.workflow.open('p1');
+  assert.equal(ui.element('invoice-fields').hidden, false);
+  assert.equal(ui.element('allocated').value, 200);
+  assert.match(ui.element('allocations').innerHTML, /Remaining:.*200/);
+  await f.service.saveInvoice('p1', { ...invoiceInput, reference:'B', allocatedAmount:200 });
+  await ui.workflow.open('p1');
+  assert.equal(ui.element('payment-fields').hidden, false);
+  assert.equal((ui.element('allocations').innerHTML.match(/data-remove-allocation=/g) || []).length, 2);
+});
+
+test('removing an association preserves the invoice and permits a corrected split', async () => {
+  const f = fixture();
+  await f.service.saveInvoice('p1', { ...invoiceInput, allocatedAmount:100 });
+  const invoiceId = f.db.Supplier_Invoices[0].id;
+  await f.service.removeInvoice('p1', f.db.Prepayment_Invoice_Allocations[0].id);
+  assert.equal(f.db.Supplier_Invoices.length, 1);
+  assert.equal(f.db.Prepayment_Invoice_Allocations.length, 0);
+  const ctx = await f.service.saveInvoice('p1', { existingInvoiceId:invoiceId, allocatedAmount:300 });
+  assert.equal(ctx.allocations.complete, true);
+});
+
+test('over-allocation and non-unique allocation names prevent any invoice creation', async () => {
+  const f = fixture();
+  await assert.rejects(f.service.saveInvoice('p1', {...invoiceInput, allocatedAmount:301}), /remaining/);
+  const metadata = f.zoho.CRM.META.getFields;
+  f.zoho.CRM.META.getFields = args => args.Entity === 'Prepayment_Invoice_Allocations' ? {fields:[{api_name:'Name',unique:{}}]} : metadata(args);
+  await assert.rejects(f.service.saveInvoice('p1', invoiceInput), /disallow duplicates/);
+  assert.equal(f.db.Supplier_Invoices.length, 0);
+});
+
+test('one paid invoice cannot confirm a prepayment spread across two invoices', async () => {
+  const f = fixture();
+  await f.service.saveInvoice('p1', {...invoiceInput, reference:'A', allocatedAmount:100});
+  await f.service.saveInvoice('p1', {...invoiceInput, reference:'B', allocatedAmount:200});
+  f.db.Supplier_Payments.push({id:'old',Status:'Paid',Currency:'EUR',Payment_Amount:300});
+  f.db.Supplier_Pay_Allocations.push({id:'a', Supplier_Payment:{id:'old'},Supplier_Invoice:{id:f.db.Supplier_Invoices[0].id},Allocated_Amount:300});
+  await assert.rejects(f.service.linkPayment('p1','old'), /no longer associated/);
+  assert.equal(f.db.Prepayments[0].Vendor_Payment, undefined);
+});
+
+test('an existing payment cannot be consumed twice by different prepayments', async () => {
+  const f = fixture();
+  attachExistingPayment(f);
+  f.db.Prepayments.push({id:'other',Amount:1200,Currency:'EUR',Vendor_Payment:{id:'paid1'}});
+  f.db.Prepayment_Invoice_Allocations.push({id:'other-link',Prepayment:{id:'other'},Vendor_Invoice:{id:'existing'},Allocated_Amount:1200,Currency:'EUR'});
+  await assert.rejects(f.service.linkPayment('p1','paid1'), /no longer associated/);
+  assert.equal(f.db.Prepayments[0].Vendor_Payment, undefined);
+});
+
+test('failure verifying the second payment allocation preserves the payment for retry', async () => {
+  const f = fixture();
+  await f.service.saveInvoice('p1', {...invoiceInput, reference:'A', allocatedAmount:100});
+  await f.service.saveInvoice('p1', {...invoiceInput, reference:'B', allocatedAmount:200});
+  const get = f.api.getRecord;
+  f.api.getRecord = args => {
+    if (args.Entity === 'Supplier_Pay_Allocations' && args.RecordID === 'alloc2') throw Error('temporarily unavailable');
+    return get(args);
+  };
+  await assert.rejects(f.service.savePayment('p1',paymentInput), /No additional payment/);
+  await assert.rejects(f.service.removeInvoice('p1',f.db.Prepayment_Invoice_Allocations[0].id), /pending operation/);
+  f.api.getRecord = get;
+  await ns.createPrepaymentWorkflowService(f.zoho,f.storage).savePayment('p1',paymentInput);
+  assert.equal(f.db.Supplier_Payments.length,1);
+  assert.equal(f.db.Prepayments[0].Accounting_Status,'Prepayment recorded');
+});
+
+test('associated services use only the junction, deduplicate and support multiple requests', async () => {
+  const f = fixture();
+  f.db.Booking_Services = [
+    { id: 'sv2', Product_Description: 'Later', Service_Date: '2026-09-12' },
+    { id: 'sv1', Product_Description: 'First', Service_Date: '2026-09-11' },
+    { id: 'sv3', Supplier: { id: 's1' }, Booking: { id: 'b1' } }
+  ];
+  f.db.Prepayment_Request_Services = [
+    {id:'l1', Prepayment_Request:{id:'r1'}, Booking_Service:{id:'sv1'}},
+    {id:'l2', Prepayment_Request:{id:'r1'}, Booking_Service:{id:'sv2'}},
+    {id:'l3', Prepayment_Request:{id:'r1'}, Booking_Service:{id:'sv1'}},
+    {id:'l4', Prepayment_Request:{id:'other'}, Booking_Service:{id:'sv1'}}
+  ];
+  const result = await f.service.relatedServices(await f.service.context('p1'), 'st1');
+  assert.deepEqual(Array.from(result.records, row => row.id), ['sv1', 'sv2']);
+  assert.match(result.description, /linked to this prepayment request/);
+});
+
+test('an empty junction does not associate unrelated supplier or settlement services', async () => {
+  const f = fixture();
+  f.db.Booking_Services = [{id:'sv1', Supplier_Settlement:{id:'st1'}, Supplier:{id:'s1'}, Booking:{id:'b1'}, Prepayment_Request:{id:'r1'}}];
+  const result = await f.service.relatedServices(await f.service.context('p1'), 'st1');
+  assert.equal(result.records.length, 0);
+});
+
+test('association search and missing service errors are not reported as an empty result', async () => {
+  const f = fixture(), ctx = await f.service.context('p1');
+  const search = f.api.searchRecord;
+  f.api.searchRecord = async () => { throw Error('Permission denied'); };
+  await assert.rejects(f.service.relatedServices(ctx), /Permission denied/);
+  f.api.searchRecord = search;
+  f.db.Prepayment_Request_Services = [{id:'l1', Prepayment_Request:{id:'r1'}, Booking_Service:{id:'missing'}}];
+  await assert.rejects(f.service.relatedServices(ctx), /Could not read/);
+});
+
+test('associated service descriptions and dates appear in invoice, payment and read-only asides', async () => {
+  for (const phase of ['invoice', 'payment', 'view']) {
+    const f = fixture();
+    f.db.Booking_Services = [{ id: 'sv1', Supplier: { id: 's1' }, Booking: { id: 'b1' }, Supplier_Settlement: { id: 'st1' }, Product_Description: 'Tour <private>\nPickup at hotel', Service_Date: '2026-09-17' }];
+    f.db.Prepayment_Request_Services = [{id:'l1', Prepayment_Request:{id:'r1'}, Booking_Service:{id:'sv1'}}];
+    if (phase !== 'invoice') await f.service.saveInvoice('p1', invoiceInput);
+    if (phase === 'view') f.db.Prepayments[0].Accounting_Status = 'Prepayment recorded';
+    const ui = workflowUI(f);
+    await ui.workflow.open('p1');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(ui.element('services').innerHTML, /Tour &lt;private&gt;\nPickup at hotel/);
+    assert.match(ui.element('services').innerHTML, /17\/09\/2026/);
+  }
+});
 
 test('prepayment offers Own accounts and keeps the supplier default out of the payment header', async () => {
   const f = fixture();
@@ -155,14 +324,14 @@ test('existing invoice is linked without creating a duplicate invoice or settlem
   const f = fixture();
   f.db.Supplier_Invoices.push({ id: 'existing', Supplier: { id: 's1' }, Booking: { id: 'b1' }, Supplier_Settlement: { id: 'st1' }, Total_Payable_Amount: 1000, Amount_Paid: 0 });
   await f.service.saveInvoice('p1', { existingInvoiceId: 'existing' });
-  assert.equal(f.db.Prepayments[0].Vendor_Invoice.id, 'existing');
-  assert.equal(f.calls.filter(c => c.create).length, 0);
+  assert.equal(f.db.Prepayment_Invoice_Allocations[0].Vendor_Invoice.id, 'existing');
+  assert.equal(f.calls.filter(c => c.create && c.Entity !== 'Prepayment_Invoice_Allocations').length, 0);
 });
 
 test('invoice lookup failure resumes the returned invoice ID after reopening', async () => {
   const f = fixture(), update = f.api.updateRecord;
   f.api.updateRecord = async args => {
-    if (args.APIData.Vendor_Invoice) { throw new Error('Link failed'); }
+    if (args.APIData.Accounting_Status === 'Pending payment record') { throw new Error('Link failed'); }
     return update(args);
   };
   await assert.rejects(f.service.saveInvoice('p1', invoiceInput), /Link failed/);
@@ -402,7 +571,7 @@ function workflowUI(f) {
   };
   f.api.getFile = async ({ id }) => { files.push(id); return new Blob(['PDF'], { type: 'application/pdf' }); };
   const context = { window: uiWindow, document, Intl, Blob };
-  for (const file of ['invoice-name.js', 'quick-settlement-refresh.js', 'prepayments.js', 'prepayment-workflow.js']) vm.runInNewContext(fs.readFileSync('app/scripts/' + file, 'utf8'), context);
+  for (const file of ['invoice-name.js', 'quick-settlement-refresh.js', 'prepayments.js', 'prepayment-allocations.js', 'prepayment-workflow.js']) vm.runInNewContext(fs.readFileSync('app/scripts/' + file, 'utf8'), context);
   uiWindow.AccountingManagerApp.createPrepaymentsWorkspace = null;
   vm.runInNewContext(fs.readFileSync('app/scripts/operations.js', 'utf8'), context);
   const workflow = uiWindow.AccountingManagerApp.createPrepaymentWorkflow({ querySelector: () => modal }, f.zoho, async () => {});
@@ -468,9 +637,9 @@ test('linking compares 1320 EUR prepayment to Total Payable Amount regardless of
     f.db.Prepayments[0].Amount = 1320;
     f.db.Supplier_Invoices.push({ id: 'existing', Supplier: { id: 's1' }, Booking: { id: 'b1' }, Supplier_Settlement: { id: 'st1' }, Currency: 'EUR', Total_Payable_Amount: 1320, Amount_Paid: 0, Unpaid_Invoiced_Amount: balance });
     await f.service.saveInvoice('p1', { existingInvoiceId: 'existing' });
-    assert.equal(f.db.Prepayments[0].Vendor_Invoice.id, 'existing');
+    assert.equal(f.db.Prepayment_Invoice_Allocations[0].Vendor_Invoice.id, 'existing');
     assert.equal(f.db.Prepayments[0].Accounting_Status, 'Pending payment record');
-    assert.equal(f.calls.filter(c => c.function || c.create).length, 0);
+    assert.equal(f.calls.filter(c => c.function || c.create && c.Entity !== 'Prepayment_Invoice_Allocations').length, 0);
   }
 });
 
@@ -502,7 +671,7 @@ test('a linked invoice still needs enough pending balance before registering a p
 
 function attachExistingPayment(f, overrides = {}) {
   f.db.Supplier_Invoices.push({ id: 'existing', Name: 'INV-PAID', Supplier: { id: 's1' }, Booking: { id: 'b1' }, Supplier_Settlement: { id: 'st1' }, Currency: 'EUR', Total_Payable_Amount: 1320, Amount_Paid: 1320, Unpaid_Invoiced_Amount: 0 });
-  f.db.Prepayments[0].Vendor_Invoice = { id: 'existing' };
+  f.db.Prepayment_Invoice_Allocations.push({ id: 'pia-existing', Prepayment: {id:'p1'}, Vendor_Invoice: {id:'existing'}, Currency:'EUR', get Allocated_Amount() { return f.db.Prepayments[0].Amount; } });
   f.db.Prepayments[0].Accounting_Status = 'Pending payment record';
   f.db.Supplier_Payments.push({ id: 'paid1', Name: 'PAY-EXISTING', Payment_Date: '2026-09-12', Currency: 'EUR', Status: 'Paid', Payment_Amount: 1320, ...overrides });
   f.db.Supplier_Pay_Allocations.push({ id: 'allocation1', Supplier_Invoice: { id: 'existing' }, Supplier_Payment: { id: 'paid1' }, Allocated_Amount: 1320 });
@@ -541,13 +710,13 @@ test('existing payment is the only form action, without requiring payment accoun
   await ui.element('form').listeners.submit({ preventDefault() {} });
   assert.equal(f.db.Prepayments[0].Vendor_Payment.id, 'paid1');
   assert.equal(ui.element('submit').hidden, true);
-  assert.equal(f.calls.filter(c => c.function || c.create).length, 0);
+  assert.equal(f.calls.filter(c => c.function || c.create && c.Entity !== 'Prepayment_Invoice_Allocations').length, 0);
 });
 
 test('linking an invoice immediately offers its existing payment', async () => {
   const f = fixture();
   attachExistingPayment(f);
-  delete f.db.Prepayments[0].Vendor_Invoice;
+  f.db.Prepayment_Invoice_Allocations.length = 0;
   f.db.Prepayments[0].Accounting_Status = 'Pending invoice';
   const ui = workflowUI(f);
   await ui.workflow.open('p1');
@@ -577,7 +746,7 @@ test('an existing payment discovered at submit time prevents creation and switch
   const f = fixture(), ui = workflowUI(f);
   await f.service.saveInvoice('p1', invoiceInput);
   await ui.workflow.open('p1');
-  const invoiceId = f.db.Prepayments[0].Vendor_Invoice.id;
+  const invoiceId = f.db.Prepayment_Invoice_Allocations[0].Vendor_Invoice.id;
   f.db.Supplier_Payments.push({ id: 'late', Name: 'Late payment', Status: 'Paid', Payment_Amount: 300 });
   f.db.Supplier_Pay_Allocations.push({ id: 'late-alloc', Supplier_Invoice: { id: invoiceId }, Supplier_Payment: { id: 'late' }, Allocated_Amount: 300 });
   ui.element('payment-date').value = '2026-09-15';
@@ -612,7 +781,7 @@ test('failed linking can be retried without creating a payment', async () => {
   await assert.rejects(f.service.linkPayment('p1', 'paid1'), /Link failed/);
   f.api.updateRecord = update;
   await f.service.linkPayment('p1', 'paid1');
-  assert.equal(f.calls.filter(c => c.function || c.create).length, 0);
+  assert.equal(f.calls.filter(c => c.function || c.create && c.Entity !== 'Prepayment_Invoice_Allocations').length, 0);
   assert.equal(f.db.Prepayments[0].Accounting_Status, 'Prepayment recorded');
 });
 
@@ -626,7 +795,7 @@ test('proforma preview and Reported By remain available in invoice creation, pay
     const ui = workflowUI(f);
     await ui.workflow.open('p1');
     assert.match(ui.element('context').innerHTML, /Reported By<\/dt><dd>&lt;requester&gt;@example.com/);
-    assert.match(ui.element('documents').innerHTML, /aria-label="Preview Proforma: Proforma.pdf"/);
+    assert.match(ui.element('documents').innerHTML, /aria-label="Preview Proforma \/ invoices: Proforma.pdf"/);
     assert.match(ui.element('documents').innerHTML, /prepayment-preview-action">Preview/);
     ui.element('documents').listeners.click({ target: { closest() { return { getAttribute() { return '0'; } }; } } });
     await new Promise(resolve => setImmediate(resolve));
@@ -750,4 +919,182 @@ test('quick payment synchronizes the parent after linking, and reports parent fa
     assert.match(result.settlementWarning, /Request permission denied/);
     assert.equal(f.db.Supplier_Payments.length, 1);
   } finally { delete ns.syncPrepaymentRequest; }
+});
+
+
+function serviceEditorFixture() {
+  const f = fixture();
+  f.storage.removeItem = key => f.storage.setItem(key, null);
+  f.db.Booking_Services = [
+    { id: 's-a', Booking: { id: 'b1' }, Supplier: { id: 's1' }, Service_Date: '2026-09-22', Product_Description: 'First service', Total_Purchase_Price: 100, Currency: 'EUR' },
+    { id: 's-b', Booking: { id: 'b1' }, Supplier: { id: 's1' }, Service_Date: '2026-09-23', Product_Description: 'Second service', Total_Purchase_Price: 250.5, Currency: 'EUR' },
+    { id: 'other-trip', Booking: { id: 'b2' }, Supplier: { id: 's1' } },
+    { id: 'other-supplier', Booking: { id: 'b1' }, Supplier: { id: 's2' } }
+  ];
+  f.db.Prepayment_Request_Services = [{ id: 'old-link', Prepayment_Request: { id: 'r1' }, Booking_Service: { id: 's-a' } }, { id: 'other-request', Prepayment_Request: { id: 'r2' }, Booking_Service: { id: 's-a' } }];
+  f.api.deleteRecord = async ({ Entity, RecordID }) => {
+    const links = f.db[Entity];
+    assert.ok(links.some(l => l.id !== RecordID && l.Prepayment_Request.id === 'r1'), 'retains at least one association');
+    f.calls.push({ delete: RecordID });
+    f.db[Entity] = links.filter(l => l.id !== RecordID);
+    return { data: [{ code: 'SUCCESS' }] };
+  };
+  return f;
+}
+
+test('service editor lists only the supplier and booking and replaces links without touching other requests', async () => {
+  const f = serviceEditorFixture();
+  const choices = await f.service.serviceSelection(await f.service.context('p1'));
+  assert.deepEqual(Array.from(choices.records, r => r.id), ['s-a', 's-b']);
+  assert.deepEqual(Array.from(choices.selected), ['s-a']);
+  const result = await f.service.saveServiceSelection('p1', ['s-b']);
+  assert.deepEqual(Array.from(result.selected), ['s-b']);
+  assert.ok(f.db.Prepayment_Request_Services.some(l => l.id === 'other-request'));
+  assert.equal(f.calls[0].Entity, 'Prepayment_Request_Services');
+  assert.equal(f.calls[1].delete, 'old-link');
+  await f.service.saveServiceSelection('p1', ['s-b']);
+  assert.equal(f.calls.length, 2, 'repeated saves are idempotent');
+});
+
+test('service editor rejects empty or foreign selections before writes', async () => {
+  for (const selection of [[], ['other-trip'], ['other-supplier']]) {
+    const f = serviceEditorFixture();
+    await assert.rejects(f.service.saveServiceSelection('p1', selection), /at least one|supplier and booking/);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('failed association removal can be retried without duplicating additions', async () => {
+  const f = serviceEditorFixture(), remove = f.api.deleteRecord;
+  f.api.deleteRecord = async () => ({ data: [{ code: 'ERROR', message: 'Removal rejected' }] });
+  await assert.rejects(f.service.saveServiceSelection('p1', ['s-b']), /Removal rejected/);
+  assert.equal(f.db.Prepayment_Request_Services.filter(l => l.Prepayment_Request.id === 'r1').length, 2);
+  f.api.deleteRecord = remove;
+  await f.service.saveServiceSelection('p1', ['s-b']);
+  assert.equal(f.calls.filter(c => c.create).length, 1);
+});
+
+test('failed association creation never removes the last service', async () => {
+  const f = serviceEditorFixture();
+  f.api.insertRecord = async () => ({ data: [{ code: 'ERROR', message: 'Creation rejected' }] });
+  await assert.rejects(f.service.saveServiceSelection('p1', ['s-b']), /Creation rejected/);
+  assert.ok(f.db.Prepayment_Request_Services.some(l => l.id === 'old-link'));
+  assert.equal(f.calls.length, 0);
+});
+
+test('service editor allows native checkbox and label clicks and saves additional services', async () => {
+  const f = serviceEditorFixture(), ui = workflowUI(f);
+  await ui.workflow.open('p1');
+  const click = attribute => ui.element('services').listeners.click({ preventDefault() {}, target: { closest: () => ({ hasAttribute: name => name === attribute }) } });
+  await click('data-service-edit');
+  for (const tagName of ['INPUT', 'LABEL', 'SPAN']) {
+    let prevented = false;
+    await ui.element('services').listeners.click({
+      preventDefault() { prevented = true; },
+      target: { tagName, closest: () => null }
+    });
+    assert.equal(prevented, false, tagName + ' must retain native checkbox activation');
+  }
+  ui.element('services').listeners.change({ target: { getAttribute: () => 's-b', checked: true } });
+  assert.match(ui.element('services').innerHTML, /data-service-choice="s-b" checked/);
+  assert.match(ui.element('services').innerHTML, /Selected: 2.*350\.50/);
+  await click('data-service-save');
+  assert.deepEqual(f.db.Prepayment_Request_Services.filter(l => l.Prepayment_Request.id === 'r1').map(l => l.Booking_Service.id), ['s-a', 's-b']);
+});
+
+test('service editor shows shared service details and recalculates the selected total before saving', async () => {
+  const f = serviceEditorFixture(), ui = workflowUI(f);
+  await ui.workflow.open('p1');
+  const click = attribute => ui.element('services').listeners.click({ preventDefault() {}, target: { closest: () => ({ hasAttribute: name => name === attribute }) } });
+  await click('data-service-edit');
+  assert.match(ui.element('services').innerHTML, /First service/);
+  assert.match(ui.element('services').innerHTML, /Second service/);
+  assert.match(ui.element('services').innerHTML, /22\/09\/2026/);
+  assert.match(ui.element('services').innerHTML, /Selected: 1.*100\.00/);
+  const toggle = (id, checked) => ui.element('services').listeners.change({ target: { getAttribute: () => id, checked } });
+  toggle('s-b', true);
+  assert.match(ui.element('services').innerHTML, /Selected: 2.*350\.50/);
+  toggle('s-a', false); toggle('s-b', false);
+  assert.match(ui.element('services').innerHTML, /data-service-save disabled/);
+  await ui.element('form').listeners.submit({ preventDefault() {} });
+  assert.match(ui.element('message').textContent, /Save or cancel/);
+  toggle('s-b', true);
+  await click('data-service-save');
+  assert.match(ui.element('services-message').textContent, /Associated services updated/);
+  assert.deepEqual(f.db.Prepayment_Request_Services.filter(l => l.Prepayment_Request.id === 'r1').map(l => l.Booking_Service.id), ['s-b']);
+});
+
+
+test('service save uses SDK object payload and returns confirmed services despite stale search indexes', async () => {
+  const f = serviceEditorFixture(), insert = f.api.insertRecord, search = f.api.searchRecord;
+  const stale = structuredClone(f.db.Prepayment_Request_Services);
+  f.api.insertRecord = async args => {
+    assert.equal(Array.isArray(args.APIData), false);
+    assert.equal(args.APIData.Booking_Service.id, 's-b');
+    return insert(args);
+  };
+  f.api.searchRecord = args => args.Entity === 'Prepayment_Request_Services'
+    ? Promise.resolve({ data: stale.filter(l => l.Prepayment_Request.id === 'r1') }) : search(args);
+  const saved = await f.service.saveServiceSelection('p1', ['s-b']);
+  assert.deepEqual(Array.from(saved.records, r => r.id), ['s-b']);
+  assert.equal(f.db.Prepayment_Request_Services.some(l => l.id === 'old-link'), false);
+});
+
+test('service save failure stays in editor with a visible error and a successful retry restores reading mode', async () => {
+  const f = serviceEditorFixture(), ui = workflowUI(f), remove = f.api.deleteRecord;
+  await ui.workflow.open('p1');
+  const click = (key, attribute) => ui.element(key).listeners.click({ preventDefault() {}, target: { closest: () => ({ hasAttribute: name => name === attribute }) } });
+  await click('services-edit', 'data-service-edit');
+  assert.equal(ui.element('services-edit').hidden, true);
+  const toggle = (id, checked) => ui.element('services').listeners.change({ target: { getAttribute: () => id, checked } });
+  toggle('s-b', true); toggle('s-a', false);
+  f.api.deleteRecord = async () => ({ data: [{ code: 'ERROR', message: 'No permission to remove association' }] });
+  await click('services', 'data-service-save');
+  assert.equal(ui.element('services-message').hidden, false);
+  assert.match(ui.element('services-message').textContent, /No permission/);
+  assert.match(ui.element('services').innerHTML, /data-service-save/);
+  assert.equal(ui.element('submit').disabled, false);
+  f.api.deleteRecord = remove;
+  await click('services', 'data-service-save');
+  assert.doesNotMatch(ui.element('services').innerHTML, /data-service-save|First service/);
+  assert.match(ui.element('services').innerHTML, /Second service/);
+  assert.equal(ui.element('services-edit').hidden, false);
+  assert.match(ui.element('services-message').textContent, /updated/);
+});
+
+
+test('associated settlement follows the linked invoice instead of a stale form selection', async () => {
+  const f = fixture(), ctx = await f.service.context('p1');
+  f.db.Supplier_Settlements.push({ id: 'st2', Supplier: { id: 's1' }, Booking: { id: 'b1' } });
+  f.db.Supplier_Invoices.push({ id: 'inv1', Supplier_Settlement: { id: 'st2' } });
+  assert.equal(await f.service.associatedSettlement(ctx, '', ''), null);
+  assert.equal((await f.service.associatedSettlement(ctx, 'st1', '')).id, 'st1');
+  assert.equal((await f.service.associatedSettlement(ctx, 'st1', 'inv1')).id, 'st2');
+  ctx.allocations.rows = [{Vendor_Invoice:{id:'inv1'}}];
+  assert.equal((await f.service.associatedSettlement(ctx, 'st1', '')).id, 'st2');
+  f.db.Supplier_Settlements[1].Booking.id = 'foreign';
+  await assert.rejects(f.service.associatedSettlement(ctx, '', ''), /supplier and booking/);
+});
+
+test('settlement summary shows CRM totals and pending amounts and updates for selected invoices', async () => {
+  const f = fixture();
+  Object.assign(f.db.Supplier_Settlements[0], { Name: 'Settlement 1', Total_Service_Cost: 1000, Total_Invoice: 600, Total_Paid: 250 });
+  const ui = workflowUI(f);
+  await ui.workflow.open('p1');
+  await new Promise(resolve => setImmediate(resolve));
+  let html = ui.element('settlement-summary').innerHTML;
+  for (const value of ['Settlement 1', 'Total service cost', '1,000.00', 'Already invoiced', '600.00', 'Total paid', '250.00', 'Pending invoicing', '400.00', 'Unpaid invoiced amount', '350.00']) assert.ok(html.includes(value), value);
+  f.db.Supplier_Settlements.push({ id: 'st2', Name: 'Settlement 2', Supplier: { id: 's1' }, Booking: { id: 'b1' }, Total_Service_Cost: 100, Total_Invoice: 120, Total_Paid: 120 });
+  f.db.Supplier_Invoices.push({ id: 'inv2', Supplier_Settlement: { id: 'st2' } });
+  ui.element('existing').value = 'inv2';
+  ui.element('existing').listeners.change();
+  await new Promise(resolve => setImmediate(resolve));
+  html = ui.element('settlement-summary').innerHTML;
+  assert.match(html, /Settlement 2/);
+  assert.match(html, /-.*20\.00/);
+  assert.match(html, /Unpaid invoiced amount<\/span><strong>[^<]*0\.00/);
+  delete f.db.Supplier_Settlements[1].Total_Paid;
+  ui.element('existing').listeners.change();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(ui.element('settlement-summary').innerHTML, /Unpaid invoiced amount<\/span><strong>Not provided/);
 });

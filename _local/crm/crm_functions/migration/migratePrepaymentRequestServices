@@ -1,0 +1,181 @@
+string standalone.migratePrepaymentRequestServices(String mode, String afterServiceId)
+{
+// Temporary migration. Never clears the old lookup or changes payment statuses.
+result = Map();
+result.put("success",false);
+result.put("complete",false);
+cursor = ifnull(afterServiceId,"").trim();
+if(cursor == "")
+{
+	cursor = "0";
+}
+result.put("next_after_service_id",cursor);
+details = List();
+created = 0;
+existing = 0;
+missing = 0;
+duplicates = 0;
+failed = 0;
+scanned = 0;
+try
+{
+	if(mode != "simulate" && mode != "migrate" && mode != "verify")
+	{
+		result.put("message","Use simulate, migrate or verify.");
+		return result.toString();
+	}
+	if(!cursor.matches("^[0-9]+$"))
+	{
+		result.put("message","afterServiceId must be empty, 0 or a CRM record ID.");
+		return result.toString();
+	}
+	query = Map();
+	query.put("select_query","select id, Prepayment_Request from Booking_Services where (Prepayment_Request is not null and id > " + cursor + ") order by id asc limit 25");
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/coql"
+		type :POST
+		parameters :query.toString()
+		headers :{"Content-Type":"application/json"}
+		connection :"crm_oauth_connection"
+		detailed :true
+	];
+	services = List();
+	more = false;
+	if(response.get("responseCode") == 200)
+	{
+		body = response.get("responseText").toString().toMap();
+		if(!body.containKey("data"))
+		{
+			result.put("message","Source query did not return records: " + body.toString());
+			return result.toString();
+		}
+		services = body.get("data");
+		more = ifnull(ifnull(body.get("info"),Map()).get("more_records"),false);
+	}
+	else if(response.get("responseCode") != 204)
+	{
+		result.put("message","Could not read legacy service associations: " + response.toString());
+		return result.toString();
+	}
+	for each serviceRow in services
+	{
+		serviceId = serviceRow.get("id").toString();
+		detail = Map();
+		detail.put("service_id",serviceId);
+		try
+		{
+			// Read again rather than migrating a stale lookup from the query.
+			service = zoho.crm.getRecordById("Booking_Services",serviceId.toLong());
+			if(ifnull(service.get("id"),"").toString() != serviceId)
+			{
+				throw "Could not read the source service.";
+			}
+			requestId = ifnull(ifnull(service.get("Prepayment_Request"),Map()).get("id"),"").toString();
+			if(requestId == "")
+			{
+				throw "The source lookup changed during migration. Review this service and retry.";
+			}
+			detail.put("request_id",requestId);
+			request = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+			if(ifnull(request.get("id"),"").toString() != requestId)
+			{
+				throw "Could not read the linked request.";
+			}
+			pairQuery = Map();
+			pairQuery.put("select_query","select id, Prepayment_Request, Booking_Service from Prepayment_Request_Services where (Prepayment_Request = '" + requestId + "' and Booking_Service = '" + serviceId + "') limit 2");
+			pairResponse = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/coql"
+				type :POST
+				parameters :pairQuery.toString()
+				headers :{"Content-Type":"application/json"}
+				connection :"crm_oauth_connection"
+				detailed :true
+			];
+			links = List();
+			if(pairResponse.get("responseCode") == 200)
+			{
+				pairBody = pairResponse.get("responseText").toString().toMap();
+				if(!pairBody.containKey("data"))
+				{
+					throw "Association query did not return records: " + pairBody.toString();
+				}
+				links = pairBody.get("data");
+			}
+			else if(pairResponse.get("responseCode") != 204)
+			{
+				throw "Could not check existing associations: " + pairResponse.toString();
+			}
+			if(links.size() > 1)
+			{
+				duplicates = duplicates + 1;
+				detail.put("status","duplicate_pair");
+			}
+			else if(links.size() == 1)
+			{
+				existing = existing + 1;
+				detail.put("status","already_linked");
+				detail.put("link_id",links.get(0).get("id"));
+			}
+			else if(mode == "migrate")
+			{
+				payload = Map();
+				payload.put("Name",requestId + "-" + serviceId);
+				payload.put("Prepayment_Request",requestId);
+				payload.put("Booking_Service",serviceId);
+				options = Map();
+				options.put("trigger",List());
+				creation = zoho.crm.createRecord("Prepayment_Request_Services",payload,options);
+				linkId = ifnull(creation.get("id"),"").toString();
+				if(linkId == "")
+				{
+					throw "Association creation was not confirmed. Check CRM before retrying: " + creation.toString();
+				}
+				detail.put("link_id",linkId);
+				saved = zoho.crm.getRecordById("Prepayment_Request_Services",linkId.toLong());
+				if(ifnull(ifnull(saved.get("Prepayment_Request"),Map()).get("id"),"").toString() != requestId || ifnull(ifnull(saved.get("Booking_Service"),Map()).get("id"),"").toString() != serviceId)
+				{
+					throw "Created association could not be verified. Check its link_id before retrying.";
+				}
+				created = created + 1;
+				detail.put("status","created_and_verified");
+			}
+			else
+			{
+				missing = missing + 1;
+				detail.put("status","missing");
+			}
+			scanned = scanned + 1;
+			cursor = serviceId;
+			details.add(detail);
+		}
+		catch (rowError)
+		{
+			failed = failed + 1;
+			detail.put("status","error");
+			detail.put("message",rowError.toString());
+			details.add(detail);
+			break;
+		}
+	}
+	result.put("success",failed == 0 && duplicates == 0 && (mode != "verify" || missing == 0));
+	result.put("complete",failed == 0 && more == false);
+	result.put("message","Continue with next_after_service_id until complete. A completed scan is not migration approval; inspect every batch and run verify from 0.");
+}
+catch (error)
+{
+	failed = failed + 1;
+	result.put("message",error.toString());
+}
+result.put("mode",mode);
+result.put("next_after_service_id",cursor);
+result.put("scanned",scanned);
+result.put("created",created);
+result.put("existing",existing);
+result.put("missing",missing);
+result.put("duplicates",duplicates);
+result.put("failed",failed);
+result.put("details",details);
+return result.toString();
+}

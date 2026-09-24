@@ -1,0 +1,134 @@
+string standalone.notif_sendPrepaymentProof(String prepaymentId)
+{
+result = Map();
+result.put("success",false);
+result.put("sent",false);
+sendAttempted = false;
+try
+{
+	prepaymentId = ifnull(prepaymentId,"").trim();
+	if(!prepaymentId.matches("^[0-9]+$"))
+	{
+		result.put("message","Invalid prepayment ID.");
+		return result.toString();
+	}
+	payment = zoho.crm.getRecordById("Prepayments",prepaymentId.toLong());
+	if(payment.get("id") == null)
+	{
+		result.put("message","The prepayment could not be loaded.");
+		return result.toString();
+	}
+	requestLookup = payment.get("Prepayment_Request");
+	if(requestLookup == null || requestLookup.get("id") == null)
+	{
+		result.put("message","The prepayment has no associated request.");
+		return result.toString();
+	}
+	requestRecord = zoho.crm.getRecordById("Prepayment_Requests",requestLookup.get("id").toLong());
+	if(requestRecord.get("id") == null)
+	{
+		result.put("message","The associated prepayment request could not be loaded.");
+		return result.toString();
+	}
+	recipient = ifnull(requestRecord.get("Requested_By_2"),"").toString().trim();
+	if(!recipient.matches("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$") || recipient.contains("\r") || recipient.contains("\n"))
+	{
+		result.put("message","The associated request must have a valid Requested By email address.");
+		return result.toString();
+	}
+	proofs = payment.get("Payment_Proof");
+	if(proofs == null || proofs.size() == 0)
+	{
+		result.put("message","Attach and save at least one file in Payment Proof before sending.");
+		return result.toString();
+	}
+	// Fetch every attachment before sendmail. A failed download blocks the entire email.
+	filesToAttach = List();
+	totalBytes = 0;
+	for each proof in proofs
+	{
+		attachmentId = ifnull(proof.get("attachment_Id"),ifnull(proof.get("id"),"")).toString();
+		if(!attachmentId.matches("^[0-9]+$"))
+		{
+			result.put("message","A payment proof attachment has no valid CRM attachment ID. Refresh the prepayment.");
+			return result.toString();
+		}
+		proofFile = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/Prepayments/" + prepaymentId + "/actions/download_fields_attachment?fields_attachment_id=" + attachmentId
+			type :GET
+			connection :"crm_oauth_connection"
+		];
+		if(!proofFile.isFile())
+		{
+			result.put("message","A Payment Proof attachment could not be downloaded. No email was sent.");
+			return result.toString();
+		}
+		fileBytes = proofFile.getFileSize();
+		if(fileBytes <= 0)
+		{
+			result.put("message","A Payment Proof attachment is empty. No email was sent.");
+			return result.toString();
+		}
+		totalBytes = totalBytes + fileBytes;
+		// Deluge can silently omit attachments above its 15 MB sendmail limit.
+		if(totalBytes > 15000000)
+		{
+			result.put("message","Payment proof attachments exceed the 15 MB email limit. No email was sent.");
+			return result.toString();
+		}
+		proofName = ifnull(proof.get("File_Name__s"),ifnull(proof.get("file_Name"),ifnull(proof.get("File_Name"),""))).toString();
+		if(proofName != "")
+		{
+			proofFile.setFileName(proofName);
+		}
+		filesToAttach.add(proofFile);
+	}
+	mfspRef = ifnull(requestRecord.get("MFSP_Reference"),"").toString();
+	bookingName = "";
+	supplierName = "";
+	if(requestRecord.get("Booking") != null)
+	{
+		bookingName = ifnull(requestRecord.get("Booking").get("name"),"").toString();
+	}
+	if(requestRecord.get("Supplier") != null)
+	{
+		supplierName = ifnull(requestRecord.get("Supplier").get("name"),"").toString();
+	}
+	mfspRef = mfspRef.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true);
+	bookingName = bookingName.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true);
+	supplierName = supplierName.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true);
+	html = "<div style='font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111111;line-height:1.4;'>";
+	html = html + "<p style='margin:0 0 10px 0;'>Hola,</p><p style='margin:0 0 12px 0;'>Adjunto el justificante de pago del siguiente viaje:</p>";
+	html = html + "<table style='width:100%;border-collapse:collapse;border:1px solid #e6e6e6;border-radius:8px;overflow:hidden;'><tr style='background:#f5f5f5;'>";
+	html = html + "<th style='padding:6px 8px;text-align:left;border-bottom:1px solid #e6e6e6;'>MFSP Ref</th><th style='padding:6px 8px;text-align:left;border-bottom:1px solid #e6e6e6;'>Booking</th><th style='padding:6px 8px;text-align:left;border-bottom:1px solid #e6e6e6;'>Supplier</th></tr>";
+	html = html + "<tr><td style='padding:6px 8px;border-bottom:1px solid #eeeeee;'>" + mfspRef + "</td><td style='padding:6px 8px;border-bottom:1px solid #eeeeee;'>" + bookingName + "</td><td style='padding:6px 8px;border-bottom:1px solid #eeeeee;'>" + supplierName + "</td></tr></table><p style='margin:12px 0 0 0;font-size:10px;color:#666666;'>Gracias.</p></div>";
+	sendAttempted = true;
+	sendmail
+	[
+		from :"crmadmin@madeforspainandportugal.com"
+		to :recipient
+		cc :"claudia@madeforspainandportugal.com"
+		subject :"Justificante de pago"
+		message :html
+		Attachments :file:filesToAttach
+	];
+	result.put("sent",true);
+	result.put("success",true);
+	result.put("recipient",recipient);
+	result.put("attachment_count",filesToAttach.size());
+	result.put("message","Email de justificante de pago enviado correctamente a " + recipient + ".");
+}
+catch(error)
+{
+	if(sendAttempted)
+	{
+		result.put("message","Could not confirm the send. Check email delivery before trying again. " + error.toString());
+	}
+	else
+	{
+		result.put("message","Could not prepare payment proof. No email was sent. " + error.toString());
+	}
+}
+return result.toString();
+}

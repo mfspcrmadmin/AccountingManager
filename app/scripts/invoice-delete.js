@@ -55,7 +55,7 @@
     async function prepare(invoiceId) {
       var invoice = await record(M.invoices, invoiceId);
       assertUnlocked(invoice);
-      var job = { version: 1, invoiceId: invoiceId, operations: [], cursor: 0, guards: [{ module: M.invoices, id: invoiceId }] };
+      var job = { version: 2, invoiceId: invoiceId, operations: [], cursor: 0, guards: [{ module: M.invoices, id: invoiceId }] };
       var deletes = [], updates = [], deleteKeys = new Set(), entriesToDelete = new Set();
       var invoiceCache = {}; invoiceCache[invoiceId] = invoice;
       async function loadInvoice(value) {
@@ -76,8 +76,16 @@
       ));
       var paymentIds = unique(allocations.map(function (a) { return id(a.Supplier_Payment); }));
       var cards = await all("Card_Purchases", "Vendor_Invoice", invoiceId);
+      var prepaymentFields = await ns.getUndoPrepaymentFields(crm);
+      var prepaymentLinks = await all(ns.prepaymentAllocations.module, "Vendor_Invoice", invoiceId);
+      var prepayments = [];
+      for (var link of prepaymentLinks) {
+        if (!id(link.Prepayment)) { throw new Error("A prepayment invoice allocation has no prepayment."); }
+        prepayments.push(await record("Prepayments", id(link.Prepayment)));
+        remove(ns.prepaymentAllocations.module, link);
+      }
       // Card linkage also recovers payments whose allocation was never created.
-      paymentIds = unique(paymentIds.concat(cards.map(function (c) { return id(c.Vendor_Payment); })));
+      paymentIds = unique(paymentIds.concat(cards.map(function (c) { return id(c.Vendor_Payment); }).concat(prepayments.map(function (p) { return id(p[prepaymentFields.payment]); }))));
       var payments = [], deletedPaymentIds = [];
       for (var paymentId of paymentIds) {
         var payment = await record(M.payments, paymentId); assertUnlocked(payment);
@@ -157,19 +165,22 @@
       }
       for (var deletedPaymentId of deletedPaymentIds) {
         cards = cards.concat(await all("Card_Purchases", "Vendor_Payment", deletedPaymentId));
+        prepayments = prepayments.concat(await all("Prepayments", prepaymentFields.payment, deletedPaymentId));
       }
       for (var cardId of unique(cards.map(function (c) { return String(c.id); }))) {
         var card = cards.find(function (c) { return String(c.id) === cardId; });
         var clearInvoice = id(card.Vendor_Invoice) === invoiceId;
-        var clearPayment = deletedPaymentIds.indexOf(id(card.Vendor_Payment)) !== -1;
-        var cardFields = { Accounting_Processed_At: null, Accounting_Processed_By: null };
-        if (clearInvoice) { cardFields.Vendor_Invoice = null; cardFields.Invoice_Number = null; }
-        if (clearPayment) { cardFields.Vendor_Payment = null; }
-        var hasInvoice = !clearInvoice && id(card.Vendor_Invoice);
-        cardFields.Accounting_Status = card.Transaction_Type === "Refund"
-          ? (hasInvoice ? "Pending refund record" : "Pending credit note")
-          : (hasInvoice ? "Pending payment record" : "Pending invoice");
-        update("Card_Purchases", card, cardFields);
+        update("Card_Purchases", card, ns.operationUndoFields("Card_Purchases", card, clearInvoice));
+      }
+      var requestIds = [];
+      for (var prepaymentId of unique(prepayments.map(function (p) { return String(p.id); }))) {
+        var prepayment = prepayments.find(function (p) { return String(p.id) === prepaymentId; });
+        var remainingLinks = (await all(ns.prepaymentAllocations.module, "Prepayment", prepaymentId)).filter(function (row) { return id(row.Vendor_Invoice) !== invoiceId; });
+        prepayment._invoiceAllocationComplete = ns.prepaymentAllocations.summarize(prepayment, remainingLinks).complete;
+        var resetFields = ns.operationUndoFields("Prepayments", prepayment, false);
+        delete resetFields.Vendor_Payment; resetFields[prepaymentFields.payment] = null;
+        update("Prepayments", prepayment, resetFields);
+        if (id(prepayment.Prepayment_Request)) { requestIds.push(id(prepayment.Prepayment_Request)); }
       }
       // Rebuild remaining invoice balances from all their allocations, including
       // payments outside this deletion. Formula fields are calculated by CRM.
@@ -208,8 +219,9 @@
       }
       // Clear inbound references before deleting their targets, then restore
       // derived values. All payloads were prepared before the first write.
-      var unlinkUpdates = updates.filter(function (op) { return op.module === "Card_Purchases" || Object.prototype.hasOwnProperty.call(op.fields, "Original_Invoice") || Object.prototype.hasOwnProperty.call(op.fields, "Original_Invoice_Line"); });
+      var unlinkUpdates = updates.filter(function (op) { return op.module === "Card_Purchases" || op.module === "Prepayments" || Object.prototype.hasOwnProperty.call(op.fields, "Original_Invoice") || Object.prototype.hasOwnProperty.call(op.fields, "Original_Invoice_Line"); });
       job.operations = unlinkUpdates.concat(deletes, updates.filter(function (op) { return unlinkUpdates.indexOf(op) === -1; }), deletedPaymentIds.map(function (value) { return { type: "delete", module: M.payments, id: value }; }));
+      unique(requestIds).forEach(function (value) { job.operations.push({ type: "syncRequest", id: value }); });
       job.operations.push({ type: "delete", module: M.invoices, id: invoiceId });
       return job;
     }
@@ -219,7 +231,7 @@
       var key = "accountingManager.invoiceDeletion.v1." + invoiceId;
       var saved = storage.getItem(key);
       var job = saved ? JSON.parse(saved) : await prepare(invoiceId);
-      if (job.version !== 1 || job.invoiceId !== invoiceId) { throw new Error("Invalid invoice deletion recovery data."); }
+      if (job.version !== 2 || job.invoiceId !== invoiceId) { throw new Error("Invalid invoice deletion recovery data."); }
       storage.setItem(key, JSON.stringify(job));
       try {
         // Posting can have occurred since the first attempt failed. Never use
@@ -235,6 +247,11 @@
         }
         for (; job.cursor < job.operations.length; job.cursor += 1) {
           var op = job.operations[job.cursor];
+          if (op.type === "syncRequest") {
+            await ns.syncPrepaymentRequest(crm, op.id);
+            storage.setItem(key, JSON.stringify(Object.assign({}, job, { cursor: job.cursor + 1 })));
+            continue;
+          }
           var response = op.type === "delete" ? await crm.deleteRecord(op.module, op.id) : await crm.updateRecord(op.module, op.id, op.fields, { trigger: [] });
           var result = helpers.extractRecords(response)[0] || response || {};
           var status = String(result.code || result.status || "").toLowerCase();
@@ -242,6 +259,7 @@
           if (status !== "success" && !(op.type === "delete" && alreadyDeleted)) {
             throw new Error(op.module + " " + op.id + ": " + (result.message || "CRM did not confirm the change."));
           }
+          if (op.module === "Prepayments" && ns.resetPrepaymentCheckpoint) { ns.resetPrepaymentCheckpoint(op.id); }
           storage.setItem(key, JSON.stringify(Object.assign({}, job, { cursor: job.cursor + 1 })));
         }
         storage.removeItem(key);

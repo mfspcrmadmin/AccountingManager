@@ -55,6 +55,8 @@
     var find = function (key) { return panel.querySelector('[data-prepayments-bank-' + key + ']'); };
     var dialog = find("dialog"), send = find("send"), open = find("open"), cancel = find("cancel"), message = find("message");
     var editor = find("preview"), receiptBulk = find("receipt-bulk"), statusView = "all", registered = new Set();
+    var proofBulk = find("proof-bulk"), proofStatus = find("proof-status");
+    var proofSender = ns.createPrepaymentProofSender ? ns.createPrepaymentProofSender(zoho) : null;
     function canSend() { return statusView !== "open" && selected.size > 0 && selected.size <= 25 && Array.from(selected).every(function (id) { return registered.has(id); }); }
     editor.addEventListener("paste", function (event) {
       event.preventDefault();
@@ -66,11 +68,27 @@
       open.hidden = statusView === "open";
       open.disabled = busy || pending.size > 0 || !canSend();
       receiptBulk.disabled = busy || pending.size > 0 || !selected.size;
+      if (proofBulk) { proofBulk.disabled = busy || pending.size > 0 || !selected.size || !proofSender; }
       panel.querySelectorAll('[data-prepayment-select]').forEach(function (input) { input.checked = selected.has(input.value); input.disabled = busy; });
+      panel.querySelectorAll('[data-prepayment-select-all]').forEach(function (input) {
+        var rows = Array.from(input.closest('table').querySelectorAll('[data-prepayment-select]'));
+        var count = rows.filter(function (row) { return selected.has(row.value); }).length;
+        input.checked = rows.length > 0 && count === rows.length;
+        input.indeterminate = count > 0 && count < rows.length;
+        input.disabled = busy || !rows.length;
+      });
       panel.querySelectorAll('[data-prepayment-bank-requested], [data-prepayment-bank-receipt]').forEach(function (input) { input.disabled = busy || pending.has(input.value); });
     }
     panel.addEventListener("change", async function (event) {
       var input = event.target;
+      if (input.matches('[data-prepayment-select-all]')) {
+        if (!busy) {
+          input.closest('table').querySelectorAll('[data-prepayment-select]').forEach(function (row) {
+            if (input.checked) { selected.add(row.value); } else { selected.delete(row.value); }
+          });
+        }
+        sync(); return;
+      }
       if (input.matches('[data-prepayment-select]')) {
         if (!busy) {
           if (!input.checked) { selected.delete(input.value); }
@@ -86,6 +104,24 @@
         finally { pending.delete(input.value); sync(); }
       }
     });
+    if (proofBulk && proofStatus) { proofBulk.addEventListener("click", async function () {
+      if (busy || pending.size || !selected.size || !proofSender) { return; }
+      var ids = Array.from(selected), failures = [], sentCount = 0;
+      busy = true; sync(); proofStatus.hidden = false;
+      try {
+        for (var index = 0; index < ids.length; index += 1) {
+          proofStatus.textContent = "Sending payment proof " + (index + 1) + " of " + ids.length + "…";
+          try { await proofSender.send(ids[index]); sentCount += 1; }
+          catch (error) { failures.push(ids[index] + ": " + (error.message || "Send not confirmed.")); }
+          // Never leave attempted sends selected: a timeout may follow delivery.
+          selected.delete(ids[index]);
+        }
+      } finally {
+        busy = false; sync();
+        proofStatus.textContent = sentCount + " of " + ids.length + " payment proof email(s) sent." +
+          (failures.length ? " Not confirmed: " + failures.join("; ") + " Check these records and email delivery before selecting them again." : "");
+      }
+    }); }
     receiptBulk.addEventListener("click", async function () {
       if (busy || pending.size || !selected.size) { return; }
       var ids = Array.from(selected), failures = [];

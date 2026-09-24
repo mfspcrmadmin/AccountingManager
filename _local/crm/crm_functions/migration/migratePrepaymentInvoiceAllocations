@@ -1,0 +1,220 @@
+string standalone.migratePrepaymentInvoiceAllocations(String mode, String afterPrepaymentId, String invoiceLookupApiName)
+{
+// Temporary backfill of the legacy ONE-invoice model. Never updates source records.
+result = Map();
+result.put("success",false);
+result.put("complete",false);
+cursor = ifnull(afterPrepaymentId,"0").trim();
+if(cursor == "") { cursor = "0"; }
+details = List();
+created = 0;
+existing = 0;
+missing = 0;
+failed = 0;
+scanned = 0;
+skipped = 0;
+try
+{
+	if(mode != "simulate" && mode != "migrate" && mode != "verify") { throw "Use simulate, migrate or verify."; }
+	if(!cursor.matches("^[0-9]+$")) { throw "afterPrepaymentId must be empty, 0 or a CRM ID."; }
+	sourceField = ifnull(invoiceLookupApiName,"").trim();
+	if(!sourceField.matches("^[A-Za-z][A-Za-z0-9_]*$")) { throw "Provide the existing invoice lookup API name on Prepayments."; }
+	// Check live metadata before reading or writing migration records.
+	for each moduleName in {"Prepayments","Prepayment_Invoice_Allocations"}
+	{
+		metadata = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/settings/fields?module=" + moduleName
+			type :GET
+			connection :"crm_oauth_connection"
+		];
+		if(!metadata.containKey("fields")) { throw "Cannot read field metadata for " + moduleName; }
+		validLookup = false;
+		uniqueName = false;
+		for each field in metadata.get("fields")
+		{
+			if(moduleName == "Prepayments" && field.get("api_name") == sourceField && field.get("data_type") == "lookup")
+			{
+				validLookup = ifnull(ifnull(ifnull(field.get("lookup"),Map()).get("module"),Map()).get("api_name"),"") == "Supplier_Invoices";
+			}
+			if(field.get("api_name") == "Name" && ifnull(field.get("unique"),Map()).size() > 0) { uniqueName = true; }
+		}
+		if(moduleName == "Prepayments" && !validLookup) { throw "The source lookup is missing or does not point to Supplier_Invoices. Restore/export the original associations; do not infer them from supplier or amount."; }
+		if(moduleName == "Prepayment_Invoice_Allocations" && !uniqueName)
+		{
+			result.put("configuration_warning","Configure Name as unique before migrate. Names use prepaymentId-invoiceId.");
+			if(mode == "migrate") { throw "Name must be unique before creating allocations."; }
+		}
+	}
+	query = Map();
+	query.put("select_query","select id, " + sourceField + " from Prepayments where (" + sourceField + " is not null and id > " + cursor + ") order by id asc limit 25");
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/coql"
+		type :POST
+		parameters :query.toString()
+		headers :{"Content-Type":"application/json"}
+		connection :"crm_oauth_connection"
+		detailed :true
+	];
+	rows = List();
+	more = false;
+	if(response.get("responseCode") == 200)
+	{
+		body = response.get("responseText").toString().toMap();
+		if(!body.containKey("data") || !body.containKey("info")) { throw "Incomplete source query response."; }
+		rows = body.get("data");
+		more = body.get("info").get("more_records");
+		if(more == null) { throw "Missing source pagination information."; }
+	}
+	else if(response.get("responseCode") != 204) { throw "Cannot read source prepayments: " + response.toString(); }
+	for each row in rows
+	{
+		prepaymentId = row.get("id").toString();
+		detail = Map();
+		detail.put("prepayment_id",prepaymentId);
+		try
+		{
+			payment = zoho.crm.getRecordById("Prepayments",prepaymentId.toLong());
+			if(ifnull(payment.get("id"),"").toString() != prepaymentId) { throw "Cannot read source prepayment."; }
+			invoiceId = ifnull(ifnull(payment.get(sourceField),Map()).get("id"),"").toString();
+			queryInvoiceId = ifnull(ifnull(row.get(sourceField),Map()).get("id"),"").toString();
+			detail.put("source_field",sourceField);
+			detail.put("query_invoice_id",queryInvoiceId);
+			detail.put("invoice_id",invoiceId);
+			detail.put("source_field_returned",payment.containKey(sourceField));
+			if(!payment.containKey(sourceField)) { throw "The record read did not return the invoice lookup. Check field permissions for the function's execution user and compare with the COQL connection."; }
+			if(!row.containKey(sourceField)) { throw "The source query did not return the invoice lookup. Check COQL field permissions."; }
+			// Only explicitly null lookups in BOTH reads mean there is no association.
+			// A non-null lookup without an ID may be an inaccessible/dangling reference.
+			if(payment.get(sourceField) == null && row.get(sourceField) == null)
+			{
+				detail.put("status","skipped_no_invoice");
+				detail.put("message","Both reads returned an empty invoice lookup; no association to migrate.");
+				skipped = skipped + 1;
+				scanned = scanned + 1;
+				cursor = prepaymentId;
+				details.add(detail);
+				continue;
+			}
+			if(invoiceId == "" && queryInvoiceId == "")
+			{
+				detail.put("query_invoice_lookup",row.get(sourceField));
+				detail.put("current_invoice_lookup",payment.get(sourceField));
+				throw "The invoice reference has no readable ID. Inspect the returned lookup values and field/record permissions; no association was skipped or created.";
+			}
+			if(invoiceId == "") { throw "The current invoice lookup is empty, although the source query returned invoice " + queryInvoiceId + ". Review the prepayment and retry from the returned cursor."; }
+			if(invoiceId != queryInvoiceId) { throw "Invoice lookup differs between reads: query=" + queryInvoiceId + ", current=" + invoiceId + ". Review the prepayment and retry from the returned cursor."; }
+			amount = ifnull(payment.get("Amount"),0).toDecimal();
+			currencyCode = ifnull(payment.get("Currency"),"").toString();
+			if(amount <= 0 || currencyCode == "") { throw "Prepayment needs a positive Amount and explicit Currency."; }
+			detail.put("invoice_id",invoiceId);
+			detail.put("amount",amount);
+			detail.put("currency",currencyCode);
+			invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+			if(ifnull(invoice.get("id"),"").toString() != invoiceId) { throw "Cannot read linked invoice."; }
+			if(invoice.get("Currency") != currencyCode) { throw "Invoice and prepayment currencies differ."; }
+			if(ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal() < amount) { throw "Prepayment exceeds invoice total payable; review manually."; }
+			requestId = ifnull(ifnull(payment.get("Prepayment_Request"),Map()).get("id"),"").toString();
+			if(requestId == "") { throw "Prepayment has no request."; }
+			request = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+			if(ifnull(request.get("id"),"").toString() != requestId) { throw "Cannot read request."; }
+			for each lookupName in {"Supplier","Booking"}
+			{
+				expectedId = ifnull(ifnull(request.get(lookupName),Map()).get("id"),"").toString();
+				if(expectedId == "" || expectedId != ifnull(ifnull(invoice.get(lookupName),Map()).get("id"),"").toString()) { throw "Invoice/request mismatch: " + lookupName; }
+			}
+			// Look for ALL allocations of this prepayment, not just the legacy pair.
+			// A prepayment already split across invoices requires manual review.
+			linkQuery = Map();
+			linkQuery.put("select_query","select id, Prepayment, Vendor_Invoice, Allocated_Amount, Currency from Prepayment_Invoice_Allocations where Prepayment = '" + prepaymentId + "' limit 2");
+			linkResponse = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/coql"
+				type :POST
+				parameters :linkQuery.toString()
+				headers :{"Content-Type":"application/json"}
+				connection :"crm_oauth_connection"
+				detailed :true
+			];
+			links = List();
+			if(linkResponse.get("responseCode") == 200)
+			{
+				linkBody = linkResponse.get("responseText").toString().toMap();
+				if(!linkBody.containKey("data")) { throw "Incomplete allocation query response."; }
+				links = linkBody.get("data");
+			}
+			else if(linkResponse.get("responseCode") != 204) { throw "Cannot read allocations: " + linkResponse.toString(); }
+			if(links.size() > 1) { throw "Multiple allocations already exist. Review split or duplicates manually."; }
+			if(links.size() == 1)
+			{
+				saved = links.get(0);
+				detail.put("link_id",saved.get("id"));
+				if(ifnull(ifnull(saved.get("Vendor_Invoice"),Map()).get("id"),"").toString() != invoiceId || ifnull(saved.get("Allocated_Amount"),0).toDecimal() != amount || saved.get("Currency") != currencyCode) { throw "Existing allocation differs from legacy invoice, amount or currency. No overwrite performed."; }
+				existing = existing + 1;
+				detail.put("status","already_linked");
+			}
+			else if(mode == "migrate")
+			{
+				payload = Map();
+				payload.put("Name",prepaymentId + "-" + invoiceId);
+				payload.put("Prepayment",prepaymentId);
+				payload.put("Vendor_Invoice",invoiceId);
+				payload.put("Allocated_Amount",amount);
+				payload.put("Currency",currencyCode);
+				options = Map();
+				options.put("trigger",List());
+				creation = zoho.crm.createRecord("Prepayment_Invoice_Allocations",payload,options);
+				linkId = ifnull(creation.get("id"),"").toString();
+				if(linkId == "") { throw "Creation unconfirmed. Inspect CRM before retrying: " + creation.toString(); }
+				detail.put("link_id",linkId);
+				saved = zoho.crm.getRecordById("Prepayment_Invoice_Allocations",linkId.toLong());
+				if(ifnull(ifnull(saved.get("Prepayment"),Map()).get("id"),"").toString() != prepaymentId || ifnull(ifnull(saved.get("Vendor_Invoice"),Map()).get("id"),"").toString() != invoiceId || ifnull(saved.get("Allocated_Amount"),0).toDecimal() != amount || saved.get("Currency") != currencyCode) { throw "Created allocation could not be verified. Inspect link_id before retrying."; }
+				created = created + 1;
+				detail.put("status","created_and_verified");
+			}
+			else
+			{
+				missing = missing + 1;
+				detail.put("status","missing");
+			}
+			cursor = prepaymentId;
+			scanned = scanned + 1;
+			details.add(detail);
+		}
+		catch (rowError)
+		{
+			failed = failed + 1;
+			detail.put("status","error");
+			detail.put("message",rowError.toString());
+			details.add(detail);
+			break;
+		}
+	}
+	result.put("success",failed == 0 && (mode != "verify" || missing == 0));
+	result.put("complete",failed == 0 && more == false);
+	if(failed > 0)
+	{
+		result.put("message","Stopped at prepayment " + prepaymentId + ". " + detail.get("message") + " The returned cursor remains before this record; do not use the failed record ID as the next cursor.");
+	}
+	else
+	{
+		result.put("message","Continue with next_after_prepayment_id. Verify from 0 after migration; inspect every batch. Keep the legacy lookup until all consumers are migrated.");
+	}
+}
+catch (error)
+{
+	failed = failed + 1;
+	result.put("message",error.toString());
+}
+result.put("mode",mode);
+result.put("next_after_prepayment_id",cursor);
+result.put("scanned",scanned);
+result.put("skipped",skipped);
+result.put("created",created);
+result.put("existing",existing);
+result.put("missing",missing);
+result.put("failed",failed);
+result.put("details",details);
+return result.toString();
+}

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 function fixture() {
   const window = {};
+  vm.runInNewContext(fs.readFileSync('app/scripts/prepayment-proof.js', 'utf8'), { window });
   vm.runInNewContext(fs.readFileSync('app/scripts/prepayment-bank-request.js', 'utf8'), { window });
   vm.runInNewContext(fs.readFileSync('app/scripts/prepayments.js', 'utf8'), { window, Intl });
   const calls = [];
@@ -94,14 +95,60 @@ test('both table views put selection left of the eye and editable requested stat
   }
 });
 
+test('bulk proof sends selected IDs once in every view and clears attempted selections', async () => {
+  for (const view of ['open', 'closed', 'all']) {
+    const f = uiFixture();
+    f.actions.render([{ id: '1' }, { id: '2' }], view);
+    assert.equal(f.el('proof-bulk').disabled, true);
+    for (const input of f.inputs) { input.checked = true; await f.change(input); }
+    assert.equal(f.el('proof-bulk').disabled, false);
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    f.zoho.CRM.FUNCTIONS.execute = async (name, args) => {
+      f.calls.push({ name, args: JSON.parse(args.arguments) });
+      await gate;
+      return { details: { output: JSON.stringify({ success: true, sent: true }) } };
+    };
+    const sending = f.el('proof-bulk').listeners.click();
+    assert.equal(f.el('proof-bulk').disabled, true);
+    assert.equal(f.el('receipt-bulk').disabled, true);
+    await f.el('proof-bulk').listeners.click();
+    assert.equal(f.calls.length, 1);
+    release(); await sending;
+    assert.deepEqual(f.calls, ['1', '2'].map(prepaymentId => ({ name: 'notif_sendprepaymentproof', args: { prepaymentId } })));
+    assert.equal(f.el('count').textContent, '0 selected');
+    assert.match(f.el('proof-status').textContent, /2 of 2.*sent/);
+    assert.equal(f.el('proof-status').hidden, false);
+  }
+});
+
+test('bulk proof continues after rejection or timeout and never retries attempted sends', async () => {
+  for (const timeout of [false, true]) {
+    const f = uiFixture(); f.render();
+    for (const input of f.inputs) { input.checked = true; await f.change(input); }
+    f.zoho.CRM.FUNCTIONS.execute = async (name, args) => {
+      const id = JSON.parse(args.arguments).prepaymentId; f.calls.push(id);
+      if (id === '1' && timeout) throw Error('Timeout');
+      return { details: { output: JSON.stringify(id === '1' ? { success: false, sent: false, message: 'No payment proof attached' } : { success: true, sent: true }) } };
+    };
+    await f.el('proof-bulk').listeners.click();
+    await f.el('proof-bulk').listeners.click();
+    assert.deepEqual(f.calls, ['1', '2']);
+    assert.match(f.el('proof-status').textContent, /1 of 2.*sent/);
+    assert.match(f.el('proof-status').textContent, timeout ? /Timeout/ : /No payment proof attached/);
+    assert.equal(f.el('count').textContent, '0 selected');
+  }
+});
+
 function uiFixture() {
   const f = fixture(), elements = new Map();
   function element() { return { disabled: false, value: '', checked: false, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; }, matches(selector) { return selector === this.selector; }, closest() { return null; } }; }
   f.el = key => { if (!elements.has(key)) elements.set(key, element()); return elements.get(key); };
   f.inputs = ['1', '2'].map(value => Object.assign(element(), { value, selector: '[data-prepayment-select]' }));
+  f.selectAll = Object.assign(element(), { selector: '[data-prepayment-select-all]', closest: () => ({ querySelectorAll: () => f.inputs }) });
   const panel = element();
   panel.querySelector = selector => f.el(selector.match(/bank-([^\]]+)/)[1]);
-  panel.querySelectorAll = selector => selector === '[data-prepayment-select]' ? f.inputs : [];
+  panel.querySelectorAll = selector => selector === '[data-prepayment-select]' ? f.inputs : selector === '[data-prepayment-select-all]' ? [f.selectAll] : [];
   f.el('dialog').showModal = () => { f.el('dialog').open = true; };
   f.el('dialog').close = () => { f.el('dialog').open = false; };
   f.reloads = 0; f.errors = [];
@@ -110,6 +157,25 @@ function uiFixture() {
   f.render = () => f.actions.render(['1', '2', '3'].map(id => ({ id, Accounting_Status: 'Prepayment recorded' })));
   return f;
 }
+test('header checkbox selects visible rows, reflects partial selection and keeps other pages selected', async () => {
+  const f = uiFixture(); f.render();
+  f.selectAll.checked = true; await f.change(f.selectAll);
+  assert.equal(f.el('count').textContent, '2 selected');
+  assert.ok(f.inputs.every(input => input.checked));
+  assert.equal(f.selectAll.indeterminate, false);
+  f.inputs[0].checked = false; await f.change(f.inputs[0]);
+  assert.equal(f.selectAll.checked, false);
+  assert.equal(f.selectAll.indeterminate, true);
+  f.selectAll.checked = true; await f.change(f.selectAll);
+  f.inputs = [f.inputs[0]]; f.render();
+  f.selectAll.checked = false; await f.change(f.selectAll);
+  assert.equal(f.el('count').textContent, '1 selected');
+  assert.equal(f.selectAll.checked, false);
+  assert.equal(f.selectAll.indeterminate, false);
+  f.inputs = []; f.render();
+  assert.equal(f.selectAll.disabled, true);
+});
+
 test('selection survives pagination and filters, clears explicitly and drops no longer eligible records', async () => {
   const f = uiFixture(); f.render();
   f.inputs.forEach(input => { input.checked = true; f.change(input); });
@@ -181,13 +247,13 @@ test('a recipient typo preserves the edited message and allows correction withou
   f.ignoreWrite = true;
   await assert.rejects(f.service.setReceiptNeeded('1', true), /did not confirm Bank Receipt Needed/);
 });
-test('receipt is editable in all views beside bank requested and missing proof is a dash', () => {
+test('receipt is editable in all views and needed receipts offer attaching proof', () => {
   const f = fixture();
   for (const view of ['open', 'closed', 'all']) {
     const html = f.window.AccountingManagerApp.prepaymentsModel.paymentTable([{payment: {id: '1', Bank_Receipt_Needed: true}, group: {}}], '2026-09-16', true, view);
     assert.match(html, /data-prepayment-bank-receipt value="1" checked/);
     assert.ok(html.indexOf('data-prepayment-bank-receipt') > html.indexOf('data-prepayment-bank-requested'));
-    assert.match(html, /<td>-<\/td>/);
+    assert.match(html, /data-prepayment-proof="1"/);
   }
 });
 test('receipt changes from the table persist and reload, with rollback on unconfirmed writes', async () => {

@@ -1,0 +1,215 @@
+string standalone.creatorMigrationFiles(String mode, String moduleName, String recordId, String reportName, String sourceId, String sourceField, String filesJson)
+{
+allowedModes = {"simulate","migrate","verify"};
+allowedModules = {"Prepayment_Requests","Prepayments"};
+allowedFields = {"Proforma_Attached","Invoice_Attached","Payment_Proof","__snapshot"};
+if(!allowedModes.contains(mode) || !allowedModules.contains(moduleName) || !allowedFields.contains(sourceField) || !sourceId.matches("^[0-9]+$") || !reportName.matches("^[A-Za-z][A-Za-z0-9_]*$"))
+{
+	throw "Invalid document migration arguments.";
+}
+items = List();
+raw = ifnull(filesJson,"").trim();
+if(sourceField == "__snapshot")
+{
+	// Exclude metadata changed by the migration marker. Children have their own snapshots.
+	snapshot = raw.toMap();
+	snapshot.remove("Modified_Time");
+	snapshot.remove("Modified_User");
+	snapshot.remove("Payments");
+	raw = snapshot.toString();
+	items.add(raw);
+}
+else if(raw != "" && raw != "null" && raw != "[]")
+{
+	if(raw.startsWith("["))
+	{
+		items = raw.toJSONList();
+	}
+	else
+	{
+		items.add(raw);
+	}
+}
+targetField = sourceField;
+if(sourceField == "Invoice_Attached" || sourceField == "__snapshot")
+{
+	targetField = "Attachments";
+}
+details = List();
+missing = 0;
+for each item in items
+{
+	filePath = "";
+	encoded = false;
+	fileName = "CREATOR-" + sourceId + "-source-" + zoho.encryption.sha256(raw) + ".json";
+	if(sourceField != "__snapshot")
+	{
+		filePath = item.toString();
+		if(filePath.startsWith("{"))
+		{
+			fileMap = filePath.toMap();
+			filePath = ifnull(fileMap.get("filepath"),ifnull(fileMap.get("file_path"),ifnull(fileMap.get("download_url"),""))).toString();
+		}
+		if(filePath.contains("filepath="))
+		{
+			filePath = filePath.getSuffix("filepath=");
+			if(filePath.contains("&"))
+			{
+				filePath = filePath.getPrefix("&");
+			}
+			encoded = true;
+		}
+		if(filePath == "" || filePath.contains("/download") || filePath.startsWith("http"))
+		{
+			throw "Cannot identify Creator file path in " + sourceField + ": " + item.toString();
+		}
+		pathParts = filePath.toList("/");
+		baseName = pathParts.get(pathParts.size() - 1);
+		fileName = "CREATOR-" + sourceId + "-" + sourceField + "-" + baseName;
+	}
+	// A stable name permits resuming after an upload succeeded but a later step failed.
+	existingFiles = List();
+	if(recordId != "")
+	{
+		if(targetField == "Attachments")
+		{
+			finished = false;
+			for each page in {1,2,3,4,5,6,7,8,9,10}
+			{
+				attachments = invokeurl
+				[
+					url :"https://www.zohoapis.eu/crm/v8/" + moduleName + "/" + recordId + "/Attachments?fields=id,File_Name&page=" + page + "&per_page=200"
+					type :GET
+					connection :"crm_oauth_connection"
+					detailed :true
+				];
+				if(attachments.get("responseCode") == 204)
+				{
+					finished = true;
+					break;
+				}
+				if(attachments.get("responseCode") != 200)
+				{
+					throw "Could not read CRM attachments: " + attachments.toString();
+				}
+				attachmentBody = attachments.get("responseText").toString().toMap();
+				if(!attachmentBody.containKey("data"))
+				{
+					throw "CRM attachments response is incomplete.";
+				}
+				existingFiles.addAll(attachmentBody.get("data"));
+				if(ifnull(ifnull(attachmentBody.get("info"),Map()).get("more_records"),false) == false)
+				{
+					finished = true;
+					break;
+				}
+			}
+			if(!finished)
+			{
+				throw "Too many attachments to verify safely.";
+			}
+		}
+		else
+		{
+			record = zoho.crm.getRecordById(moduleName,recordId.toLong());
+			if(ifnull(record.get("id"),"").toString() != recordId || !record.containKey(targetField))
+			{
+				throw "Could not read CRM file field " + targetField;
+			}
+			existingFiles = ifnull(record.get(targetField),List());
+		}
+	}
+	found = 0;
+	for each existingFile in existingFiles
+	{
+		existingName = ifnull(existingFile.get("File_Name"),ifnull(existingFile.get("file_Name"),ifnull(existingFile.get("File_Name__s"),""))).toString();
+		if(existingName == fileName)
+		{
+			found = found + 1;
+		}
+	}
+	if(found > 1)
+	{
+		throw "Duplicate migrated document: " + fileName;
+	}
+	if(found == 1)
+	{
+		details.add({"file":fileName,"action":"existing"});
+	}
+	else if(mode != "migrate")
+	{
+		missing = missing + 1;
+		details.add({"file":fileName,"action":"missing"});
+	}
+	else
+	{
+		if(recordId == "")
+		{
+			throw "Cannot migrate a file without a confirmed CRM record ID.";
+		}
+		if(sourceField == "__snapshot")
+		{
+			file = raw.toFile(fileName);
+		}
+		else
+		{
+			if(!encoded)
+			{
+				filePath = encodeUrl(filePath);
+			}
+			file = invokeurl
+			[
+				url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/" + reportName + "/" + sourceId + "/" + sourceField + "/download?filepath=" + filePath
+				type :GET
+				connection :"administrationmanager"
+			];
+			if(!file.isFile())
+			{
+				throw "Creator did not return a file: " + sourceField + " / " + sourceId;
+			}
+			file.setFileName(fileName);
+		}
+		file.setParamName("file");
+		if(targetField == "Attachments")
+		{
+			upload = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/" + moduleName + "/" + recordId + "/Attachments"
+				type :POST
+				files :file
+				connection :"crm_oauth_connection"
+			];
+		}
+		else
+		{
+			upload = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/files"
+				type :POST
+				files :file
+				connection :"crm_oauth_connection"
+			];
+		}
+		if(ifnull(upload.get("data"),List()).size() != 1 || upload.get("data").get(0).get("code") != "SUCCESS")
+		{
+			throw "CRM file upload was not confirmed. Recheck before retrying: " + upload.toString();
+		}
+		if(targetField != "Attachments")
+		{
+			fileId = upload.get("data").get(0).get("details").get("id");
+			fileValues = List();
+			fileValues.add({"File_Id__s":fileId});
+			update = Map();
+			update.put(targetField,fileValues);
+			updateResponse = zoho.crm.updateRecord(moduleName,recordId.toLong(),update,{"trigger":List()});
+			if(ifnull(updateResponse.get("id"),"").toString() != recordId)
+			{
+				throw "CRM file field update was not confirmed: " + updateResponse.toString();
+			}
+		}
+		details.add({"file":fileName,"action":"uploaded"});
+	}
+}
+migrationResponse = {"missing":missing,"files":details};
+return migrationResponse.toString();
+}

@@ -65,12 +65,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.selectedPaymentAllocationMfsp.textContent = allocation.MFSP_Reference || "-";
     }
 
-    function renderPaymentsWorkspace(view, onSelected) {
+    function renderPaymentsWorkspace(view, onSelected, letterBatch) {
       var paymentColumns = [
         { key: "date", label: "Date" }, { key: "payment", label: "Payment" }, { key: "status", label: "Status" },
         { key: "account", label: "Payment account" }, { key: "amount", label: "Amount" }
       ];
-      ns.tableColumns.configure("payments", paymentColumns, function () { renderPaymentsWorkspace(view, onSelected); });
+      ns.tableColumns.configure("payments", paymentColumns, function () { renderPaymentsWorkspace(view, onSelected, letterBatch); });
       var visiblePaymentColumns = ns.tableColumns.visibleOrder("payments");
       var isSpecificDateRange = (view.filters.datePreset || "specific") === "specific";
       if (elements.paymentFilterDatePreset) {
@@ -105,7 +105,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           date: "<th>Date</th>", payment: "<th>Payment</th>", status: "<th>Status</th>",
           account: "<th>Payment account</th>", amount: '<th class="numeric-cell">Amount</th>'
         };
-        elements.paymentsTableHead.innerHTML = "<tr>" + visiblePaymentColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, headers[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("payments") + "</th></tr>";
+        elements.paymentsTableHead.innerHTML = '<tr><th><input type="checkbox" data-payment-letter-select-all aria-label="Select all visible payments"></th>'  + visiblePaymentColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, headers[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("payments") + "</th></tr>";
       }
 
       if (!view.filteredRecords.length) {
@@ -129,11 +129,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             account: "<td>" + helpers.escapeHtml(paymentAccountDisplay || "-") + "</td>",
             amount: '<td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(helpers.getPaymentAmount(payment, fieldCandidates))) + "</td>"
           };
-          return '<tr class="is-clickable' + (isActive ? " is-active" : "") + '" data-payment-id="' + helpers.escapeHtml(payment.id) + '">' + visiblePaymentColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
+          return '<tr class="is-clickable' + (isActive ? " is-active" : "") + '" data-payment-id="' + helpers.escapeHtml(payment.id) + '"><td><input type="checkbox" data-payment-letter-select="' + helpers.escapeHtml(payment.id) + '" aria-label="Select payment ' + helpers.escapeHtml(view.getPaymentReference(payment)) + '"></td>' + visiblePaymentColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
         }).join("");
 
         Array.prototype.forEach.call(elements.paymentsTableBody.querySelectorAll("tr[data-payment-id]"), function (row) {
-          row.addEventListener("click", function () {
+          row.addEventListener("click", function (event) {
+            if (event.target.closest("[data-payment-letter-select]")) { return; }
             onSelected(row.getAttribute("data-payment-id"));
           });
         });
@@ -146,6 +147,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       elements.paymentsPrevPage.disabled = state.isLoading || view.page <= 1;
       elements.paymentsNextPage.disabled = state.isLoading || !view.hasMore;
+      if (letterBatch) { letterBatch.renderSelection(view); }
     }
 
     function renderSelectedPayment(payment, helpersApi, onPaymentDetailTabChange) {

@@ -1,0 +1,44 @@
+string standalone.bodySupplierFinalInvoiceRequest(String recipientName, String mfspReference, String bookingName, String serviceDate, String totalInvoiceAmount, String currencyCode)
+{
+// Escape record values before inserting them into email HTML.
+values = Map();
+values.put("recipient",ifnull(recipientName,""));
+values.put("reference",ifnull(mfspReference,""));
+values.put("booking",ifnull(bookingName,""));
+values.put("date",ifnull(serviceDate,""));
+values.put("amount",ifnull(totalInvoiceAmount,""));
+values.put("currency",ifnull(currencyCode,""));
+for each key in values.keys()
+{
+	value = values.get(key).toString();
+	value = value.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true).replaceAll("\"","&quot;",true).replaceAll("'","&#39;",true);
+	values.put(key,value);
+}
+html = "<div style='font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111111;line-height:1.45;'>";
+html = html + "<div style='max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:18px;'>";
+html = html + "<h2 style='margin:0 0 12px;font-size:16px;font-weight:700;'>Final invoice request</h2>";
+greeting = "Buen día";
+if(values.get("recipient") != "")
+{
+	greeting = greeting + " " + values.get("recipient");
+}
+html = html + "<p style='margin:0 0 14px;'>" + greeting + ",</p>";
+html = html + "<p style='margin:0 0 14px;'>Les escribimos en relación con un servicio previamente abonado mediante prepago.</p>";
+html = html + "<p style='margin:0 0 14px;'>Les agradeceríamos que nos pudieran emitir la factura final correspondiente a dicho servicio.</p>";
+html = html + "<div style='background:#F8F5EF;border:1px solid #E3D7C3;border-radius:12px;padding:12px 18px;margin:0 0 20px;'>";
+html = html + "<p style='margin:0 0 10px;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;color:#333333;font-weight:700;'>Detalles del servicio</p>";
+html = html + "<p style='margin:0 0 6px;'><strong>MFSP Reference:</strong> " + values.get("reference") + "</p>";
+html = html + "<p style='margin:0 0 6px;'><strong>Nombre del booking:</strong> " + values.get("booking") + "</p>";
+html = html + "<p style='margin:0 0 6px;'><strong>Fecha de servicio:</strong> " + values.get("date") + "</p>";
+html = html + "<p style='margin:0;'><strong>Total invoice amount:</strong> " + values.get("amount") + " " + values.get("currency") + "</p></div>";
+html = html + "<p style='margin:0 0 12px;'>Asimismo, les facilitamos nuestros datos fiscales para la emisión de la factura:</p>";
+html = html + "<div style='background:#FAFAFA;border:1px solid #F0F0F0;border-radius:10px;padding:10px 12px;margin:0 0 18px;'>";
+html = html + "<p style='margin:0 0 4px;font-weight:700;'>Made for Spain, S.A</p><p style='margin:0 0 4px;'>A82318908</p>";
+html = html + "<p style='margin:0;'>Calle Castelló, 23, 2º Izda, 28001 Madrid</p></div>";
+html = html + "<p style='margin:0 0 14px;'>Les rogamos utilicen esta dirección de correo electrónico para el envío de la factura:</p>";
+html = html + "<div style='background:#EAF5EE;border:1px solid #B7D8C2;border-radius:12px;padding:12px 18px;margin:0 0 20px;text-align:center;'>";
+html = html + "<p style='margin:0;font-size:11px;font-weight:700;color:#000000;'>proveedores@madeforspainandportugal.com</p></div>";
+html = html + "<p style='margin:0 0 14px;'>Muchas gracias por su colaboración.</p><p style='margin:0 0 4px;'>Atentamente,</p>";
+html = html + "<p style='margin:0;font-weight:700;'>Made for Spain and Portugal</p></div></div>";
+return html;
+}

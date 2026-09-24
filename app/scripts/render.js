@@ -330,7 +330,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         valueMarkup = '<dd class="supplier-detail-value supplier-detail-value-rich"><span class="accounting-status ' +
           (value ? "present" : "missing") + '">' +
           helpers.escapeHtml(value ? helpers.textValue(value) : "Missing") +
-          "</span></dd>";
+          "</span>" + (!value && settings.supplierId && ns.supplierAccountingInfo ? ns.supplierAccountingInfo.requestHtml(settings.supplierId) : "") + "</dd>";
       } else if (settings.link && value && value !== "-") {
         href = /^https?:\/\//i.test(String(value)) ? String(value) : "https://" + String(value);
         valueMarkup = '<dd class="supplier-detail-value supplier-detail-value-rich"><a class="supplier-inline-link" href="' +
@@ -426,7 +426,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return buildSupplierInfoPanels([
         buildSupplierInfoBlock("Financial setup", [
           buildSupplierDetailCard("Accounting account", helpers.getCandidateValue(supplier, fieldCandidates.supplier.accounting), {
-            accountingStatus: true
+            accountingStatus: true, supplierId: supplier.id
           }),
           buildSupplierDetailCard("Account number", helpers.getCandidateValue(supplier, fieldCandidates.supplier.accountNumber)),
           buildSupplierDetailCard("CIF / NIF", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cifNif)),
@@ -1280,8 +1280,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         onShowAttachmentsChange
       );
     }
-    function renderPaymentsWorkspace(view, onSelected) {
-      paymentsRenderer.renderPaymentsWorkspace(view, onSelected);
+    function renderPaymentsWorkspace(view, onSelected, letterBatch) {
+      paymentsRenderer.renderPaymentsWorkspace(view, onSelected, letterBatch);
     }
 
     function renderSelectedPayment(payment, helpersApi, onPaymentDetailTabChange) {

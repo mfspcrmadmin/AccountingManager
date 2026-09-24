@@ -1,0 +1,1211 @@
+string standalone.sync_syncServicesFromEzusWithToken(String bookingId,Map booking,String token,Bool skipDeletes)
+{
+res = Map();
+stepDeleteJobsEnqueued = 0;
+stepDeleteJobsDeduped = 0;
+stepDeleteJobErrors = List();
+supplierSettlementJobRes = Map();
+stepSyncErrors = List();
+serviceSyncErrors = List();
+agentCommissionDetailsField = "Agent_Commission_Details";
+agentCommissionAmountField = "Final_Commission";
+agentCommissionAmountTotal = 0.0;
+agentCommissionDetailsText = "";
+// Reuse Booking context supplied by the caller. Standalone and legacy callers
+// can omit it safely: load the record only when it is needed.
+if(isnull(booking) || booking.isEmpty())
+{
+	booking = zoho.crm.getRecordById("Deals",bookingId);
+}
+if(isnull(booking) || booking.isEmpty())
+{
+	res.put("error",true);
+	res.put("message","CRM Booking could not be found.");
+	return res;
+}
+ezusProjectRef = ifnull(booking.get("Ezus_Project_ID"),"");
+bookingStage = ifnull(booking.get("Stage"),"");
+bookingOwnerId = "";
+bookingOwner = booking.get("Owner");
+if(!isnull(bookingOwner))
+{
+	bookingOwnerId = ifnull(bookingOwner.get("id"),"");
+}
+if(ezusProjectRef == "")
+{
+	res.put("error",true);
+	res.put("message","Ezus Project ID in CRM is null or empty.");
+	return res;
+}
+// -------------------------
+// 1) Cargar Booking Services actuales
+// -------------------------
+currentBSListRelated = zoho.crm.searchRecords("Booking_Services","(Booking:equals:" + bookingId + ")");
+BSByItemRefMap = Map();
+BSIdsToDeleteMap = Map();
+if(!isnull(currentBSListRelated) && !currentBSListRelated.isEmpty())
+{
+	for each  bs in currentBSListRelated
+	{
+		itemRef = ifnull(bs.get("Ezus_Item_Reference"),"");
+		if(itemRef != "")
+		{
+			BSByItemRefMap.put(itemRef,bs);
+		}
+		BSIdsToDeleteMap.put(bs.get("id"),true);
+	}
+}
+// -------------------------
+// 2) Obtener Steps de EZUS
+// -------------------------
+stepsGetRes = standalone.getEzusStepsByProjectWithToken(ezusProjectRef,"",token);
+if(stepsGetRes.get("error").equals(true))
+{
+	res.put("error",true);
+	res.put("message",stepsGetRes.get("message"));
+	return res;
+}
+stepModule = "Booking_Steps";
+// -------------------------
+// 3) SYNC STEPS
+// -------------------------
+currentStepList = zoho.crm.searchRecords(stepModule,"(Booking:equals:" + bookingId + ")");
+stepByKey = Map();
+stepIdsToInactivate = Map();
+if(!isnull(currentStepList) && !currentStepList.isEmpty())
+{
+	for each  stRec in currentStepList
+	{
+		k = ifnull(stRec.get("Step_Reference"),"");
+		if(k != "")
+		{
+			stepByKey.put(k,stRec);
+		}
+		stepIdsToInactivate.put(stRec.get("id"),stRec);
+	}
+}
+toCreateSteps = List();
+toUpdateSteps = List();
+stepsWithPCMCount = 0;
+for each  step in stepsGetRes.get("result")
+{
+	stepRef = ifnull(step.get("reference"),"");
+	if(stepRef != "")
+	{
+		stepMap = standalone.buildBookingStepMapFromEzusStep(step,bookingId);
+		normalizedStepMap = Map();
+		for each  stepMapKey in stepMap.keys()
+		{
+			normalizedStepMap.put(stepMapKey,stepMap.get(stepMapKey));
+		}
+		// Las horas de estos campos son texto en CRM: usar siempre formato 12 h
+		// para que se muestren, por ejemplo, como "9:30 AM" o "5:00 PM".
+		textTimeFields = {"Car_PickUp_Time","Departure_City_Car_PickUp_Time","Arrival_City_Car_PickUp_Time","Flight_Departure_Time","Flight_Arrival_Time","Train_Departure_Time","Train_Arrival_Time","Ship_Departure_Time","Ship_Arrival_Time"};
+		for each  textTimeField in textTimeFields
+		{
+			rawTimeText = ifnull(normalizedStepMap.get(textTimeField),"").toString().trim();
+			if(rawTimeText != "")
+			{
+				// El helper normalmente ya devuelve HH:mm; mantener esta extracción
+				// por compatibilidad si EZUS entrega una fecha y hora completa.
+				if(rawTimeText.contains("T") && rawTimeText.length() >= 16)
+				{
+					rawTimeText = rawTimeText.subString(11,16);
+				}
+				else if(rawTimeText.contains(" ") && rawTimeText.length() >= 16)
+				{
+					rawTimeText = rawTimeText.subString(11,16);
+				}
+				rawTimeParts = rawTimeText.toList(":");
+				if(rawTimeParts.size() >= 2)
+				{
+					try 
+					{
+						hour24 = rawTimeParts.get(0).toLong();
+						minuteText = rawTimeParts.get(1);
+						if(minuteText.contains(" "))
+						{
+							minuteText = minuteText.getPrefix(" ");
+						}
+						if(hour24 >= 0 && hour24 <= 23)
+						{
+							meridiem = "AM";
+							if(hour24 >= 12)
+							{
+								meridiem = "PM";
+							}
+							hour12 = hour24 % 12;
+							if(hour12 == 0)
+							{
+								hour12 = 12;
+							}
+							normalizedStepMap.put(textTimeField,hour12 + ":" + minuteText + " " + meridiem);
+						}
+					}
+					catch (eTimeFormat)
+					{
+					}
+				}
+			}
+		}
+		if(stepMap.get("Name").containsIgnoreCase("eGRX") || stepMap.get("Name").containsIgnoreCase("eMAD"))
+		{
+		}
+		stepMap = normalizedStepMap;
+		if(ifnull(stepMap.get("PCM_Code"),"") != "")
+		{
+			stepsWithPCMCount = stepsWithPCMCount + 1;
+		}
+		existingStep = stepByKey.get(stepRef);
+		if(isnull(existingStep))
+		{
+			toCreateSteps.add(stepMap);
+		}
+		else
+		{
+			stepMap.put("id",existingStep.get("id"));
+			toUpdateSteps.add(stepMap);
+			stepIdsToInactivate.remove(existingStep.get("id"));
+		}
+	}
+}
+// Bulk CREATE Steps
+batch = List();
+for each  rec in toCreateSteps
+{
+	batch.add(rec);
+	if(batch.size() == 100)
+	{
+		stepCreateRes = zoho.crm.bulkCreate(stepModule,batch);
+		if(!isnull(stepCreateRes))
+		{
+			i = 0;
+			for each  stepCreateItemRes in stepCreateRes
+			{
+				stepCreateCode = ifnull(stepCreateItemRes.get("code"),"").toString();
+				stepCreateStatus = ifnull(stepCreateItemRes.get("status"),"").toString();
+				if(stepCreateCode.equalsIgnoreCase("error") || stepCreateStatus.equalsIgnoreCase("error") || stepCreateCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					failedStepMap = batch.get(i);
+					try 
+					{
+						fallbackStepCreateRes = zoho.crm.createRecord(stepModule,failedStepMap);
+						fallbackStepCreateCode = ifnull(fallbackStepCreateRes.get("code"),"").toString();
+						fallbackStepCreateStatus = ifnull(fallbackStepCreateRes.get("status"),"").toString();
+						fallbackStepCreateId = "";
+						fallbackStepCreateDetails = fallbackStepCreateRes.get("details");
+						if(!isnull(fallbackStepCreateDetails))
+						{
+							try 
+							{
+								fallbackStepCreateId = ifnull(fallbackStepCreateDetails.get("id"),"").toString();
+							}
+							catch (eBookingStepCreateDetails)
+							{
+								fallbackStepCreateId = "";
+							}
+						}
+						if(fallbackStepCreateCode.equalsIgnoreCase("error") || fallbackStepCreateStatus.equalsIgnoreCase("error") || fallbackStepCreateCode.equalsIgnoreCase("INVALID_DATA") || fallbackStepCreateId == "")
+						{
+							stepSyncErrors.add("STEP_CREATE bulk=" + stepCreateItemRes.toString() + " fallback=" + fallbackStepCreateRes.toString() + " payload=" + failedStepMap.toString());
+						}
+					}
+					catch (eBookingStepCreate)
+					{
+						stepSyncErrors.add("STEP_CREATE bulk=" + stepCreateItemRes.toString() + " fallback_exception=" + eBookingStepCreate.toString() + " payload=" + failedStepMap.toString());
+					}
+				}
+				i = i + 1;
+			}
+		}
+		batch = List();
+	}
+}
+if(batch.size() > 0)
+{
+	stepCreateRes = zoho.crm.bulkCreate(stepModule,batch);
+	if(!isnull(stepCreateRes))
+	{
+		i = 0;
+		for each  stepCreateItemRes in stepCreateRes
+		{
+			stepCreateCode = ifnull(stepCreateItemRes.get("code"),"").toString();
+			stepCreateStatus = ifnull(stepCreateItemRes.get("status"),"").toString();
+			if(stepCreateCode.equalsIgnoreCase("error") || stepCreateStatus.equalsIgnoreCase("error") || stepCreateCode.equalsIgnoreCase("INVALID_DATA"))
+			{
+				failedStepMap = batch.get(i);
+				try 
+				{
+					fallbackStepCreateRes = zoho.crm.createRecord(stepModule,failedStepMap);
+					fallbackStepCreateCode = ifnull(fallbackStepCreateRes.get("code"),"").toString();
+					fallbackStepCreateStatus = ifnull(fallbackStepCreateRes.get("status"),"").toString();
+					fallbackStepCreateId = "";
+					fallbackStepCreateDetails = fallbackStepCreateRes.get("details");
+					if(!isnull(fallbackStepCreateDetails))
+					{
+						try 
+						{
+							fallbackStepCreateId = ifnull(fallbackStepCreateDetails.get("id"),"").toString();
+						}
+						catch (eBookingStepCreateDetails)
+						{
+							fallbackStepCreateId = "";
+						}
+					}
+					if(fallbackStepCreateCode.equalsIgnoreCase("error") || fallbackStepCreateStatus.equalsIgnoreCase("error") || fallbackStepCreateCode.equalsIgnoreCase("INVALID_DATA") || fallbackStepCreateId == "")
+					{
+						stepSyncErrors.add("STEP_CREATE bulk=" + stepCreateItemRes.toString() + " fallback=" + fallbackStepCreateRes.toString() + " payload=" + failedStepMap.toString());
+					}
+				}
+				catch (eBookingStepCreate)
+				{
+					stepSyncErrors.add("STEP_CREATE bulk=" + stepCreateItemRes.toString() + " fallback_exception=" + eBookingStepCreate.toString() + " payload=" + failedStepMap.toString());
+				}
+			}
+			i = i + 1;
+		}
+	}
+}
+// Bulk UPDATE Steps
+batch = List();
+for each  rec in toUpdateSteps
+{
+	batch.add(rec);
+	if(batch.size() == 100)
+	{
+		stepUpdateRes = zoho.crm.bulkUpdate(stepModule,batch);
+		if(!isnull(stepUpdateRes))
+		{
+			i = 0;
+			for each  stepUpdateItemRes in stepUpdateRes
+			{
+				stepUpdateCode = ifnull(stepUpdateItemRes.get("code"),"").toString();
+				stepUpdateStatus = ifnull(stepUpdateItemRes.get("status"),"").toString();
+				if(stepUpdateCode.equalsIgnoreCase("error") || stepUpdateStatus.equalsIgnoreCase("error") || stepUpdateCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					failedStepMap = batch.get(i);
+					try 
+					{
+						fallbackStepUpdateRes = zoho.crm.updateRecord(stepModule,failedStepMap.get("id"),failedStepMap);
+						fallbackStepUpdateCode = ifnull(fallbackStepUpdateRes.get("code"),"").toString();
+						fallbackStepUpdateStatus = ifnull(fallbackStepUpdateRes.get("status"),"").toString();
+						fallbackStepUpdateId = "";
+						fallbackStepUpdateDetails = fallbackStepUpdateRes.get("details");
+						if(!isnull(fallbackStepUpdateDetails))
+						{
+							try 
+							{
+								fallbackStepUpdateId = ifnull(fallbackStepUpdateDetails.get("id"),"").toString();
+							}
+							catch (eBookingStepUpdateDetails)
+							{
+								fallbackStepUpdateId = "";
+							}
+						}
+						if(fallbackStepUpdateCode.equalsIgnoreCase("error") || fallbackStepUpdateStatus.equalsIgnoreCase("error") || fallbackStepUpdateCode.equalsIgnoreCase("INVALID_DATA") || fallbackStepUpdateId == "")
+						{
+							stepSyncErrors.add("STEP_UPDATE bulk=" + stepUpdateItemRes.toString() + " fallback=" + fallbackStepUpdateRes.toString() + " payload=" + failedStepMap.toString());
+						}
+					}
+					catch (eBookingStepUpdate)
+					{
+						stepSyncErrors.add("STEP_UPDATE bulk=" + stepUpdateItemRes.toString() + " fallback_exception=" + eBookingStepUpdate.toString() + " payload=" + failedStepMap.toString());
+					}
+				}
+				i = i + 1;
+			}
+		}
+		batch = List();
+	}
+}
+if(batch.size() > 0)
+{
+	stepUpdateRes = zoho.crm.bulkUpdate(stepModule,batch);
+	if(!isnull(stepUpdateRes))
+	{
+		i = 0;
+		for each  stepUpdateItemRes in stepUpdateRes
+		{
+			stepUpdateCode = ifnull(stepUpdateItemRes.get("code"),"").toString();
+			stepUpdateStatus = ifnull(stepUpdateItemRes.get("status"),"").toString();
+			if(stepUpdateCode.equalsIgnoreCase("error") || stepUpdateStatus.equalsIgnoreCase("error") || stepUpdateCode.equalsIgnoreCase("INVALID_DATA"))
+			{
+				failedStepMap = batch.get(i);
+				try 
+				{
+					fallbackStepUpdateRes = zoho.crm.updateRecord(stepModule,failedStepMap.get("id"),failedStepMap);
+					fallbackStepUpdateCode = ifnull(fallbackStepUpdateRes.get("code"),"").toString();
+					fallbackStepUpdateStatus = ifnull(fallbackStepUpdateRes.get("status"),"").toString();
+					fallbackStepUpdateId = "";
+					fallbackStepUpdateDetails = fallbackStepUpdateRes.get("details");
+					if(!isnull(fallbackStepUpdateDetails))
+					{
+						try 
+						{
+							fallbackStepUpdateId = ifnull(fallbackStepUpdateDetails.get("id"),"").toString();
+						}
+						catch (eBookingStepUpdateDetails)
+						{
+							fallbackStepUpdateId = "";
+						}
+					}
+					if(fallbackStepUpdateCode.equalsIgnoreCase("error") || fallbackStepUpdateStatus.equalsIgnoreCase("error") || fallbackStepUpdateCode.equalsIgnoreCase("INVALID_DATA") || fallbackStepUpdateId == "")
+					{
+						stepSyncErrors.add("STEP_UPDATE bulk=" + stepUpdateItemRes.toString() + " fallback=" + fallbackStepUpdateRes.toString() + " payload=" + failedStepMap.toString());
+					}
+				}
+				catch (eBookingStepUpdate)
+				{
+					stepSyncErrors.add("STEP_UPDATE bulk=" + stepUpdateItemRes.toString() + " fallback_exception=" + eBookingStepUpdate.toString() + " payload=" + failedStepMap.toString());
+				}
+			}
+			i = i + 1;
+		}
+	}
+}
+// Inactivate Steps (si no vienen de EZUS)
+if(skipDeletes == false && stepIdsToInactivate.size() > 0)
+{
+	toInactivate = List();
+	for each  sid in stepIdsToInactivate.keys()
+	{
+		up = Map();
+		up.put("id",sid);
+		up.put("Status","Inactive");
+		toInactivate.add(up);
+		if(toInactivate.size() == 100)
+		{
+			_ = zoho.crm.bulkUpdate(stepModule,toInactivate);
+			toInactivate = List();
+		}
+	}
+	if(toInactivate.size() > 0)
+	{
+		_ = zoho.crm.bulkUpdate(stepModule,toInactivate);
+	}
+	for each  sid in stepIdsToInactivate.keys()
+	{
+		staleStep = stepIdsToInactivate.get(sid);
+		staleStepReference = "";
+		if(!isnull(staleStep))
+		{
+			staleStepReference = ifnull(staleStep.get("Step_Reference"),"");
+		}
+		stepDeleteEnqueueRes = standalone.jobs_enqueueDeleteInactiveBookingStep(bookingId,sid,staleStepReference,"Booking step missing from latest EZUS sync","sync_syncServicesFromEzusWithToken");
+		if(stepDeleteEnqueueRes.get("error") == true)
+		{
+			stepDeleteJobErrors.add(stepDeleteEnqueueRes.get("message"));
+		}
+		else if(stepDeleteEnqueueRes.get("dedup_skipped") == true)
+		{
+			stepDeleteJobsDeduped = stepDeleteJobsDeduped + 1;
+		}
+		else if(stepDeleteEnqueueRes.get("created") == true)
+		{
+			stepDeleteJobsEnqueued = stepDeleteJobsEnqueued + 1;
+		}
+	}
+}
+// -------------------------
+// 4) Construir mapa Step_Reference -> StepId
+// -------------------------
+stepIdByKey = Map();
+stepList2 = zoho.crm.searchRecords(stepModule,"(Booking:equals:" + bookingId + ")");
+if(!isnull(stepList2) && !stepList2.isEmpty())
+{
+	for each  st2 in stepList2
+	{
+		k2 = ifnull(st2.get("Step_Reference"),"");
+		if(k2 != "")
+		{
+			stepIdByKey.put(k2,st2.get("id"));
+		}
+	}
+}
+// ===== SUPPLIER LOOKUP RESOLUTION (no create) =====
+supplierModule = "Vendors";
+supplierEzusApiField = "Ezus_Supplier_API";
+supplierTpReferenceField = "TP_Reference";
+serviceSupplierLookupField = "Supplier";
+supplierRefsSet = Map();
+supplierIdByRef = Map();
+supplierTpRefsSet = Map();
+supplierIdByTpRef = Map();
+supplierRecordById = Map();
+// -------------------------
+// 5) SYNC SERVICES
+// -------------------------
+productCache = Map();
+supplierCache = Map();
+toCreate = List();
+toUpdate = List();
+dayCount = 1;
+dayItemCount = 1;
+extraCount = 1;
+cancelledCount = 1;
+CurrentServiceDate = "-";
+for each  step in stepsGetRes.get("result")
+{
+	stepRef = ifnull(step.get("reference"),"");
+	if(stepRef != "")
+	{
+		stepId = stepIdByKey.get(stepRef);
+		// -------------------
+		// Day logic (SAFE)
+		// -------------------
+		startDateRaw = ifnull(step.get("date_start"),"");
+		stepDateStr = "";
+		stepDateObj = null;
+		serviceDateTimeISO = "";
+		if(startDateRaw != "")
+		{
+			if(startDateRaw.contains(" "))
+			{
+				stepDateStr = startDateRaw.getPrefix(" ");
+			}
+			else if(startDateRaw.contains("T"))
+			{
+				stepDateStr = startDateRaw.getPrefix("T");
+			}
+			else
+			{
+				stepDateStr = startDateRaw;
+			}
+			try 
+			{
+				stepDateObj = stepDateStr.toDate("yyyy-MM-dd");
+			}
+			catch (e)
+			{
+				stepDateObj = null;
+			}
+			ds = startDateRaw;
+			if(ds != "" && (ds.contains(" ") || ds.contains("T")))
+			{
+				dateOnly = ds;
+				if(ds.contains(" "))
+				{
+					dateOnly = ds.subString(0,10);
+				}
+				else if(ds.contains("T"))
+				{
+					dateOnly = ds.subString(0,10);
+				}
+				try 
+				{
+					tz = standalone.tzSpainByDate(ds);
+					dsISO = standalone.ezusToCRMDateTime(ds,tz);
+					if(dsISO != "")
+					{
+						serviceDateTimeISO = dsISO;
+					}
+				}
+				catch (eDateTime)
+				{
+					serviceDateTimeISO = "";
+				}
+			}
+		}
+		if(!isnull(stepDateObj))
+		{
+			if(CurrentServiceDate == "-" || CurrentServiceDate == "")
+			{
+				CurrentServiceDate = stepDateStr;
+			}
+			else if(CurrentServiceDate != stepDateStr)
+			{
+				dayCount = dayCount + 1;
+				dayItemCount = 1;
+				CurrentServiceDate = stepDateStr;
+			}
+		}
+		items = step.get("items");
+		if(!isnull(items) && !items.isEmpty())
+		{
+			for each  item in items
+			{
+				itemRef = ifnull(item.get("reference"),"");
+				if(itemRef == "")
+				{
+					continue;
+				}
+				// Skip optional items completely.
+				// If an item now becomes optional and a Booking Service already exists
+				// from a previous sync, only delete it when its Status_EZUS is Unassigned.
+				isOptional = false;
+				if(!isnull(item.get("is_optional")) && item.get("is_optional") == true)
+				{
+					isOptional = true;
+				}
+				if(isOptional == true)
+				{
+					existingOptionalBS = BSByItemRefMap.get(itemRef);
+					if(!isnull(existingOptionalBS))
+					{
+						existingOptionalStatus = ifnull(existingOptionalBS.get("Status_EZUS"),"").toString().trim();
+						if(!existingOptionalStatus.equalsIgnoreCase("Unassigned"))
+						{
+							BSIdsToDeleteMap.remove(existingOptionalBS.get("id"));
+							if(existingOptionalStatus.equalsIgnoreCase("Cancelled") || existingOptionalStatus.equalsIgnoreCase("Canceled"))
+							{
+								cancelledOptionalUpdate = Map();
+								cancelledOptionalUpdate.put("id",existingOptionalBS.get("id"));
+								cancelledOptionalUpdate.put("Name","c/" + cancelledCount);
+								toUpdate.add(cancelledOptionalUpdate);
+								cancelledCount = cancelledCount + 1;
+							}
+						}
+					}
+					continue;
+				}
+				stepType = ifnull(step.get("type"),"");
+				stepCategory = ifnull(step.get("category"),"");
+				stepName = ifnull(step.get("name"),"");
+				itemName = ifnull(item.get("name"),"");
+				isAgentCommissionExtra = false;
+				if(stepType.equalsIgnoreCase("extra"))
+				{
+					if(stepCategory.equalsIgnoreCase("Agent Commission") || stepName.equalsIgnoreCase("Agent Commission") || itemName.equalsIgnoreCase("Agent Commission"))
+					{
+						isAgentCommissionExtra = true;
+					}
+				}
+				if(isAgentCommissionExtra == true)
+				{
+					itemNotes = ifnull(item.get("notes"),"").toString();
+					if(itemNotes != "")
+					{
+						if(agentCommissionDetailsText == "")
+						{
+							agentCommissionDetailsText = itemNotes;
+						}
+						else
+						{
+							agentCommissionDetailsText = agentCommissionDetailsText + "\n" + itemNotes;
+						}
+					}
+					itemSalesPriceText = ifnull(item.get("sales_price"),"").toString();
+					itemQuantityText = ifnull(item.get("quantity"),"").toString();
+					itemSalesPrice = 0.0;
+					itemQuantity = 0.0;
+					if(itemSalesPriceText != "")
+					{
+						try 
+						{
+							itemSalesPrice = itemSalesPriceText.toDecimal();
+						}
+						catch (eAgentCommissionSalesPrice)
+						{
+							itemSalesPrice = 0.0;
+						}
+					}
+					if(itemQuantityText != "")
+					{
+						try 
+						{
+							itemQuantity = itemQuantityText.toDecimal();
+						}
+						catch (eAgentCommissionQuantity)
+						{
+							itemQuantity = 0.0;
+						}
+					}
+					agentCommissionAmountTotal = agentCommissionAmountTotal + itemSalesPrice * itemQuantity;
+					continue;
+				}
+				// Sequence: cancellations use their own counter across the booking.
+				existingBS = BSByItemRefMap.get(itemRef);
+				serviceStatus = "";
+				if(!isnull(existingBS))
+				{
+					serviceStatus = ifnull(existingBS.get("Status_EZUS"),"").toString().trim();
+				}
+				// These hotel categories are explicitly confirmed below.
+				if(stepCategory.equalsIgnoreCase("Hotel not booked MfS&P") || stepCategory.equalsIgnoreCase("Hotel NBTM"))
+				{
+					serviceStatus = "Confirmed";
+				}
+				if(serviceStatus.equalsIgnoreCase("Cancelled") || serviceStatus.equalsIgnoreCase("Canceled"))
+				{
+					Sequence = "c/" + cancelledCount;
+					cancelledCount = cancelledCount + 1;
+				}
+				else if(stepType == "extra")
+				{
+					Sequence = "e/" + extraCount;
+					extraCount = extraCount + 1;
+				}
+				else
+				{
+					Sequence = dayCount + "/" + dayItemCount;
+					dayItemCount = dayItemCount + 1;
+				}
+				serviceCRMMap = Map();
+				serviceCRMMap.put("Booking_Status",ifnull(bookingStage,""));
+				serviceCRMMap.put("Ezus_Step_Reference",stepRef);
+				serviceCRMMap.put("Ezus_Item_Reference",itemRef);
+				serviceCRMMap.put("Name",Sequence);
+				// Lookup al Step
+				if(!isnull(stepId))
+				{
+					serviceCRMMap.put("Step",stepId);
+				}
+				serviceCRMMap.put("Number_of_Pax",ifnull(step.get("people"),""));
+				productDescription = ifnull(item.get("name"),"");
+				serviceCRMMap.put("Product_Description",productDescription);
+				excludedDescriptionTerms = {"taxi","dieta","extra","water","agua","fee","commission","refreshment","alquiler","meal"};
+				productDescriptionNormalized = productDescription.toLowerCase();
+				shouldExcludeService = true;
+				for each  excludedTerm in excludedDescriptionTerms
+				{
+					if(productDescriptionNormalized.contains(excludedTerm))
+					{
+						shouldExcludeService = false;
+						break;
+					}
+				}
+				serviceCRMMap.put("Requires_Operational_Management",shouldExcludeService);
+				serviceCRMMap.put("Purchase_Price",ifnull(item.get("purchase_price"),""));
+				serviceCRMMap.put("Sales_Price",ifnull(item.get("sales_price"),""));
+				// Quantity is an integer field in CRM. Reject invalid EZUS data before
+				// sending any Booking Service writes, rather than returning a generic
+				// bulk-update error later.
+				rawQuantity = ifnull(item.get("quantity"),"").toString().trim();
+				quantityIsInteger = false;
+				normalizedQuantity = 0;
+				if(rawQuantity != "")
+				{
+					try 
+					{
+						quantityDecimal = rawQuantity.toDecimal();
+						roundedQuantity = round(quantityDecimal,0);
+						if(quantityDecimal == roundedQuantity)
+						{
+							normalizedQuantity = roundedQuantity.toLong();
+							quantityIsInteger = true;
+						}
+					}
+					catch (eQuantity)
+					{
+						quantityIsInteger = false;
+					}
+				}
+				if(quantityIsInteger == false)
+				{
+					res.put("error",true);
+					res.put("invalidQuantity",true);
+					res.put("message","Invalid EZUS quantity '" + rawQuantity + "' for service '" + itemName + "' (item " + itemRef + ", step " + stepRef + "). Quantity must be a whole number.");
+					return res;
+				}
+				serviceCRMMap.put("Quantity",normalizedQuantity);
+				itemNotes = ifnull(item.get("notes"),"");
+				guestsNotes = "";
+				distributionNotes = "";
+				beddingNotes = "";
+				if(itemNotes != "" && stepType.equalsIgnoreCase("accommodation"))
+				{
+					if(itemNotes.contains(":"))
+					{
+						guestsNotes = itemNotes.getPrefix(":");
+						notesAfterGuests = itemNotes.replaceAll("^[^:]*:","");
+						if(notesAfterGuests.contains("/"))
+						{
+							distributionNotes = notesAfterGuests.getPrefix("/");
+							beddingNotes = notesAfterGuests.replaceAll("^[^/]*/","");
+						}
+						else
+						{
+							distributionNotes = notesAfterGuests;
+						}
+					}
+					else if(itemNotes.contains("/"))
+					{
+						distributionNotes = itemNotes.getPrefix("/");
+						beddingNotes = itemNotes.replaceAll("^[^/]*/","");
+					}
+					else
+					{
+						guestsNotes = itemNotes;
+					}
+				}
+				serviceCRMMap.put("Item_Notes",standalone.safeTextOrMsg(itemNotes,30000,"Item Notes"));
+				serviceCRMMap.put("Guests",standalone.safeTextOrMsg(guestsNotes,255,"Guests"));
+				serviceCRMMap.put("Distribution",standalone.safeTextOrMsg(distributionNotes,255,"Distribution"));
+				serviceCRMMap.put("Bedding",standalone.safeTextOrMsg(beddingNotes,255,"Bedding"));
+				if(bookingOwnerId != null && bookingOwnerId != "")
+				{
+					// Los IDs de los lookup de CRM se manejan como texto. Forzarlo a
+					// Long falla si la respuesta de Owner trae un valor no numérico.
+					serviceCRMMap.put("Booking_Owner",bookingOwnerId);
+				}
+				// Service_Date (SAFE)
+				if(!isnull(stepDateObj))
+				{
+					serviceCRMMap.put("Service_Date",stepDateObj);
+				}
+				else if(CurrentServiceDate != "-" && CurrentServiceDate != "")
+				{
+					try 
+					{
+						serviceCRMMap.put("Service_Date",CurrentServiceDate.toDate("yyyy-MM-dd"));
+					}
+					catch (e2)
+					{
+					}
+				}
+				if(serviceDateTimeISO != "")
+				{
+					serviceCRMMap.put("Service_Date_Time",serviceDateTimeISO);
+				}
+				serviceCRMMap.put("Ezus_Supplier_Reference","");
+				serviceCRMMap.put(serviceSupplierLookupField,null);
+				serviceCRMMap.put("Supplier_Name","");
+				itemSupplierRef = ifnull(item.get("supplier_reference"),"");
+				if(itemSupplierRef != "")
+				{
+					serviceCRMMap.put("Ezus_Supplier_Reference",itemSupplierRef);
+					if(isnull(supplierRefsSet.get(itemSupplierRef)))
+					{
+						supplierRefsSet.put(itemSupplierRef,true);
+					}
+					supplierTpRefCandidate = "";
+					if(itemSupplierRef.contains("-supnew-"))
+					{
+						supplierTpRefCandidate = itemSupplierRef.replaceAll("^.*-supnew-","");
+					}
+					if(supplierTpRefCandidate != "")
+					{
+						if(isnull(supplierTpRefsSet.get(supplierTpRefCandidate)))
+						{
+							supplierTpRefsSet.put(supplierTpRefCandidate,true);
+						}
+					}
+				}
+				// Product fields con cache
+				productRef = ifnull(item.get("product_reference"),"");
+				if(productRef != "")
+				{
+					serviceCRMMap.put("Ezus_Product_Reference",productRef);
+					product = productCache.get(productRef);
+					if(isnull(product))
+					{
+						product = Map();
+						try 
+						{
+							productGetRes = standalone.getEzusProductByIdWithToken(productRef,token);
+							if(!isnull(productGetRes) && productGetRes.get("error") == false)
+							{
+								product = productGetRes.get("result");
+								if(isnull(product))
+								{
+									product = Map();
+								}
+							}
+							else
+							{
+							}
+						}
+						catch (eProductFetch)
+						{
+						}
+						productCache.put(productRef,product);
+					}
+					if(!isnull(product) && !product.isEmpty())
+					{
+						productDestination = product.get("destination");
+						if(!isnull(productDestination) && !productDestination.isEmpty())
+						{
+							serviceCRMMap.put("Destination",ifnull(productDestination.get("name"),""));
+							serviceCRMMap.put("Subdestination",ifnull(productDestination.get("subdestination_name"),""));
+						}
+						productCategory = product.get("category");
+						if(!isnull(productCategory) && !productCategory.isEmpty())
+						{
+							serviceCRMMap.put("Category",ifnull(productCategory.get("name"),""));
+							serviceCRMMap.put("Subcategory",ifnull(productCategory.get("subcategory_name"),""));
+						}
+					}
+				}
+				categoryForRule = ifnull(serviceCRMMap.get("Category"),"");
+				subcategoryForRule = ifnull(serviceCRMMap.get("Subcategory"),"");
+				stepCategoryForRule = ifnull(step.get("category"),"");
+				if(categoryForRule == "" && subcategoryForRule == "" && itemSupplierRef == "" && stepCategoryForRule.equalsIgnoreCase("Restaurants"))
+				{
+					serviceCRMMap.put("Category","Activities");
+					serviceCRMMap.put("Subcategory","Restaurants");
+				}
+				if(step.get("category") != null)
+				{
+					if(step.get("category").equalsIgnoreCase("not booked MfS&P") || step.get("category").contains("NBTM"))
+					{
+						serviceCRMMap.put("NBTM",true);
+						if(step.get("category").equalsIgnoreCase("Hotel not booked MfS&P") || step.get("category").equalsIgnoreCase("Hotel NBTM"))
+						{
+							serviceCRMMap.put("Category","Accommodation");
+							serviceCRMMap.put("Subcategory","Hotels");
+							serviceCRMMap.put("Status_EZUS","Confirmed");
+						}
+					}
+				}
+				// Set hotel dates after all category rules have been applied.
+				if(!isnull(serviceCRMMap.get("Category")) && serviceCRMMap.get("Category").equals("Accommodation"))
+				{
+					inDate = ifnull(step.get("date_start"),"");
+					outDate = ifnull(step.get("date_end"),"");
+					if(inDate != "")
+					{
+						serviceCRMMap.put("Hotel_Check_In",inDate.toDate());
+					}
+					if(outDate != "")
+					{
+						serviceCRMMap.put("Hotel_Check_Out",outDate.toDate());
+					}
+				}
+				existingBS = BSByItemRefMap.get(itemRef);
+				if(isnull(existingBS))
+				{
+					serviceCRMMap.put("Booking",bookingId);
+					serviceCRMMap.put("Layout",616617000135519390);
+					toCreate.add(serviceCRMMap);
+				}
+				else
+				{
+					serviceCRMMap.put("id",existingBS.get("id"));
+					toUpdate.add(serviceCRMMap);
+					BSIdsToDeleteMap.remove(existingBS.get("id"));
+				}
+			}
+		}
+	}
+}
+// ===== RESOLVE SUPPLIERS IN CRM (searchRecords, no create) =====
+if(supplierRefsSet.size() > 0)
+{
+	allRefs = supplierRefsSet.keys();
+	for each  r in allRefs
+	{
+		if(r != "")
+		{
+			try 
+			{
+				supplierMatches = zoho.crm.searchRecords(supplierModule,"(" + supplierEzusApiField + ":equals:" + r + ")");
+				if(!isnull(supplierMatches) && !supplierMatches.isEmpty())
+				{
+					for each  srec in supplierMatches
+					{
+						refVal = ifnull(srec.get(supplierEzusApiField),"");
+						sid = ifnull(srec.get("id"),"");
+						if(refVal != "" && sid != "")
+						{
+							supplierIdByRef.put(refVal,sid);
+							supplierRecordById.put(sid,srec);
+						}
+					}
+				}
+			}
+			catch (e)
+			{
+			}
+		}
+	}
+}
+if(supplierTpRefsSet.size() > 0)
+{
+	allTpRefs = supplierTpRefsSet.keys();
+	for each  tpRef in allTpRefs
+	{
+		if(tpRef != "")
+		{
+			try 
+			{
+				supplierMatches = zoho.crm.searchRecords(supplierModule,"(" + supplierTpReferenceField + ":equals:" + tpRef + ")");
+				if(!isnull(supplierMatches) && !supplierMatches.isEmpty())
+				{
+					for each  srec in supplierMatches
+					{
+						tpRefVal = ifnull(srec.get(supplierTpReferenceField),"");
+						sid = ifnull(srec.get("id"),"");
+						ezusApiVal = ifnull(srec.get(supplierEzusApiField),"");
+						if(tpRefVal != "" && sid != "" && ezusApiVal == "")
+						{
+							if(isnull(supplierIdByTpRef.get(tpRefVal)))
+							{
+								supplierIdByTpRef.put(tpRefVal,sid);
+							}
+							supplierRecordById.put(sid,srec);
+						}
+					}
+				}
+			}
+			catch (e)
+			{
+			}
+		}
+	}
+}
+// ===== APPLY SUPPLIER LOOKUP + SUPPLIER NAME AFTER RESOLUTION =====
+resolvedSupplierIdByEzusRef = Map();
+supplierNameByEzusRef = Map();
+if(supplierRefsSet.size() > 0)
+{
+	for each  ezSupRefResolved in supplierRefsSet.keys()
+	{
+		if(ezSupRefResolved != "")
+		{
+			resolvedSupId = supplierIdByRef.get(ezSupRefResolved);
+			if(isnull(resolvedSupId) || resolvedSupId == "")
+			{
+				supplierTpRefCandidate = "";
+				if(ezSupRefResolved.contains("-supnew-"))
+				{
+					supplierTpRefCandidate = ezSupRefResolved.replaceAll("^.*-supnew-","");
+				}
+				if(supplierTpRefCandidate != "")
+				{
+					resolvedSupId = supplierIdByTpRef.get(supplierTpRefCandidate);
+				}
+			}
+			if(!isnull(resolvedSupId) && resolvedSupId != "")
+			{
+				resolvedSupplierIdByEzusRef.put(ezSupRefResolved,resolvedSupId);
+			}
+			supplierDataResolved = supplierCache.get(ezSupRefResolved);
+			if(isnull(supplierDataResolved))
+			{
+				supplierDataResolved = Map();
+				try 
+				{
+					supplierGetRes = standalone.getEzusSupplierByIdWithToken(ezSupRefResolved,token);
+					if(!isnull(supplierGetRes) && supplierGetRes.get("error") == false)
+					{
+						supplierDataResolved = supplierGetRes.get("result");
+						if(isnull(supplierDataResolved))
+						{
+							supplierDataResolved = Map();
+						}
+					}
+				}
+				catch (eSupplierFetch)
+				{
+				}
+				supplierCache.put(ezSupRefResolved,supplierDataResolved);
+			}
+			if(!isnull(supplierDataResolved) && !supplierDataResolved.isEmpty())
+			{
+				resolvedSupplierName = ifnull(supplierDataResolved.get("company_name"),"");
+				if(resolvedSupplierName == "")
+				{
+					resolvedSupplierName = ifnull(supplierDataResolved.get("name"),"");
+				}
+				if(resolvedSupplierName != "")
+				{
+					supplierNameByEzusRef.put(ezSupRefResolved,resolvedSupplierName);
+				}
+			}
+		}
+	}
+}
+serviceListsForSupplierResolution = List();
+if(!isnull(toCreate) && toCreate.size() > 0)
+{
+	serviceListsForSupplierResolution.add(toCreate);
+}
+if(!isnull(toUpdate) && toUpdate.size() > 0)
+{
+	serviceListsForSupplierResolution.add(toUpdate);
+}
+for each  serviceListForSupplierResolution in serviceListsForSupplierResolution
+{
+	for each  srv in serviceListForSupplierResolution
+	{
+		ezSupRefSrv = ifnull(srv.get("Ezus_Supplier_Reference"),"");
+		if(ezSupRefSrv != "")
+		{
+			supId = resolvedSupplierIdByEzusRef.get(ezSupRefSrv);
+			if(!isnull(supId) && supId != "")
+			{
+				srv.put(serviceSupplierLookupField,supId);
+				srvCategory = ifnull(srv.get("Category"),"");
+				srvSubcategory = ifnull(srv.get("Subcategory"),"");
+				if(srvCategory == "" && srvSubcategory == "")
+				{
+					supplierRecord = supplierRecordById.get(supId);
+					if(!isnull(supplierRecord))
+					{
+						supplierCategory = ifnull(supplierRecord.get("Supplier_Category"),"");
+						supplierSubcategory = ifnull(supplierRecord.get("Subcategory"),"");
+						if(supplierCategory != "" || supplierSubcategory != "")
+						{
+							srv.put("Category",supplierCategory);
+							srv.put("Subcategory",supplierSubcategory);
+						}
+					}
+				}
+			}
+			supplierName = supplierNameByEzusRef.get(ezSupRefSrv);
+			if(!isnull(supplierName) && supplierName != "")
+			{
+				srv.put("Supplier_Name",supplierName);
+			}
+		}
+		srvCategoryAfterResolution = ifnull(srv.get("Category"),"");
+		srvSubcategoryAfterResolution = ifnull(srv.get("Subcategory"),"");
+		srvSupplierAfterResolution = ifnull(srv.get(serviceSupplierLookupField),"");
+		srvProductDescription = ifnull(srv.get("Product_Description"),"");
+		if(srvCategoryAfterResolution == "" && srvSubcategoryAfterResolution == "" && srvSupplierAfterResolution == "" && (srvProductDescription.contains("museum") || srvProductDescription.contains("Museum") || srvProductDescription.contains("MUSEUM")))
+		{
+			srv.put("Category","Activities");
+			srv.put("Subcategory","Tickets");
+		}
+		if(srvCategoryAfterResolution == "" && srvSubcategoryAfterResolution == "" && srvSupplierAfterResolution == "" && (srvProductDescription.contains("parking") || srvProductDescription.contains("Parking") || srvProductDescription.contains("PARKING")))
+		{
+			srv.put("Category","Transport");
+			srv.put("Subcategory","Parking");
+		}
+	}
+}
+// -------------------------
+// 6) BULK CREATE/UPDATE SERVICES
+// -------------------------
+hasSyncError = false;
+// CREATE
+batchCreate = List();
+for each  rec in toCreate
+{
+	batchCreate.add(rec);
+	if(batchCreate.size() == 100)
+	{
+		createRes = zoho.crm.bulkCreate("Booking_Services",batchCreate);
+		if(!isnull(createRes))
+		{
+			for each  r in createRes
+			{
+				createCode = ifnull(r.get("code"),"").toString();
+				createStatus = ifnull(r.get("status"),"").toString();
+				if(createCode.equalsIgnoreCase("error") || createStatus.equalsIgnoreCase("error") || createCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					hasSyncError = true;
+					serviceSyncErrors.add("SERVICE_CREATE response=" + r.toString());
+				}
+			}
+		}
+		batchCreate = List();
+	}
+}
+if(batchCreate.size() > 0)
+{
+	createRes = zoho.crm.bulkCreate("Booking_Services",batchCreate);
+	if(!isnull(createRes))
+	{
+		for each  r in createRes
+		{
+			createCode = ifnull(r.get("code"),"").toString();
+			createStatus = ifnull(r.get("status"),"").toString();
+			if(createCode.equalsIgnoreCase("error") || createStatus.equalsIgnoreCase("error") || createCode.equalsIgnoreCase("INVALID_DATA"))
+			{
+				hasSyncError = true;
+				serviceSyncErrors.add("SERVICE_CREATE response=" + r.toString());
+			}
+		}
+	}
+}
+// UPDATE
+batchUpdate = List();
+for each  rec in toUpdate
+{
+	batchUpdate.add(rec);
+	if(batchUpdate.size() == 100)
+	{
+		updateRes = zoho.crm.bulkUpdate("Booking_Services",batchUpdate);
+		if(!isnull(updateRes))
+		{
+			for each  r in updateRes
+			{
+				updateCode = ifnull(r.get("code"),"").toString();
+				updateStatus = ifnull(r.get("status"),"").toString();
+				if(updateCode.equalsIgnoreCase("error") || updateStatus.equalsIgnoreCase("error") || updateCode.equalsIgnoreCase("INVALID_DATA"))
+				{
+					hasSyncError = true;
+					serviceSyncErrors.add("SERVICE_UPDATE response=" + r.toString());
+				}
+			}
+		}
+		batchUpdate = List();
+	}
+}
+if(batchUpdate.size() > 0)
+{
+	updateRes = zoho.crm.bulkUpdate("Booking_Services",batchUpdate);
+	if(!isnull(updateRes))
+	{
+		for each  r in updateRes
+		{
+			updateCode = ifnull(r.get("code"),"").toString();
+			updateStatus = ifnull(r.get("status"),"").toString();
+			if(updateCode.equalsIgnoreCase("error") || updateStatus.equalsIgnoreCase("error") || updateCode.equalsIgnoreCase("INVALID_DATA"))
+			{
+				hasSyncError = true;
+				serviceSyncErrors.add("SERVICE_UPDATE response=" + r.toString());
+			}
+		}
+	}
+}
+// DELETE orphan services (solo si no hubo errores)
+if(hasSyncError)
+{
+	res.put("error",true);
+	res.put("message","Services Sync: Skipping deletes due to sync errors");
+	res.put("stepSyncErrors",stepSyncErrors);
+	res.put("serviceSyncErrors",serviceSyncErrors);
+	return res;
+}
+if(skipDeletes == false && BSIdsToDeleteMap.size() > 0)
+{
+	for each  idKey in BSIdsToDeleteMap.keys()
+	{
+		bsId = idKey;
+		deleteMap = Map();
+		deleteMap.put("module","Booking_Services");
+		deleteMap.put("id",bsId);
+		delRes = zoho.crm.invokeConnector("crm.delete",deleteMap);
+	}
+}
+bookingCommissionUpdateMap = Map();
+bookingCommissionUpdateMap.put(agentCommissionDetailsField,standalone.safeTextOrMsg(agentCommissionDetailsText,30000,"Agent Commission Details"));
+agentCommissionAmountRounded = round(agentCommissionAmountTotal,2);
+bookingCommissionUpdateMap.put(agentCommissionAmountField,agentCommissionAmountRounded);
+bookingCommissionUpdateRes = zoho.crm.updateRecord("Deals",bookingId,bookingCommissionUpdateMap);
+if(!isnull(bookingCommissionUpdateRes.get("status")) && bookingCommissionUpdateRes.get("status") == "error")
+{
+	res.put("error",true);
+	res.put("message","Services sync completed, but Agent Commission fields could not be updated. Details: " + bookingCommissionUpdateRes.get("message"));
+	res.put("stepSyncErrors",stepSyncErrors);
+	res.put("serviceSyncErrors",serviceSyncErrors);
+	return res;
+}
+supplierSettlementJobRes = standalone.jobs_enqueueSupplierSettlementRecalcForBooking(bookingId,"Booking services synced from EZUS","sync_syncServicesFromEzusWithToken");
+res.put("inactiveStepDeleteJobsEnqueued",stepDeleteJobsEnqueued);
+res.put("inactiveStepDeleteJobsDeduped",stepDeleteJobsDeduped);
+res.put("inactiveStepDeleteJobErrors",stepDeleteJobErrors);
+res.put("supplierSettlementRecalcJob",supplierSettlementJobRes);
+res.put("stepSyncErrors",stepSyncErrors);
+res.put("serviceSyncErrors",serviceSyncErrors);
+if(stepSyncErrors.size() > 0 || serviceSyncErrors.size() > 0)
+{
+	res.put("error",true);
+	res.put("message","Sync completed with CRM write errors");
+	res.put("emptyBSList",false);
+	return res;
+}
+if(stepDeleteJobErrors.size() > 0 || supplierSettlementJobRes.get("error") == true)
+{
+	res.put("error",true);
+	res.put("message","Services sync completed, but one or more admin jobs could not be enqueued");
+	res.put("emptyBSList",false);
+	return res;
+}
+res.put("error",false);
+res.put("message","Action was done succesfully!");
+res.put("emptyBSList",false);
+return res;
+}

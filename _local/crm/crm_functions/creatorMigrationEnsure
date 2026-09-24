@@ -1,0 +1,172 @@
+string standalone.creatorMigrationEnsure(String mode, String moduleName, String sourceKey, String payloadJson)
+{
+allowedModes = {"simulate","migrate","verify"};
+allowedModules = {"Prepayment_Requests","Prepayments","Prepayment_Request_Services"};
+lookupFields = {"Supplier","Booking","Prepayment_Request","Booking_Service"};
+numberFields = {"Amount","Percent"};
+if(!allowedModes.contains(mode) || !allowedModules.contains(moduleName))
+{
+	throw "Invalid migration mode or module.";
+}
+if(!sourceKey.matches("^[0-9]+(-[0-9]+)?$"))
+{
+	throw "Invalid source key.";
+}
+payload = payloadJson.toMap();
+keyField = "Creator_Record_ID";
+if(moduleName == "Prepayment_Request_Services")
+{
+	keyField = "Name";
+}
+// Enforce uniqueness in CRM rather than relying only on a search before create.
+metadata = invokeurl
+[
+	url :"https://www.zohoapis.eu/crm/v8/settings/fields?module=" + moduleName
+	type :GET
+	connection :"crm_oauth_connection"
+];
+uniqueKey = false;
+fieldNames = List();
+for each field in ifnull(metadata.get("fields"),List())
+{
+	fieldNames.add(field.get("api_name"));
+	if(field.get("api_name") == keyField && field.get("data_type") == "text" && ifnull(field.get("unique"),Map()).size() > 0)
+	{
+		uniqueKey = true;
+	}
+}
+if(!uniqueKey)
+{
+	throw moduleName + "." + keyField + " must be a unique text field before migration.";
+}
+for each fieldName in payload.keys()
+{
+	if(!fieldNames.contains(fieldName))
+	{
+		throw "CRM field is missing: " + moduleName + "." + fieldName;
+	}
+}
+payload.put(keyField,sourceKey);
+criteria = keyField + " = '" + sourceKey + "'";
+if(moduleName == "Prepayment_Request_Services")
+{
+	criteria = "(Prepayment_Request = '" + payload.get("Prepayment_Request").get("id") + "' and Booking_Service = '" + payload.get("Booking_Service").get("id") + "')";
+}
+query = {"select_query":"select id from " + moduleName + " where " + criteria + " limit 2"};
+response = invokeurl
+[
+	url :"https://www.zohoapis.eu/crm/v8/coql"
+	type :POST
+	parameters :query.toString()
+	headers :{"Content-Type":"application/json"}
+	connection :"crm_oauth_connection"
+	detailed :true
+];
+matches = List();
+if(response.get("responseCode") == 200)
+{
+	body = response.get("responseText").toString().toMap();
+	if(!body.containKey("data"))
+	{
+		throw "Invalid CRM lookup response: " + body.toString();
+	}
+	matches = body.get("data");
+}
+else if(response.get("responseCode") != 204)
+{
+	throw "Could not look up migration key in " + moduleName + ": " + response.toString();
+}
+if(matches.size() > 1)
+{
+	throw "Duplicate migration key or relationship in " + moduleName + ": " + sourceKey;
+}
+recordId = "";
+action = "existing";
+if(matches.size() == 1)
+{
+	recordId = matches.get(0).get("id").toString();
+}
+else if(mode != "migrate")
+{
+	migrationResponse = {"id":"","action":"missing","module":moduleName,"source_key":sourceKey,"payload":payload};
+	return migrationResponse.toString();
+}
+else
+{
+	creationPayload = payload;
+	if(moduleName == "Prepayment_Requests")
+	{
+		// Final status is set only after every child and document has been verified.
+		creationPayload = payload.toString().toMap();
+		creationPayload.put("Status","To Be Paid");
+	}
+	created = zoho.crm.createRecord(moduleName,creationPayload,{"trigger":List()});
+	recordId = ifnull(created.get("id"),"").toString();
+	if(recordId == "")
+	{
+		throw "CRM creation was not confirmed. Retry the same item; the unique key prevents a second record. " + created.toString();
+	}
+	action = "created";
+}
+record = zoho.crm.getRecordById(moduleName,recordId.toLong());
+if(ifnull(record.get("id"),"").toString() != recordId)
+{
+	throw "Could not verify " + moduleName + " " + recordId;
+}
+missingOriginalStatus = false;
+for each fieldName in payload.keys()
+{
+	// Do not rename an existing junction. Request status is checked/finalized by the caller.
+	if((moduleName != "Prepayment_Request_Services" || fieldName != "Name") && (moduleName != "Prepayment_Requests" || fieldName != "Status"))
+	{
+		expected = ifnull(payload.get(fieldName),"").toString();
+		actual = ifnull(record.get(fieldName),"").toString();
+		if(lookupFields.contains(fieldName))
+		{
+			expected = ifnull(ifnull(payload.get(fieldName),Map()).get("id"),"").toString();
+			actual = ifnull(ifnull(record.get(fieldName),Map()).get("id"),"").toString();
+		}
+		if(numberFields.contains(fieldName) && expected != "" && actual != "")
+		{
+			if(expected.toDecimal() == actual.toDecimal())
+			{
+				actual = expected;
+			}
+		}
+		if(fieldName == "Requested_Date" && expected != "" && actual != "")
+		{
+			actual = actual.getPrefix("T");
+			expected = expected.getPrefix("T");
+		}
+		if(moduleName == "Prepayments" && fieldName == "Creator_Original_Status" && actual == "" && mode != "verify")
+		{
+			missingOriginalStatus = true;
+			actual = expected;
+		}
+		if(expected != actual)
+		{
+			throw "Existing CRM record differs in " + moduleName + "." + fieldName + " (ID " + recordId + "). It was not overwritten.";
+		}
+	}
+}
+// Backfill only this audit field on records created by the previous migration version.
+// All other payload fields have been verified before this write.
+if(missingOriginalStatus)
+{
+	if(mode == "migrate")
+	{
+		update = zoho.crm.updateRecord(moduleName,recordId.toLong(),{"Creator_Original_Status":payload.get("Creator_Original_Status")},{"trigger":List()});
+		confirmed = zoho.crm.getRecordById(moduleName,recordId.toLong());
+		if(ifnull(update.get("id"),"").toString() != recordId || confirmed.get("Creator_Original_Status") != payload.get("Creator_Original_Status"))
+		{
+			throw "Could not preserve the original Creator status. Creator was not marked Migrated.";
+		}
+	}
+	else
+	{
+		action = "needs_original_status";
+	}
+}
+migrationResponse = {"id":recordId,"action":action,"module":moduleName,"source_key":sourceKey};
+return migrationResponse.toString();
+}

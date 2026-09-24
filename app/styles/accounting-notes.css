@@ -1,0 +1,43 @@
+.prepayment-context-actions { display: flex; align-items: center; gap: 8px; }
+.prepayment-notes-button { display: grid; place-items: center; width: 34px; height: 34px; padding: 7px; border: 1px solid #f1c5a3; border-radius: 9px; background: #fff5eb; color: #b95c19; cursor: pointer; }
+.prepayment-notes-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.prepayment-notes-button:hover { background: #ffe7d1; }
+.prepayment-notes-button:active { transform: scale(.95); }
+.prepayment-notes-button:disabled { opacity: .45; cursor: wait; }
+.communication-notes-dialog { box-sizing: border-box; width: min(680px, calc(100vw - 32px)); height: min(780px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); padding: 22px; border: 1px solid #eac9b0; border-radius: 16px; background: #fffdfb; color: #503a2b; overflow: hidden; font: 13px/1.5 "Segoe UI", Arial, sans-serif; }
+.communication-notes-dialog[open] { display: flex; flex-direction: column; }
+.communication-notes-dialog::backdrop { background: #301c1066; }
+.communication-notes-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.communication-notes-dialog h2 { margin: 0; font-size: 20px; color: #954e19; }
+.communication-notes-dialog > [role="status"] { flex-shrink: 0; margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.communication-notes-dialog > [data-notes-body] { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 16px; margin-top: 16px; }
+.communication-notes-list { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.communication-notes-dialog .communication-note { padding: 12px; border: 1px solid #efd9c5; border-radius: 10px; background: #fff5ea; flex-shrink: 0; }
+.communication-notes-dialog .communication-note-head { display: flex; align-items: center; gap: 6px; }
+.communication-notes-dialog .communication-note-head > strong { flex: 1; font-size: 12px; }
+.communication-notes-dialog .communication-editor-actions { display: flex; justify-content: flex-end; gap: 6px; margin: 0; }
+.communication-notes-dialog .communication-edit-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; min-width: 0; padding: 5px; border: 0; background: transparent; color: #a86a3d; }
+.communication-notes-dialog .communication-edit-icon svg { width: 17px; height: 17px; }
+.communication-notes-dialog time, .communication-notes-dialog small { font-size: 10px; color: #977861; }
+.communication-notes-dialog .communication-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin-top: 7px; }
+.communication-notes-dialog .communication-note-composer { display: grid; gap: 10px; flex-shrink: 0; padding-top: 12px; border-top: 1px solid #ebd5c3; margin: 0; }
+.communication-notes-dialog .note-editor { border: 1px solid #e8c7aa; border-radius: 9px; overflow: hidden; background: #fff; }
+.communication-notes-dialog .note-format-toolbar { display: flex; gap: 4px; padding: 5px; border-bottom: 1px solid #f0ddcb; }
+.communication-notes-dialog .note-format-toolbar button { width: auto; margin: 0; border: 0; border-radius: 5px; padding: 4px 10px; background: #fff3e6; color: #92501e; cursor: pointer; }
+.communication-notes-dialog .note-format-bold { font-weight: 700; }
+.communication-notes-dialog .note-format-underline { text-decoration: underline; }
+.communication-notes-dialog .note-rich-input { height: 100px; min-height: 0; overflow-y: auto; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.communication-notes-dialog .note-rich-input:empty::before { content: attr(data-placeholder); color: #a39080; pointer-events: none; }
+.communication-notes-dialog .note-rich-input:focus { outline: 2px solid #db924f; outline-offset: -2px; }
+.communication-notes-dialog .communication-add-button { width: auto; justify-self: end; border: 1px solid #ca742c; border-radius: 8px; padding: 8px 16px; background: #d98032; color: #fff; cursor: pointer; }
+.communication-notes-dialog button { transition: background .15s, transform .1s; }
+.communication-notes-dialog button:hover { filter: brightness(.96); }
+.communication-notes-dialog button:active { transform: scale(.96); }
+.communication-notes-dialog button:disabled { opacity: .5; }
+.communication-notes-dialog .accounting-note-context { margin: 8px 0; padding: 10px 12px; border-left: 3px solid #df984e; border-radius: 5px; background: #fffaf4; font-size: 11px; }
+.communication-notes-dialog .note-editor .accounting-note-context { margin: 0; border-radius: 0; }
+.accounting-note-context > span { display: block; color: #a47148; font-size: 9px; letter-spacing: .06em; }
+.accounting-note-context strong { display: block; font-size: 12px; color: #895323; }
+.accounting-note-context p { margin: 3px 0; font-size: 11px; }
+.accounting-note-context a { color: #ac5f22; font-weight: 600; font-size: 11px; }
+.accounting-note-context a small { display: inline; }

@@ -1293,6 +1293,16 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       if (elements.invoiceCreateTitle) {
         elements.invoiceCreateTitle.textContent = getInvoiceCreateTitleText();
       }
+      if (elements.invoiceCreateHeaderSupplier) {
+        var supplier = state.supplier, supplierId = supplier && String(supplier.id || "");
+        var supplierName = supplier && (supplier.Vendor_Name || supplier.Name || helpers.getLookupName(supplier)) || "";
+        var header = elements.invoiceCreateHeaderSupplier, signature = JSON.stringify([supplierId, supplierName]);
+        header.hidden = !supplierId;
+        if (header.dataset.supplier !== signature) {
+          header.dataset.supplier = signature;
+          header.innerHTML = supplierId ? '<span>' + helpers.escapeHtml(supplierName) + '</span>' + (ns.supplierAccountingInfo ? ns.supplierAccountingInfo.infoHtml(supplierId) : '') : '';
+        }
+      }
       if (elements.invoiceCreateNumberLabel) {
         elements.invoiceCreateNumberLabel.textContent = isRefundMode ? "Refund Reference" : "Invoice Number";
       }

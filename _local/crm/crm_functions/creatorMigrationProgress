@@ -1,0 +1,115 @@
+string standalone.creatorMigrationProgress(String action, String config, String value)
+{
+if(action != "load" && action != "save")
+{
+	throw "Invalid migration progress action.";
+}
+variableName = "CreatorPrepayment_" + zoho.encryption.sha256(config).subString(0,16);
+response = invokeurl
+[
+	url :"https://www.zohoapis.eu/crm/v8/settings/variables"
+	type :GET
+	connection :"crm_oauth_connection"
+	detailed :true
+];
+variables = List();
+if(response.get("responseCode") != 204)
+{
+	body = response.get("responseText").toString().toMap();
+	if(response.get("responseCode") != 200 || !body.containKey("variables"))
+	{
+		throw "Cannot read migration progress. Grant crm_oauth_connection ZohoCRM.settings.variables.ALL.";
+	}
+	variables = body.get("variables");
+}
+variableId = "";
+savedValue = "";
+for each variable in variables
+{
+	if(variable.get("api_name") == variableName)
+	{
+		if(variableId != "")
+		{
+			throw "Duplicate migration progress variable. Review CRM variables.";
+		}
+		variableId = variable.get("id").toString();
+		savedValue = ifnull(variable.get("value"),"").toString();
+	}
+}
+checkpoint = Map();
+checkpoint.put("config",config);
+checkpoint.put("resume_state","");
+checkpoint.put("complete",false);
+if(savedValue != "")
+{
+	checkpoint = savedValue.toMap();
+	if(checkpoint.get("config") != config)
+	{
+		throw "Stored migration progress belongs to a different configuration.";
+	}
+}
+if(action == "load" && variableId != "")
+{
+	return checkpoint.toString();
+}
+if(action == "save")
+{
+	checkpoint = value.toMap();
+	if(checkpoint.get("config") != config || !checkpoint.containKey("resume_state") || !checkpoint.containKey("complete"))
+	{
+		throw "Invalid migration progress payload.";
+	}
+}
+payload = Map();
+payload.put("value",checkpoint.toString());
+if(variableId == "")
+{
+	payload.put("name",variableName);
+	payload.put("api_name",variableName);
+	payload.put("type","textarea");
+	group = Map();
+	group.put("name","General");
+	payload.put("variable_group",group);
+}
+else
+{
+	payload.put("id",variableId);
+}
+rows = List();
+rows.add(payload);
+request = Map();
+request.put("variables",rows);
+if(variableId == "")
+{
+	updated = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/settings/variables"
+		type :POST
+		parameters :request.toString()
+		headers :{"Content-Type":"application/json"}
+		connection :"crm_oauth_connection"
+	];
+}
+else
+{
+	updated = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/settings/variables"
+		type :PUT
+		parameters :request.toString()
+		headers :{"Content-Type":"application/json"}
+		connection :"crm_oauth_connection"
+	];
+}
+if(!updated.containKey("variables") || updated.get("variables").size() != 1 || updated.get("variables").get(0).get("code") != "SUCCESS")
+{
+	throw "Could not save migration progress. Check variable permissions, the General variable group and value size. " + updated.toString();
+}
+// Read back the value, so truncation cannot silently lose the resume position.
+confirmedValue = zoho.crm.getOrgVariable(variableName);
+if(confirmedValue.toString() != checkpoint.toString())
+{
+	throw "CRM did not confirm the complete migration progress value.";
+}
+return checkpoint.toString();
+}

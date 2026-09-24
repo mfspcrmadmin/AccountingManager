@@ -33,6 +33,11 @@
   }
   ns.createPrepaymentWorkflowService = function (zoho, storage) {
     var api = zoho.CRM.API, schemaPromise, memory = {}, deniedAttachmentRequests = new Set();
+    ns.resetPrepaymentCheckpoint = function (recordId) {
+      var key = "accounting-manager-prepayment-" + recordId;
+      delete memory[key];
+      if (storage) { storage.removeItem(key); }
+    };
     async function syncRequest(ctx) {
       var requestId = id(ctx.payment.Prepayment_Request);
       if (!requestId) { return ""; }
@@ -71,7 +76,7 @@
             if (!field) { throw new Error("Prepayments needs a lookup to " + module + " before records can be registered."); }
             return field.api_name;
           }
-          return { invoice: lookup(INVOICES, "Vendor_Invoice"), payment: lookup(PAYMENTS, "Vendor_Payment") };
+          return { payment: lookup(PAYMENTS, "Vendor_Payment") };
         }).catch(function (error) { schemaPromise = null; throw error; });
       }
       return schemaPromise;
@@ -102,6 +107,12 @@
       if (value) { memory[key] = value; if (storage) { storage.setItem(key, JSON.stringify(value)); } return value; }
       return memory[key] || (storage && JSON.parse(storage.getItem(key) || "null")) || {};
     }
+    ns.assertPrepaymentDeletionCheckpoint = function (recordId) {
+      var journal = checkpoint(recordId);
+      if (journal.invoiceId || journal.paymentId || journal.invoiceAttempt || journal.paymentAttempt || journal.invoiceAllocationAttempt || (journal.invoiceAllocationIds || []).length) {
+        throw new Error("Review the pending invoice/payment operation before deleting this prepayment.");
+      }
+    };
     async function update(recordId, data) {
       success(await api.updateRecord({ Entity: PREPAYMENTS, APIData: Object.assign({ id: recordId }, data), Trigger: ["workflow"] }));
     }
@@ -142,7 +153,13 @@
           else if (!(Number(error && error.status) === 204 || error && error.code === "NO_CONTENT")) { request._documentError = "The request attachments could not be loaded."; }
         }
       }
-      return { payment: payment, request: request, fields: fields };
+      var rows = await search(ns.prepaymentAllocations.module, "(Prepayment:equals:" + recordId + ")");
+      var known = checkpoint(recordId).invoiceAllocationIds || [];
+      for (var allocationId of known) {
+        if (!rows.some(function (row) { return id(row) === allocationId; })) { rows.push(await get(ns.prepaymentAllocations.module, allocationId)); }
+      }
+      var allocationSummary = ns.prepaymentAllocations.summarize(payment, rows);
+      return { payment: payment, request: request, fields: fields, allocations: allocationSummary };
     }
     function validateContext(ctx) {
       if (ns.prepaymentsModel.isClosed(ctx.payment) || id(ctx.payment[ctx.fields.payment])) { throw new Error("This prepayment is already recorded, discarded or cancelled. Refresh to view its details."); }
@@ -158,7 +175,7 @@
     async function options(ctx) {
       var supplierId = id(ctx.request.Supplier), bookingId = id(ctx.request.Booking);
       if (!supplierId || !bookingId) { throw new Error("The request needs a supplier and booking before registration."); }
-      if (id(ctx.payment[ctx.fields.invoice])) {
+      if (ctx.allocations.complete) {
         var existingPayments = await invoicePayments(ctx);
         var accountChoices = existingPayments.length ? { accounts: [], defaultAccountId: "" } : await ns.loadOwnPaymentAccountChoices(api);
         return Object.assign({ settlements: [], invoices: [], existingPayments: existingPayments }, accountChoices);
@@ -175,10 +192,12 @@
       };
     }
     async function invoicePayments(ctx) {
-      var invoiceId = id(ctx.payment[ctx.fields.invoice]);
-      var invoice = await get(INVOICES, invoiceId);
-      validateInvoice(invoice, ctx);
-      var allocations = await search("Supplier_Pay_Allocations", "(Supplier_Invoice:equals:" + invoiceId + ")");
+      var allocations = [];
+      for (var row of ctx.allocations.rows) {
+        var invoiceId = id(row.Vendor_Invoice);
+        validateInvoice(await get(INVOICES, invoiceId), ctx);
+        allocations = allocations.concat(await search("Supplier_Pay_Allocations", "(Supplier_Invoice:equals:" + invoiceId + ")"));
+      }
       var journal = checkpoint(id(ctx.payment));
       if (journal.paymentId && journal.allocationIds && journal.allocationIds.length) {
         var created = await Promise.all(journal.allocationIds.map(function (allocationId) { return get("Supplier_Pay_Allocations", allocationId); }));
@@ -192,7 +211,7 @@
       var byPayment = {};
       allocations.forEach(function (allocation) {
         var paymentId = id(allocation.Supplier_Payment);
-        if (paymentId && id(allocation.Supplier_Invoice) === invoiceId && !cancelled(allocation) && positive(allocation.Allocated_Amount)) {
+        if (paymentId && ctx.allocations.rows.some(function (row) { return id(row.Vendor_Invoice) === id(allocation.Supplier_Invoice); }) && !cancelled(allocation) && positive(allocation.Allocated_Amount)) {
           byPayment[paymentId] = (byPayment[paymentId] || 0) + Number(allocation.Allocated_Amount);
         }
       });
@@ -200,12 +219,27 @@
         var payment = await get(PAYMENTS, paymentId);
         return { payment: payment, allocated: byPayment[paymentId] };
       }));
-      return payments.filter(function (item) { return !cancelled(item.payment); });
+      var availablePayments = [];
+      for (var item of payments) {
+        if (cancelled(item.payment) || !ns.prepaymentAllocations.covered(ctx.allocations, allocations, id(item.payment))) { continue; }
+        var balances = {};
+        allocations.filter(function (a) { return id(a.Supplier_Payment) === id(item.payment) && !cancelled(a) && a.Status !== "Void"; }).forEach(function (a) { balances[id(a.Supplier_Invoice)] = (balances[id(a.Supplier_Invoice)] || 0) + Number(a.Allocated_Amount); });
+        var peers = await search(PREPAYMENTS, "(" + ctx.fields.payment + ":equals:" + id(item.payment) + ")");
+        for (var peer of peers) {
+          if (id(peer) === id(ctx.payment)) { continue; }
+          var peerRows = await search(ns.prepaymentAllocations.module, "(Prepayment:equals:" + id(peer) + ")");
+          var peerSummary = ns.prepaymentAllocations.summarize(peer, peerRows);
+          if (!peerSummary.complete) { throw new Error("Another prepayment linked to this payment has incomplete invoice allocations. Review it in CRM."); }
+          peerRows.forEach(function (row) { var key = id(row.Vendor_Invoice); balances[key] = Number(balances[key] || 0) - Number(row.Allocated_Amount); });
+        }
+        if (ctx.allocations.rows.every(function (row) { return balances[id(row.Vendor_Invoice)] + 0.005 >= Number(row.Allocated_Amount); })) { availablePayments.push(item); }
+      }
+      return availablePayments;
     }
     async function linkPayment(recordId, paymentId) {
       var ctx = await context(recordId);
       validateContext(ctx);
-      if (!id(ctx.payment[ctx.fields.invoice])) { throw new Error("Create or select the invoice first."); }
+      if (!ctx.allocations.complete) { throw new Error("Allocate the full prepayment to invoices first."); }
       var payments = await invoicePayments(ctx);
       var selected = payments.find(function (item) { return id(item.payment) === String(paymentId); });
       if (!selected) { throw new Error("This payment is no longer associated with the invoice. Refresh the prepayment."); }
@@ -216,7 +250,7 @@
       var data = { Accounting_Status: "Prepayment recorded" };
       data[ctx.fields.payment] = { id: id(payment) };
       if (payment.Payment_Date) { data.Payment_Date = payment.Payment_Date; }
-      var settlementWarning = await ns.refreshQuickInvoiceSettlements(zoho, id(ctx.payment[ctx.fields.invoice]));
+      var settlementWarning = await refreshInvoices(ctx);
       await update(recordId, data);
       var requestWarning = await syncRequest(ctx);
       ctx = await context(recordId); ctx.settlementWarning = [settlementWarning, requestWarning].filter(Boolean).join(" "); return ctx;
@@ -227,10 +261,23 @@
       if (allocations.some(function (r) { return id(r.Vendor_Settlement) === settlementId && r.Status === "Active"; })) { return; }
       await create("Inv_Set_Allocations", { Name: invoiceId + "-" + settlementId, Vendor_Invoice: { id: invoiceId }, Vendor_Settlement: { id: settlementId }, Allocated_Amount: Number(invoice.Total_Payable_Amount), Allocation_Date: invoice.Invoice_Date, Status: "Active", Allocation_Source: "Manual" });
     }
+    async function assertAllocationSchema() {
+      var response = await zoho.CRM.META.getFields({ Entity: ns.prepaymentAllocations.module });
+      var fields = response && response.fields || [], name = fields.find(function (f) { return f.api_name === "Name"; });
+      if (!name || !name.unique || !Object.keys(name.unique).length) { throw new Error("Configure Name to disallow duplicates in Prepayment Invoice Allocations before registering invoices."); }
+    }
     async function saveInvoice(recordId, input, confirmSelfEmployment) {
       var ctx = await context(recordId), journal = checkpoint(recordId), invoice, invoiceId;
       validateContext(ctx);
-      invoiceId = id(ctx.payment[ctx.fields.invoice]) || journal.invoiceId || input.existingInvoiceId;
+      if (journal.paymentAttempt || journal.paymentId) { throw new Error("A payment is in progress. Verify it before changing invoice allocations."); }
+      if (ctx.allocations.complete && !input.existingInvoiceId && !journal.invoiceId) { ctx.settlementWarning = await refreshInvoices(ctx); return ctx; }
+      var applied = Number(input.allocatedAmount == null ? ctx.allocations.remaining : input.allocatedAmount);
+      var existingRow = ctx.allocations.rows.find(function (row) { return id(row.Vendor_Invoice) === String(input.existingInvoiceId || journal.invoiceId || ""); });
+      if (existingRow) { applied = input.allocatedAmount == null ? Number(existingRow.Allocated_Amount) : applied; }
+      if (!positive(applied) || (!existingRow && Math.round(applied * 100) > Math.round(ctx.allocations.remaining * 100))) { throw new Error("Enter a positive allocated amount within the remaining prepayment amount."); }
+      if (journal.invoiceId && input.existingInvoiceId && journal.invoiceId !== input.existingInvoiceId) { throw new Error("Finish linking the previously created invoice before selecting another invoice."); }
+      await assertAllocationSchema();
+      invoiceId = journal.invoiceId || input.existingInvoiceId;
       if (!invoiceId) {
         if (journal.invoiceAttempt) { throw new Error("The previous invoice request was not confirmed. Check CRM and select the existing invoice before trying again."); }
         if (ctx.payment.Accounting_Status === "Pending payment record") { throw new Error("Select the existing invoice for this prepayment."); }
@@ -238,7 +285,7 @@
         var invoiceType = input.invoiceType || "Proforma", irpf = Number(input.irpf || 0), amounts = invoiceAmounts(input);
         if (["Proforma", "Final Invoice", "Tickets", "Commission"].indexOf(invoiceType) === -1) { throw new Error("Select a valid invoice type for an outbound prepayment."); }
         if (!Number.isFinite(irpf) || irpf < 0 || !positive(amounts.total)) { throw new Error("Enter a valid IRPF percentage and positive total payable."); }
-        if (amounts.total < Number(ctx.payment.Amount)) { throw new Error("The invoice total payable after IRPF cannot be smaller than this prepayment."); }
+        if (amounts.total + 0.005 < applied) { throw new Error("The invoice total payable after IRPF cannot be smaller than this prepayment."); }
         var settlement = await get("Supplier_Settlements", input.settlementId);
         if (id(settlement.Supplier) !== id(ctx.request.Supplier) || id(settlement.Booking) !== id(ctx.request.Booking) || currency(settlement) !== currency(ctx.payment) || cancelled(settlement)) { throw new Error("Select a settlement for this supplier, booking and currency."); }
         var duplicates = await search(INVOICES, "(Supplier:equals:" + id(ctx.request.Supplier) + ")");
@@ -272,20 +319,52 @@
       validateInvoice(invoice, ctx);
       var invoiceTotal = Number(invoice.Total_Payable_Amount);
       if (invoice.Total_Payable_Amount == null || String(invoice.Total_Payable_Amount).trim() === "" || !Number.isFinite(invoiceTotal)) { throw new Error("The invoice needs a valid Total Payable Amount before linking this prepayment."); }
-      if (invoiceTotal + 0.005 < Number(ctx.payment.Amount)) { throw new Error("The invoice's Total Payable Amount (" + invoiceTotal.toFixed(2) + " " + currency(invoice) + ") is smaller than this prepayment (" + Number(ctx.payment.Amount).toFixed(2) + " " + currency(ctx.payment) + ")."); }
-      var link = {}; link[ctx.fields.invoice] = { id: invoiceId };
-      await update(recordId, link);
+      if (invoiceTotal + 0.005 < applied) { throw new Error("The invoice's Total Payable Amount (" + invoiceTotal.toFixed(2) + " " + currency(invoice) + ") is smaller than this prepayment (" + Number(ctx.payment.Amount).toFixed(2) + " " + currency(ctx.payment) + ")."); }
       if (journal.invoiceId === invoiceId) { await ensureSettlement(invoice); }
-      await update(recordId, { Accounting_Status: "Pending payment record" });
+      if (existingRow) {
+        if (Math.round(Number(existingRow.Allocated_Amount) * 100) !== Math.round(applied * 100)) { throw new Error("This invoice is already allocated with a different amount. Remove its association first."); }
+      } else {
+        if (journal.invoiceAllocationAttempt && !journal.invoiceAllocationId) { throw new Error("The previous allocation was not confirmed. Review CRM before retrying."); }
+        if (!journal.invoiceAllocationId) {
+          checkpoint(recordId, Object.assign(journal, { invoiceId: invoiceId, invoiceAllocationAttempt: true }));
+          var allocationId = await create(ns.prepaymentAllocations.module, { Name: recordId + "-" + invoiceId, Prepayment: { id: recordId }, Vendor_Invoice: { id: invoiceId }, Allocated_Amount: applied, Currency: currency(ctx.payment) });
+          checkpoint(recordId, Object.assign(journal, { invoiceAllocationId: allocationId, invoiceAllocationIds: (journal.invoiceAllocationIds || []).concat(allocationId) }));
+        }
+        var saved = await get(ns.prepaymentAllocations.module, journal.invoiceAllocationId);
+        if (id(saved.Prepayment) !== String(recordId) || id(saved.Vendor_Invoice) !== invoiceId || Math.round(Number(saved.Allocated_Amount) * 100) !== Math.round(applied * 100) || saved.Currency !== currency(ctx.payment)) { throw new Error("CRM did not confirm the invoice allocation. Review it before retrying."); }
+      }
+      ctx = await context(recordId);
+      await update(recordId, { Accounting_Status: ctx.allocations.complete ? "Pending payment record" : "Pending invoice" });
+      delete journal.invoiceId; delete journal.invoiceAttempt; delete journal.invoiceAllocationId; delete journal.invoiceAllocationAttempt;
+      checkpoint(recordId, journal);
       return finishWithSettlementRefresh(recordId, invoiceId);
     }
-    async function savePayment(recordId, input) {
-      var ctx = await context(recordId), journal = checkpoint(recordId), invoiceId = id(ctx.payment[ctx.fields.invoice]);
+    async function refreshInvoices(ctx) {
+      var warnings = [];
+      for (var row of ctx.allocations.rows) { warnings.push(await ns.refreshQuickInvoiceSettlements(zoho, id(row.Vendor_Invoice))); }
+      return warnings.filter(Boolean).join(" ");
+    }
+    async function removeInvoice(recordId, allocationId) {
+      var ctx = await context(recordId), journal = checkpoint(recordId);
       validateContext(ctx);
-      if (!invoiceId) { throw new Error("Create or select the invoice first."); }
-      var invoice = await get(INVOICES, invoiceId);
-      validateInvoice(invoice, ctx);
-      if (journal.invoiceId === invoiceId) { await ensureSettlement(invoice); }
+      if (journal.paymentAttempt || journal.paymentId || journal.invoiceAttempt || journal.invoiceAllocationAttempt) { throw new Error("Finish or review the pending operation before removing an invoice association."); }
+      var row = ctx.allocations.rows.find(function (item) { return id(item) === String(allocationId); });
+      if (!row) { throw new Error("Invoice association no longer exists. Refresh the prepayment."); }
+      success(await api.deleteRecord({ Entity: ns.prepaymentAllocations.module, RecordID: allocationId }));
+      journal.invoiceAllocationIds = (journal.invoiceAllocationIds || []).filter(function (value) { return value !== String(allocationId); });
+      checkpoint(recordId, journal);
+      await update(recordId, { Accounting_Status: "Pending invoice" });
+      return context(recordId);
+    }
+    async function savePayment(recordId, input) {
+      var ctx = await context(recordId), journal = checkpoint(recordId);
+      validateContext(ctx);
+      if (!ctx.allocations.complete) { throw new Error("Allocate the full prepayment to invoices first."); }
+      var invoices = [];
+      for (var row of ctx.allocations.rows) {
+        var invoice = await get(INVOICES, id(row.Vendor_Invoice));
+        validateInvoice(invoice, ctx); invoices.push(invoice);
+      }
       var paymentId = journal.paymentId;
       if (!paymentId) {
         if ((await invoicePayments(ctx)).length) {
@@ -294,17 +373,16 @@
           throw existingError;
         }
         if (journal.paymentAttempt) { throw new Error("The previous payment request was not confirmed. Check CRM before recording another payment."); }
-        if (!input.date) { throw new Error("Enter the payment date."); }
-        validatePending(invoice, ctx.payment);
+        ctx.allocations.rows.forEach(function (row, index) { validatePending(invoices[index], { Amount: row.Allocated_Amount, Currency: currency(ctx.payment) }); });
         var accountId = input.accountId;
         if (!accountId) { throw new Error("Select an Own payment account before creating the payment."); }
         var account = await get("Payment_Accounts", accountId);
         if (!ns.isOwnQuickPaymentAccount(account)) { throw new Error("Select an active Own payment account as the payment source."); }
         var allocations = {}, supplierAccounts = {};
-        allocations[invoiceId] = Number(ctx.payment.Amount);
-        var paymentData = { Name: "PREPAY-" + recordId, Currency: currency(ctx.payment), Payment_Date: input.date, Payment_Account: accountId, Status: "Paid", Accounting_Status: "Pending", Movement_Type: "Outbound Payment", allocations: allocations, Payment_Accounts_By_Supplier: supplierAccounts };
-        checkpoint(recordId, Object.assign(journal, { paymentAttempt: true, paymentDate: input.date }));
-        var response = await zoho.CRM.FUNCTIONS.execute("createsupplierpaymentfrominvoices", { arguments: JSON.stringify({ supplierInvoiceIds: invoiceId, paymentDataString: JSON.stringify(paymentData) }) });
+        ctx.allocations.rows.forEach(function (row) { allocations[id(row.Vendor_Invoice)] = Number(row.Allocated_Amount); });
+        var paymentData = { Name: "PREPAY-" + recordId, Currency: currency(ctx.payment), Payment_Account: accountId, Status: "Paid", Accounting_Status: "Pending", Movement_Type: "Outbound Payment", allocations: allocations, Payment_Accounts_By_Supplier: supplierAccounts };
+        checkpoint(recordId, Object.assign(journal, { paymentAttempt: true }));
+        var response = await zoho.CRM.FUNCTIONS.execute("createsupplierpaymentfrominvoices", { arguments: JSON.stringify({ supplierInvoiceIds: invoices.map(id).join("|||"), paymentDataString: JSON.stringify(paymentData) }) });
         var result = response && response.details && response.details.output;
         result = typeof result === "string" ? JSON.parse(result) : result;
         if (result && result.payment_id) {
@@ -315,7 +393,7 @@
         checkpoint(recordId, Object.assign(journal, { paymentId: paymentId }));
       }
       // The invoice is already paid, even if verification or the prepayment link fails below.
-      var settlementWarning = await ns.refreshQuickInvoiceSettlements(zoho, invoiceId);
+      var settlementWarning = await refreshInvoices(ctx);
       var savedPayment = await get(PAYMENTS, paymentId);
       var savedAllocations;
       try {
@@ -326,18 +404,19 @@
       } catch (error) {
         throw new Error("Payment " + paymentId + " was created, but its invoice allocation needs review: " + error.message + " No additional payment will be created. Reopen this prepayment to retry verification.");
       }
-      var matching = savedAllocations.filter(function (r) { return id(r.Supplier_Payment) === paymentId && id(r.Supplier_Invoice) === invoiceId && !cancelled(r); });
-      var allocated = matching.reduce(function (sum, r) { return sum + Number(r.Allocated_Amount || 0); }, 0);
       var issues = [], expected = Number(ctx.payment.Amount);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(savedPayment.Payment_Date || ""))) { issues.push("CRM did not return the saved payment date"); }
       if (currency(savedPayment) !== currency(ctx.payment)) { issues.push("payment currency is " + currency(savedPayment) + "; prepayment currency is " + currency(ctx.payment)); }
       if (["Paid", "Reconciled"].indexOf(savedPayment.Status) === -1) { issues.push("payment status is " + (savedPayment.Status || "missing") + "; expected Paid or Reconciled"); }
-      if (!positive(savedPayment.Payment_Amount) || Math.abs(Number(savedPayment.Payment_Amount) - expected) > 0.005) { issues.push("payment amount is " + (savedPayment.Payment_Amount == null ? "missing" : savedPayment.Payment_Amount) + "; prepayment amount is " + expected); }
-      if (!positive(allocated) || Math.abs(allocated - expected) > 0.005) { issues.push("amount allocated to invoice " + invoiceId + " is " + allocated + "; expected " + expected + (matching.length ? "" : " (no matching allocation found)")); }
-      if (matching.some(function (r) { return !positive(r.Allocated_Amount); })) { issues.push("the invoice contains an invalid allocation amount"); }
+      if (!positive(savedPayment.Payment_Amount) || Math.abs(Number(savedPayment.Payment_Amount) - expected) > 0.005) { issues.push("payment amount is " + savedPayment.Payment_Amount + "; prepayment amount is " + expected); }
+      if (!ns.prepaymentAllocations.covered(ctx.allocations, savedAllocations, paymentId)) { issues.push("no matching allocation found covering every invoice in the prepayment"); }
+      if (savedAllocations.some(function (row) { return id(row.Supplier_Payment) !== paymentId || !positive(row.Allocated_Amount) || !ctx.allocations.rows.some(function (link) { return id(link.Vendor_Invoice) === id(row.Supplier_Invoice); }); })) { issues.push("payment contains an invalid or unrelated invoice allocation"); }
+      var actualTotal = savedAllocations.filter(function (row) { return id(row.Supplier_Payment) === paymentId && !cancelled(row) && row.Status !== "Void"; }).reduce(function (sum, row) { return sum + Number(row.Allocated_Amount); }, 0);
+      if (!Number.isFinite(actualTotal) || Math.abs(actualTotal - expected) > 0.005) { issues.push("total allocated is " + actualTotal + "; expected " + expected); }
       if (issues.length) {
         throw new Error("Payment " + paymentId + " was created, but needs review: " + issues.join(". ") + ". No additional payment will be created.");
       }
-      var data = { Accounting_Status: "Prepayment recorded", Payment_Date: journal.paymentDate || input.date };
+      var data = { Accounting_Status: "Prepayment recorded", Payment_Date: savedPayment.Payment_Date };
       data[ctx.fields.payment] = { id: paymentId };
       try { await update(recordId, data); }
       catch (error) {
@@ -348,7 +427,108 @@
       var requestWarning = await syncRequest(ctx);
       ctx = await context(recordId); ctx.settlementWarning = [settlementWarning, requestWarning].filter(Boolean).join(" "); return ctx;
     }
-    return { context: context, options: options, saveInvoice: saveInvoice, savePayment: savePayment, linkPayment: linkPayment };
+    async function relatedServices(ctx) {
+      if (!id(ctx.request)) { throw new Error("This prepayment has no request to resolve its services."); }
+      var links = await search("Prepayment_Request_Services", '(Prepayment_Request:equals:' + id(ctx.request) + ')');
+      var serviceIds = new Set();
+      links.forEach(function (link) {
+        if (id(link.Prepayment_Request) !== id(ctx.request) || !id(link.Booking_Service)) { throw new Error("An invalid request/service association needs review in CRM."); }
+        serviceIds.add(id(link.Booking_Service));
+      });
+      var records = await Promise.all(Array.from(serviceIds).map(function (serviceId) { return get("Booking_Services", serviceId); }));
+      records.sort(function (a, b) { return String(a.Service_Date || '9999').localeCompare(String(b.Service_Date || '9999')) || id(a).localeCompare(id(b)); });
+      return { records: records, description: "Services linked to this prepayment request" };
+    }
+    async function associatedSettlement(ctx, selectedSettlementId, selectedInvoiceId) {
+      var invoiceId = selectedInvoiceId || (ctx.allocations.rows.length === 1 ? id(ctx.allocations.rows[0].Vendor_Invoice) : "");
+      var settlementId = selectedSettlementId;
+      if (invoiceId) {
+        var invoice = await get(INVOICES, invoiceId);
+        settlementId = id(invoice.Supplier_Settlement);
+      }
+      if (!settlementId) { return null; }
+      var settlement = await get("Supplier_Settlements", settlementId);
+      if (id(settlement.Supplier) !== id(ctx.request.Supplier) || id(settlement.Booking) !== id(ctx.request.Booking)) { throw new Error("The settlement does not belong to this request's supplier and booking."); }
+      return settlement;
+    }
+    async function associatedSettlements(ctx, selectedSettlementId, selectedInvoiceId) {
+      if (selectedInvoiceId || selectedSettlementId || !ctx.allocations.rows.length) {
+        var selected = await associatedSettlement(ctx, selectedSettlementId, selectedInvoiceId);
+        return selected ? [selected] : [];
+      }
+      var records = [], seen = new Set();
+      for (var row of ctx.allocations.rows) {
+        var settlement = await associatedSettlement(ctx, "", id(row.Vendor_Invoice));
+        if (settlement && !seen.has(id(settlement))) { seen.add(id(settlement)); records.push(settlement); }
+      }
+      return records;
+    }
+    async function serviceSelection(ctx) {
+      var request = await get("Prepayment_Requests", id(ctx.request));
+      if (!id(request.Supplier) || !id(request.Booking)) { throw new Error("The request needs a supplier and booking."); }
+      var links = await search("Prepayment_Request_Services", "(Prepayment_Request:equals:" + id(request) + ")");
+      var records = await search("Booking_Services", "((Supplier:equals:" + id(request.Supplier) + ")and(Booking:equals:" + id(request.Booking) + "))");
+      if (records.some(function (r) { return id(r.Supplier) !== id(request.Supplier) || id(r.Booking) !== id(request.Booking); }) || links.some(function (l) { return id(l.Prepayment_Request) !== id(request) || !id(l.Booking_Service); })) { throw new Error("Invalid service associations returned by CRM."); }
+      var known = new Set(records.map(id));
+      for (var link of links) {
+        if (!known.has(id(link.Booking_Service))) { throw new Error("An associated service no longer belongs to this supplier and booking. Review it in CRM before editing."); }
+      }
+      records.sort(function (a, b) { return String(a.Service_Date || "9999").localeCompare(String(b.Service_Date || "9999")) || id(a).localeCompare(id(b)); });
+      return { records: records, links: links, selected: Array.from(new Set(links.map(function (l) { return id(l.Booking_Service); }))) };
+    }
+    async function saveServiceSelection(recordId, selectedIds) {
+      var ctx = await context(recordId);
+      validateContext(ctx);
+      if (ctx.allocations.rows.length) { throw new Error("An invoice is already linked. Reopen the prepayment to continue."); }
+      var selected = new Set(selectedIds.map(String));
+      if (!selected.size) { throw new Error("Keep at least one service associated with this request."); }
+      var current = await serviceSelection(ctx), allowed = new Set(current.records.map(id));
+      if (Array.from(selected).some(function (value) { return !allowed.has(value); })) { throw new Error("Select services from this request's supplier and booking only."); }
+      var retainedLinks = current.links.filter(function (link) { return selected.has(id(link.Booking_Service)); });
+      // Confirm additions before removing anything, including when retrying a partial save.
+      for (var serviceId of selected) {
+        if (current.selected.indexOf(serviceId) !== -1) { continue; }
+        var key = "prepayment-service-link-" + id(ctx.request) + "-" + serviceId;
+        var attempt = memory[key] || (storage && JSON.parse(storage.getItem(key) || "null"));
+        if (attempt && !attempt.id) { throw new Error("A previous association could not be confirmed. Refresh and retry once CRM has indexed it."); }
+        if (!attempt) {
+          attempt = {}; memory[key] = attempt;
+          if (storage) { storage.setItem(key, JSON.stringify(attempt)); }
+          var response = await api.insertRecord({ Entity: "Prepayment_Request_Services", APIData: { Name: id(ctx.request) + "-" + serviceId, Prepayment_Request: { id: id(ctx.request) }, Booking_Service: { id: serviceId } }, Trigger: ["workflow"] });
+          var outcome = response && response.data && response.data[0];
+          if (outcome && outcome.code && outcome.code !== "SUCCESS" && outcome.status !== "success") {
+            delete memory[key];
+            if (storage && storage.removeItem) { storage.removeItem(key); }
+          }
+          var created = success(response);
+          if (!created.details || !created.details.id) { throw new Error("CRM did not return the association ID. Refresh before retrying."); }
+          attempt.id = String(created.details.id);
+          if (storage) { storage.setItem(key, JSON.stringify(attempt)); }
+        }
+        var saved = await get("Prepayment_Request_Services", attempt.id);
+        if (id(saved.Prepayment_Request) !== id(ctx.request) || id(saved.Booking_Service) !== serviceId) { throw new Error("CRM did not confirm the service association."); }
+        retainedLinks.push(saved);
+      }
+      // Read by ID: CRM search indexing can lag behind a successful insert.
+      for (var retained of retainedLinks) {
+        var verified = await get("Prepayment_Request_Services", id(retained));
+        if (id(verified.Prepayment_Request) !== id(ctx.request) || !selected.has(id(verified.Booking_Service))) { throw new Error("CRM did not confirm a selected service. Retry to finish saving."); }
+      }
+      if (!retainedLinks.length) { throw new Error("Keep at least one confirmed service associated with this request."); }
+      for (var link of current.links) {
+        if (!selected.has(id(link.Booking_Service))) { success(await api.deleteRecord({ Entity: "Prepayment_Request_Services", RecordID: id(link) })); }
+      }
+      var result = { records: [], selected: Array.from(selected), links: retainedLinks, description: "Services linked to this prepayment request" };
+      for (var selectedId of selected) { result.records.push(await get("Booking_Services", selectedId)); }
+      result.records.sort(function (a, b) { return String(a.Service_Date || "9999").localeCompare(String(b.Service_Date || "9999")) || id(a).localeCompare(id(b)); });
+      selected.forEach(function (serviceId) {
+        var key = "prepayment-service-link-" + id(ctx.request) + "-" + serviceId;
+        delete memory[key];
+        if (storage && storage.removeItem) { storage.removeItem(key); }
+      });
+      return result;
+    }
+    return { context: context, options: options, saveInvoice: saveInvoice, removeInvoice: removeInvoice, savePayment: savePayment, linkPayment: linkPayment, relatedServices: relatedServices, associatedSettlement: associatedSettlement, associatedSettlements: associatedSettlements, serviceSelection: serviceSelection, saveServiceSelection: saveServiceSelection };
   };
 
   ns.createPrepaymentWorkflow = function (panel, zoho, onChanged) {
@@ -356,6 +536,14 @@
     var find = function (key) { return modal.querySelector('[data-prepayment-workflow-' + key + ']'); };
     var service = ns.createPrepaymentWorkflowService(zoho, global.sessionStorage);
     var ctx, choices, busy = false, generation = 0, opener, phase, documentFiles = [], resolveSelfEmployment;
+    var notesButton = find("notes");
+    if (notesButton) notesButton.addEventListener("click", async function () {
+      if (busy || !ctx || notesButton.disabled) return;
+      notesButton.disabled = true;
+      try { await ns.openPrepaymentAccountingNotes(id(ctx.payment)); }
+      catch (error) { message(error.message || "Could not open Accounting Notes.", true); }
+      finally { notesButton.disabled = !ns.accountingNotesEnabled || busy || !ctx; }
+    });
     var invoiceNameDefault = ns.createInvoiceNameDefault(find("reference"), function () { return zoho.CRM.API; }, function (error) { message("Could not suggest an invoice number: " + error.message, true); });
     function updateInvoiceNameDefault() {
       if (!ctx || phase !== "invoice") { return; }
@@ -376,7 +564,115 @@
       if (resolveSelfEmployment) { var resolve = resolveSelfEmployment; resolveSelfEmployment = null; resolve(confirmed); }
     }
     function message(text, error) { find("message").textContent = text || ""; find("message").classList.toggle("is-error", Boolean(error)); }
-    function setBusy(value) { busy = value; find("submit").disabled = value; find("fields").disabled = value; modal.setAttribute("aria-busy", String(value)); find("spinner").hidden = !value; }
+    function serviceContent(record) {
+          var serviceDate = String(record.Service_Date || ""), match = serviceDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+          var amount = record.Total_Purchase_Price, price = 'Not provided';
+          if (amount != null && String(amount).trim() !== '' && Number.isFinite(Number(amount))) {
+            var code = record.Currency || currency(ctx.payment);
+            try { price = new Intl.NumberFormat('en-GB', { style: 'currency', currency: code }).format(Number(amount)); }
+            catch (ignored) { price = String(amount) + ' ' + code; }
+          }
+          return '<div class="prepayment-service-date"><span>Service Date</span><strong>' + esc(match ? match[3] + '/' + match[2] + '/' + match[1] : serviceDate || 'Not provided') + '</strong></div><div><span>Product Description</span><p>' + esc(record.Product_Description || 'No product description provided.') + '</p></div><div class="prepayment-service-price"><span>Total Purchase Price</span><strong>' + esc(price) + '</strong></div>';
+    }
+    var editServicesButton = find("services-edit");
+    function serviceMessage(text, error) {
+      var node = find("services-message");
+      if (node) { node.textContent = text || ""; node.hidden = !text; node.classList.toggle("is-error", Boolean(error)); }
+    }
+    var editingServices = false, serviceChoices = [], selectedServiceIds = new Set();
+    function serviceTotal(records) {
+      var totals = {}, missing = 0;
+      records.forEach(function (record) {
+        var amount = record.Total_Purchase_Price, code = record.Currency || currency(ctx.payment);
+        if (amount == null || String(amount).trim() === "" || !Number.isFinite(Number(amount))) { missing += 1; return; }
+        totals[code] = (totals[code] || 0) + Math.round(Number(amount) * 100);
+      });
+      var total = Object.keys(totals).map(function (code) { return new Intl.NumberFormat("en-GB", { style: "currency", currency: code }).format(totals[code] / 100); }).join(" + ") || "0";
+      return esc(total) + (missing ? ' (' + missing + ' without a price; total incomplete)' : '');
+    }
+    function renderServiceEditor() {
+      var total = serviceTotal(serviceChoices.filter(function (record) { return selectedServiceIds.has(id(record)); }));
+      find("services").innerHTML = '<p>Services for this supplier and booking. Changes apply to the whole prepayment request.</p><p class="prepayment-services-total" role="status">Selected: ' + selectedServiceIds.size + ' &middot; Total: ' + total + '</p><ul>' + serviceChoices.map(function (record) {
+        var checked = selectedServiceIds.has(id(record));
+        return '<li class="prepayment-service-choice"><label><input type="checkbox" data-service-choice="' + esc(id(record)) + '"' + (checked ? ' checked' : '') + '><span>' + (checked ? 'Included' : 'Not included') + '</span></label>' + serviceContent(record) + '</li>';
+      }).join('') + '</ul><div class="prepayment-service-actions"><button type="button" class="button" data-service-save' + (!selectedServiceIds.size ? ' disabled' : '') + '>Save services</button><button type="button" class="button tertiary" data-service-cancel>Cancel</button></div>';
+    }
+    if (find("services")) {
+      find("services").addEventListener("change", function (event) {
+        var value = event.target.getAttribute("data-service-choice");
+        if (!value || busy) { return; }
+        if (event.target.checked) { selectedServiceIds.add(value); } else { selectedServiceIds.delete(value); }
+        renderServiceEditor();
+        var checkbox = Array.prototype.find.call(find("services").querySelectorAll("[data-service-choice]"), function (node) { return node.getAttribute("data-service-choice") === value; });
+        if (checkbox) { checkbox.focus(); }
+      });
+      async function handleServiceAction(event) {
+        var button = event.target.closest("button");
+        if (!button || busy || phase !== "invoice" || ctx.allocations.rows.length) { return; }
+        event.preventDefault();
+        if (button.hasAttribute("data-service-cancel")) { editingServices = false; serviceMessage(""); await renderServices(); return; }
+        if (!button.hasAttribute("data-service-edit") && !button.hasAttribute("data-service-save")) { return; }
+        servicesGeneration += 1;
+        setBusy(true); serviceMessage(button.hasAttribute("data-service-save") ? "Saving services..." : "Loading services...");
+        try {
+          if (button.hasAttribute("data-service-edit")) {
+            var details = button.closest && button.closest("details");
+            if (details) { details.open = true; }
+            var selection = await service.serviceSelection(ctx);
+            serviceChoices = selection.records; selectedServiceIds = new Set(selection.selected); editingServices = true;
+            renderServiceEditor(); serviceMessage("");
+          } else {
+            var savedSelection = await service.saveServiceSelection(id(ctx.payment), Array.from(selectedServiceIds));
+            editingServices = false; await renderServices(savedSelection); serviceMessage("Associated services updated.");
+            try { await onChanged(); } catch (refreshError) { serviceMessage("Services saved, but the overview could not refresh. " + (refreshError.message || ""), true); }
+          }
+        } catch (error) { serviceMessage(error.message || "Could not save associated services. Retry to finish saving.", true); }
+        finally { setBusy(false); }
+      }
+      find("services").addEventListener("click", handleServiceAction);
+      if (editServicesButton) editServicesButton.addEventListener("click", handleServiceAction);
+    }
+    var servicesGeneration = 0;
+    async function renderServices(confirmedSelection) {
+      if (editServicesButton) { editServicesButton.hidden = phase !== "invoice" || editingServices || Boolean(ctx && ctx.allocations.rows.length); }
+      var container = find("services");
+      if (!container || !ctx || editingServices) { return; }
+      var token = ++servicesGeneration, currentGeneration = generation;
+      container.textContent = "Loading services…";
+      try {
+        var result = confirmedSelection && Array.isArray(confirmedSelection.records) ? confirmedSelection : await service.relatedServices(ctx);
+        if (token !== servicesGeneration || currentGeneration !== generation) { return; }
+        container.innerHTML = '<p class="prepayment-services-total">Total: ' + serviceTotal(result.records) + '</p>' + (result.description === "Services linked to this prepayment request" ? '' : '<p class="prepayment-services-description">' + esc(result.description) + '</p>') + (result.records.length ? '<ul>' + result.records.map(function (record) {
+          return '<li>' + serviceContent(record) + '</li>';
+        }).join('') + '</ul>' : '<p>No associated services found.</p>');
+      } catch (error) { if (token === servicesGeneration && currentGeneration === generation) { container.textContent = "Could not load associated services. " + (error.message || "Reopen the prepayment to retry."); } }
+    }
+    var settlementGeneration = 0;
+    async function renderSettlement() {
+      var container = find("settlement-summary");
+      if (!container || !ctx) { return; }
+      var token = ++settlementGeneration, currentGeneration = generation;
+      container.textContent = "Loading settlement...";
+      try {
+        var records = await service.associatedSettlements(ctx, phase === "invoice" ? find("settlement").value : "", phase === "invoice" ? find("existing").value : "");
+        if (token !== settlementGeneration || currentGeneration !== generation) { return; }
+        if (!records.length) { container.textContent = "No settlement associated yet. Select a settlement or link an invoice to see its totals."; return; }
+        function amount(value) { return value == null || String(value).trim() === "" || !Number.isFinite(Number(value)) ? null : Number(value); }
+        container.innerHTML = records.map(function (record) {
+        var cost = amount(record.Total_Service_Cost), invoiced = amount(record.Total_Invoice), paid = amount(record.Total_Paid);
+        var pendingInvoice = cost == null || invoiced == null ? null : Math.round((cost - invoiced) * 100) / 100;
+        var pendingPayment = invoiced == null || paid == null ? null : Math.round((invoiced - paid) * 100) / 100;
+        var format = new Intl.NumberFormat("en-GB", { style: "currency", currency: record.Currency || currency(ctx.payment) });
+        return '<p>' + recordLink("Supplier_Settlements", record) + '</p><div class="invoice-create-summary-grid">' + [
+          ["Total service cost", cost], ["Already invoiced", invoiced], ["Pending invoicing", pendingInvoice, true],
+          ["Total paid", paid], ["Unpaid invoiced amount", pendingPayment]
+        ].map(function (item) { return '<div class="invoice-create-summary-item' + (item[2] ? ' invoice-create-summary-item-highlight' : '') + '"><span>' + item[0] + '</span><strong>' + (item[1] == null ? 'Not provided' : esc(format.format(item[1]))) + '</strong></div>'; }).join('') + '</div>';
+        }).join('');
+      } catch (error) {
+        if (token === settlementGeneration && currentGeneration === generation) { container.textContent = "Could not load settlement. " + (error.message || "Please retry."); }
+      }
+    }
+    function setBusy(value) { busy = value; if (editServicesButton) { editServicesButton.disabled = value; editServicesButton.hidden = phase !== "invoice" || editingServices || Boolean(ctx && ctx.allocations.rows.length); } if (find("services")) { Array.prototype.forEach.call(find("services").querySelectorAll("button, input"), function (node) { node.disabled = value || (node.hasAttribute("data-service-save") && !selectedServiceIds.size); }); } find("submit").disabled = value; find("fields").disabled = value; modal.setAttribute("aria-busy", String(value)); find("spinner").hidden = !value; if (notesButton) notesButton.disabled = !ns.accountingNotesEnabled || value || !ctx; }
     function option(record) { return '<option value="' + esc(id(record)) + '">' + esc(label(record)) + '</option>'; }
     function recordLink(module, record, text) { return id(record) ? '<button type="button" class="prepayment-record-link" data-prepayment-module="' + module + '" data-prepayment-record="' + esc(id(record)) + '">' + esc(text || label(record) || id(record)) + '</button>' : '—'; }
     function invoiceMode() {
@@ -386,17 +682,21 @@
       find("submit").textContent = existing ? "Link invoice" : "Create invoice";
     }
     function render() {
-      var p = ctx.payment, r = ctx.request, invoice = p[ctx.fields.invoice], payment = p[ctx.fields.payment];
+      var p = ctx.payment, r = ctx.request, payment = p[ctx.fields.payment];
       var closed = ns.prepaymentsModel.isClosed(p) || id(payment);
-      var hasExistingPayment = id(invoice) && choices.existingPayments && choices.existingPayments.length;
-      phase = closed ? "view" : hasExistingPayment ? "link-payment" : id(invoice) ? "payment" : "invoice";
+      var hasExistingPayment = ctx.allocations.complete && choices.existingPayments && choices.existingPayments.length;
+      phase = closed ? "view" : hasExistingPayment ? "link-payment" : ctx.allocations.complete ? "payment" : "invoice";
       find("title").textContent = phase === "view" ? "Prepayment details" : phase === "link-payment" ? "Link existing payment" : phase === "payment" ? "Record prepayment" : "Register supplier invoice";
-      find("context").innerHTML = '<dl>' + [["Prepayment", esc(p.Name)], ["Observations", esc(p.Observations || r.Observations || "—")], ["Reported By", esc(r.Requested_By_2 || "?")], ["Supplier", esc(label(r.Supplier))], ["Booking", esc(r.MFSP_Reference || label(r.Booking))], ["Amount", esc(new Intl.NumberFormat("en-GB", { style: "currency", currency: currency(p) }).format(Number(p.Amount || 0)))], ["Accounting Status", esc(p.Accounting_Status || "Pending invoice")], ["Bank Payment Requested", p.Bank_Payment_Requested === true ? "Requested" : "Not requested"], ["Bank Receipt Needed", p.Bank_Receipt_Needed === true ? "Needed" : "Not needed"], ["Due date", esc(p.Due_Date || "—")], ["Invoice", recordLink(INVOICES, invoice)], ["Payment", recordLink(PAYMENTS, payment)]].map(function (item) { return '<div' + (item[0] === 'Observations' ? ' class="prepayment-observations"' : '') + '><dt>' + item[0] + '</dt><dd>' + item[1] + '</dd></div>'; }).join("") + '</dl>';
+      find("context").innerHTML = '<dl>' + [["Prepayment", esc(p.Name)], ["Observations", esc(p.Observations || r.Observations || "—")], ["Reported By", esc(r.Requested_By_2 || "?")], ["Supplier", esc(label(r.Supplier)) + (ns.supplierAccountingInfo ? ns.supplierAccountingInfo.infoHtml(id(r.Supplier)) : "")], ["Booking", esc(r.MFSP_Reference || label(r.Booking))], ["Amount", esc(new Intl.NumberFormat("en-GB", { style: "currency", currency: currency(p) }).format(Number(p.Amount || 0)))], ["Accounting Status", esc(p.Accounting_Status || "Pending invoice")], ["Bank Payment Requested", p.Bank_Payment_Requested === true ? "Requested" : "Not requested"], ["Bank Receipt Needed", p.Bank_Receipt_Needed === true ? "Needed" : "Not needed"], ["Due date", esc(p.Due_Date || "—")], ["Payment", recordLink(PAYMENTS, payment)]].map(function (item) { return '<div' + (item[0] === 'Observations' ? ' class="prepayment-observations"' : '') + '><dt>' + item[0] + '</dt><dd>' + item[1] + '</dd></div>'; }).join("") + '</dl>';
+      var formatAllocation = new Intl.NumberFormat("en-GB", { style: "currency", currency: currency(p) });
+      find("allocations").innerHTML = '<h4>Associated invoices</h4><ul>' + ctx.allocations.rows.map(function (row) {
+        return '<li>' + recordLink(INVOICES, row.Vendor_Invoice) + ' &middot; ' + esc(formatAllocation.format(row.Allocated_Amount)) + (!closed ? ' <button type="button" class="button tertiary" data-remove-allocation="' + esc(id(row)) + '">Remove association</button>' : '') + '</li>';
+      }).join('') + '</ul><p>Allocated: ' + esc(formatAllocation.format(ctx.allocations.allocated)) + ' &middot; Remaining: ' + esc(formatAllocation.format(ctx.allocations.remaining)) + '</p>';
       documentFiles = [];
       find("documents").hidden = false;
-      find("documents").innerHTML = '<dl>' + [[r.Proforma_Attached, "Proforma"], [r.Invoice_Attached, "Invoice"], [r._attachments, "Request attachments"], [p.Payment_Proof, "Payment proof"]].map(function (item) {
+      find("documents").innerHTML = '<dl>' + [[r.Proforma_Attached, "Proforma / invoices"], [r.Invoice_Attached, "Invoice"], [r._attachments, "Request attachments"], [p.Payment_Proof, "Payment proof"]].map(function (item) {
         var attachments = ns.operationsDocuments.files(item[0]);
-        if (!attachments.length) { return item[1] === "Proforma" ? '<div class="card-purchase-workflow-documents"><dt>Proforma</dt><dd>No proforma associated.</dd></div>' : ""; }
+        if (!attachments.length) { return item[1] === "Proforma / invoices" ? '<div class="card-purchase-workflow-documents"><dt>Proforma / invoices</dt><dd>No proforma associated. Attach supporting documents to the request.</dd></div>' : ""; }
         return '<div class="card-purchase-workflow-documents"><dt>' + item[1] + '</dt><dd>' + attachments.map(function (file) {
           var index = documentFiles.push(file) - 1;
           return '<button class="card-purchase-file" type="button" data-prepayment-file="' + index + '" title="Preview ' + esc(item[1]) + ': ' + esc(file.name) + '" aria-label="Preview ' + esc(item[1]) + ': ' + esc(file.name) + '"><span>' + esc(file.name) + '</span><span class="prepayment-preview-action">Preview</span></button>';
@@ -411,8 +711,8 @@
         find("settlement").innerHTML = '<option value="">Select settlement</option>' + choices.settlements.map(option).join("");
         if (choices.settlements.length === 1) { find("settlement").value = id(choices.settlements[0]); }
         find("reference").value = ""; find("date").value = ns.prepaymentsModel.today();
-        find("amount").value = p.Amount == null ? "" : p.Amount; find("vat").value = "0";
-        find("invoice-type").value = "Proforma"; find("irpf").value = "0"; updateAmounts();
+        find("amount").value = ctx.allocations.remaining; find("allocated").value = ctx.allocations.remaining; find("allocated").max = ctx.allocations.remaining; find("vat").value = "0";
+        find("invoice-type").value = r.Invoice_Attached && r.Invoice_Attached.length && !(r.Proforma_Attached && r.Proforma_Attached.length) ? "Final Invoice" : "Proforma"; find("irpf").value = "0"; updateAmounts();
         invoiceNameDefault.reset(); updateInvoiceNameDefault();
         invoiceMode();
       } else if (phase === "link-payment") {
@@ -426,13 +726,16 @@
         find("submit").textContent = "Confirm payment link";
       } else if (phase === "payment") {
         find("payment-reference").value = "PREPAY-" + id(p);
-        find("payment-date").value = p.Payment_Date || ns.prepaymentsModel.today();
+        find("payment-date").value = ns.prepaymentsModel.today();
+        find("payment-date").readOnly = true;
         find("payment-amount").value = p.Amount == null ? "" : p.Amount;
         find("account").innerHTML = '<option value="">Select Own payment account</option>' + choices.accounts.map(option).join("");
         find("account").value = choices.defaultAccountId || "";
         find("account").required = true;
         find("submit").textContent = "Record payment";
       }
+      renderServices();
+      renderSettlement();
     }
     function renderExistingPayment() {
       var selected = choices.existingPayments.find(function (item) { return id(item.payment) === find("existing-payment").value; });
@@ -442,15 +745,18 @@
         ["Payment", recordLink(PAYMENTS, payment, label(payment) || id(payment))],
         ["Status", esc(payment.Status || "—")], ["Payment date", esc(payment.Payment_Date || "—")],
         ["Payment amount", esc(format.format(Number(payment.Payment_Amount || 0)))],
-        ["Allocated to this invoice", esc(format.format(selected.allocated))]
+        ["Allocated to associated invoices", esc(format.format(selected.allocated))]
       ].map(function (item) { return '<div' + (item[0] === 'Observations' ? ' class="prepayment-observations"' : '') + '><dt>' + item[0] + '</dt><dd>' + item[1] + '</dd></div>'; }).join("") + '</dl>';
     }
     async function open(recordId, button) {
       if (busy) { return; }
       opener = button; var token = ++generation;
+      ctx = null; editingServices = false; serviceMessage("");
+      if (find("settlement-summary")) { find("settlement-summary").textContent = "Loading settlement..."; }
       invoiceNameDefault.reset();
       modal.hidden = false; modal.classList.add("is-open");
       find("title").textContent = "Loading prepayment…"; find("context").innerHTML = ""; find("documents").innerHTML = "";
+      if (find("services")) { find("services").textContent = "Loading services…"; }
       find("invoice-fields").hidden = true; find("payment-fields").hidden = true; find("link-payment-fields").hidden = true; find("submit").hidden = true;
       message(""); setBusy(true); modal.querySelector('button[data-prepayment-workflow-close]').focus();
       try {
@@ -471,18 +777,24 @@
     }
     find("form").addEventListener("submit", async function (event) {
       event.preventDefault(); if (busy || !ctx || phase === "view") { return; }
+      if (editingServices) { message("Save or cancel your service selection before creating the invoice.", true); return; }
       if (!find("form").reportValidity()) { return; }
+      // Read-only values do not participate in native required validation.
+      if (phase === "payment" && (!find("payment-reference").value.trim() || !positive(find("payment-amount").value) || !find("account").value)) {
+        message("Payment reference, a positive prepayment amount and an Own payment account are required.", true);
+        return;
+      }
       setBusy(true); message(phase === "invoice" ? "Saving invoice…" : "Recording payment…");
       try {
         if (phase === "invoice") {
-          ctx = await service.saveInvoice(id(ctx.payment), { existingInvoiceId: find("existing").value, settlementId: find("settlement").value, reference: find("reference").value, date: find("date").value, amount: find("amount").value, vat: find("vat").value, invoiceType: find("invoice-type").value, irpf: find("irpf").value }, confirmSelfEmployment);
+          ctx = await service.saveInvoice(id(ctx.payment), { existingInvoiceId: find("existing").value, settlementId: find("settlement").value, reference: find("reference").value, date: find("date").value, amount: find("amount").value, allocatedAmount: find("allocated").value, vat: find("vat").value, invoiceType: find("invoice-type").value, irpf: find("irpf").value }, confirmSelfEmployment);
           choices = await service.options(ctx);
         } else if (phase === "link-payment") {
           ctx = await service.linkPayment(id(ctx.payment), find("existing-payment").value);
         } else {
-          ctx = await service.savePayment(id(ctx.payment), { date: find("payment-date").value, accountId: find("account").value });
+          ctx = await service.savePayment(id(ctx.payment), { accountId: find("account").value });
         }
-        render(); message(phase === "link-payment" ? "Invoice linked. Confirm the existing payment below." : phase === "payment" ? "Invoice linked. Review the payment details." : "Prepayment recorded.");
+        render(); message(phase === "link-payment" ? "Invoice linked. Confirm the existing payment below." : phase === "payment" ? "Invoice linked. Review the payment details." : phase === "invoice" ? "Invoice saved. Add another invoice to allocate the remaining amount." : "Prepayment recorded.");
         if (ctx.settlementWarning) { message(ctx.settlementWarning, true); }
         await onChanged();
       } catch (error) {
@@ -495,7 +807,17 @@
       }
       finally { setBusy(false); }
     });
-    find("existing").addEventListener("change", invoiceMode);
+    find("allocations").addEventListener("click", async function (event) {
+      var button = event.target.closest("[data-remove-allocation]");
+      if (!button || busy || !ctx) { return; }
+      setBusy(true); message("Removing invoice association...");
+      try {
+        ctx = await service.removeInvoice(id(ctx.payment), button.getAttribute("data-remove-allocation"));
+        choices = await service.options(ctx); render(); message("Association removed. The invoice is retained."); await onChanged();
+      } catch (error) { message(error.message, true); } finally { setBusy(false); }
+    });
+    find("existing").addEventListener("change", function () { invoiceMode(); renderSettlement(); });
+    find("settlement").addEventListener("change", function () { renderServices(); renderSettlement(); });
     find("invoice-type").addEventListener("change", updateInvoiceNameDefault);
     find("existing-payment").addEventListener("change", renderExistingPayment);
     ["amount", "vat", "irpf"].forEach(function (key) { find(key).addEventListener("input", updateAmounts); });

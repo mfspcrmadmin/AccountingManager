@@ -1,0 +1,248 @@
+string standalone.accountingNotes_saveAndNotify(string bookingId, string actingUserId, string expectedNotes, string notesJson)
+{
+result = {"success":false,"saved":false,"notificationStatus":"not_attempted"};
+diagnostics = {"phase":"validate_input","bookingId":bookingId,"actingUserId":actingUserId,"sender":"crmadmin@madeforspainandportugal.com","functionVersion":"accounting-notes-v1"};
+result.put("diagnostics",diagnostics);
+try
+{
+    if(!bookingId.matches("[0-9]+") || !actingUserId.matches("[0-9]+"))
+    {
+        result.put("message","Invalid booking or signed-in user.");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    // The widget supplies the acting CRM user ID. Resolve contact details from
+    // User_Relationships.User_ID, not the relationship record ID or function owner.
+    diagnostics.put("phase","read_booking");
+    booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+    if(!booking.containKey("Accounting_Notes") || booking.get("Modified_Time") == null)
+    {
+        result.put("message","Accounting Notes are unavailable. Check CRM permissions.");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    diagnostics.put("phase","compare_notes");
+    current = ifnull(booking.get("Accounting_Notes"),"").toString();
+    if(current == notesJson)
+    {
+        // A repeated save must not send another email. This does not assert delivery.
+        result.put("success",true);
+        result.put("saved",true);
+        result.put("notesJson",current);
+        result.put("notificationStatus","unchanged");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    if(current != ifnull(expectedNotes,""))
+    {
+        result.put("message","Accounting Notes changed in another session. Reopen notes before saving.");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    diagnostics.put("phase","parse_notes");
+    nextDoc = notesJson.toMap();
+    if(nextDoc.get("version") != 1 || nextDoc.get("notes") == null || notesJson.length() > 30000)
+    {
+        result.put("message","Invalid or oversized Accounting Notes document.");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    previous = Map();
+    if(current.trim().startsWith("{") || current.trim().startsWith("["))
+    {
+        previousDoc = current.toMap();
+        if(previousDoc.get("version") != 1 || previousDoc.get("notes") == null)
+        {
+            result.put("message","Unsupported saved Accounting Notes. No changes were made.");
+            result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+        }
+        for each entry in previousDoc.get("notes") { previous.put(entry.get("id"),entry); }
+        if(ifnull(previousDoc.get("legacyText"),"") != ifnull(nextDoc.get("legacyText"),""))
+        {
+            result.put("message","Existing accounting history cannot be removed during this save.");
+            result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+        }
+    }
+    else if(current.trim() != "")
+    {
+        if(ifnull(nextDoc.get("legacyText"),"") != current)
+        {
+            result.put("message","Existing accounting history must be preserved.");
+            return result.toString();
+        }
+    }
+    incoming = Map();
+    changed = List();
+    for each entry in nextDoc.get("notes")
+    {
+        if(entry.get("context") != null && entry.get("context").get("type") != "prepayment") { result.put("message","Unsupported note context."); return result.toString(); }
+        noteId = ifnull(entry.get("id"),"").toString();
+        if(noteId == "" || incoming.containKey(noteId) || ifnull(entry.get("body"),"").trim() == "" || entry.get("author") == null || entry.get("at") == null)
+        {
+            result.put("message","Invalid Accounting Note. No changes were made.");
+            result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+        }
+        incoming.put(noteId,entry);
+        old = previous.get(noteId);
+        if(old != null)
+        {
+            for each protectedKey in {"author","authorId","authorEmail","at","context","editedBy","editedById","editedByEmail"}
+            {
+                if(ifnull(old.get(protectedKey),"").toString() != ifnull(entry.get(protectedKey),"").toString()) { result.put("message","Existing note authors and prepayment context cannot be changed."); return result.toString(); }
+            }
+        }
+        if(old == null)
+        {
+            changed.add({"action":"added","note":entry});
+        }
+        else if(old.get("body") != entry.get("body") || ifnull(old.get("formatting"),List()).toString() != ifnull(entry.get("formatting"),List()).toString())
+        {
+            changed.add({"action":"edited","note":entry});
+        }
+    }
+    for each noteId in previous.keys()
+    {
+        if(!incoming.containKey(noteId)) { changed.add({"action":"deleted","note":previous.get(noteId)}); }
+    }
+    if(changed.isEmpty())
+    {
+        result.put("success",true);
+        result.put("saved",true);
+        result.put("notesJson",current);
+        result.put("notificationStatus","unchanged");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    if(changed.size() != 1)
+    {
+        result.put("message","Save one Accounting Note at a time. Reopen notes and try again.");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    change = changed.get(0);
+    note = change.get("note");
+    diagnostics.put("action",change.get("action"));
+    matches = zoho.crm.searchRecords("User_Relationships","(User_ID:equals:" + actingUserId + ")");
+    activeActors = List();
+    for each relationship in matches
+    {
+        if(ifnull(relationship.get("User_ID"),"").toString() == actingUserId && ifnull(relationship.get("Status"),"").toString().toLowerCase() == "active") { activeActors.add(relationship); }
+    }
+    if(activeActors.size() != 1) { result.put("message","Expected one active User_Relationships record for the author."); return result.toString(); }
+    actor = activeActors.get(0);
+    actorEmail = ifnull(actor.get("Email"),"").toString().trim();
+    actorName = ifnull(actor.get("Full_Name"),actorEmail).toString();
+    if(actorName.trim() == "") { actorName = actorEmail; }
+    emailPattern = "[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+";
+    if(!actorEmail.matches(emailPattern)) { result.put("message","The author's email is unavailable in User_Relationships."); return result.toString(); }
+    context = ifnull(note.get("context"),Map());
+    prepaymentId = ifnull(context.get("prepaymentId"),"").toString();
+    recipientEmail = "";
+    recipientName = "";
+    payment = Map();
+    if(context.get("type") == "prepayment")
+    {
+        if(!prepaymentId.matches("[0-9]+") || ifnull(context.get("bookingId"),"").toString() != bookingId) { result.put("message","Invalid prepayment context."); return result.toString(); }
+        payment = zoho.crm.getRecordById("Prepayments",prepaymentId.toLong());
+        requestId = ifnull(ifnull(payment.get("Prepayment_Request"),Map()).get("id"),"").toString();
+        if(!requestId.matches("[0-9]+")) { result.put("message","The prepayment request is unavailable."); return result.toString(); }
+        request = zoho.crm.getRecordById("Prepayment_Requests",requestId.toLong());
+        if(ifnull(ifnull(request.get("Booking"),Map()).get("id"),"").toString() != bookingId) { result.put("message","The prepayment does not belong to this booking."); return result.toString(); }
+        // This is an Email field populated with the person who requested the prepayment.
+        // Never substitute Owner/Created_By: imports or integrations may own the record.
+        recipientEmail = ifnull(request.get("Requested_By_2"),"").toString().trim();
+        recipientName = recipientEmail;
+    }
+    profile = ifnull(actor.get("Profile"),"").toString();
+    finance = {"Finance Standard","Finance Administrator","Administrator"};
+    ownerId = ifnull(ifnull(booking.get("Owner"),Map()).get("id"),"").toString();
+    guestId = ifnull(ifnull(booking.get("Guest_Relations_Rep"),Map()).get("id"),"").toString();
+    if(!finance.contains(profile) && actingUserId != ownerId && actingUserId != guestId && actorEmail.toLowerCase() != recipientEmail.toLowerCase())
+    { result.put("message","Only Finance, the booking representatives or this prepayment requester can save these notes."); return result.toString(); }
+    if(change.get("action") == "added")
+    {
+        note.put("authorId",actingUserId);
+        note.put("author",actorName);
+        note.put("authorEmail",actorEmail);
+        note.put("at",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss","UTC") + "Z");
+    }
+    if(change.get("action") == "edited")
+    {
+        note.put("editedById",actingUserId);
+        note.put("editedBy",actorName);
+        note.put("editedByEmail",actorEmail);
+        note.put("editedAt",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss","UTC") + "Z");
+    }
+    normalized = List();
+    for each entry in nextDoc.get("notes")
+    {
+        if(entry.get("id") == note.get("id")) { normalized.add(note); }
+        else { normalized.add(entry); }
+    }
+    nextDoc.put("notes",normalized);
+    notesJson = nextDoc.toString();
+    if(notesJson.length() > 30000) { result.put("message","Accounting Notes exceed the field limit after recording author details."); return result.toString(); }
+    diagnostics.put("recipientEmail",recipientEmail);
+    diagnostics.put("phase","save_notes");
+    // Optimistic concurrency: fail rather than overwrite another user's save.
+    updateData = {"id":bookingId,"Accounting_Notes":notesJson};
+    updateRows = List();
+    updateRows.add(updateData);
+    payload = {"data":updateRows,"trigger":List()};
+    headers = {"Content-Type":"application/json","If-Unmodified-Since":booking.get("Modified_Time").toString()};
+    savedResponse = invokeurl
+    [
+        url :"https://www.zohoapis.eu/crm/v8/Deals/" + bookingId
+        type :PUT
+        parameters:payload.toString()
+        headers:headers
+        connection:"crm_oauth_connection"
+    ];
+    if(savedResponse.get("data") == null || savedResponse.get("data").get(0).get("code") != "SUCCESS")
+    {
+        saveError = savedResponse;
+        if(savedResponse.get("data") != null && savedResponse.get("data").size() > 0) { saveError = savedResponse.get("data").get(0); }
+        diagnostics.put("error",ifnull(saveError.get("code"),"UNKNOWN").toString() + ": " + ifnull(saveError.get("message"),"CRM did not confirm the update").toString());
+        result.put("message","CRM did not save the notes. The booking may have changed in another session. Reopen notes before retrying.");
+        result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+    }
+    result.put("success",true);
+    result.put("saved",true);
+    result.put("notesJson",notesJson);
+    if(prepaymentId == "") { result.put("notificationStatus","skipped_no_context"); return result.toString(); }
+    if(!recipientEmail.matches(emailPattern))
+    {
+        result.put("notificationStatus","failed");
+        result.put("notificationWarning","Notes saved, but Requested_By_2 is missing or invalid on the prepayment request. No email was sent. Do not repeat the note.");
+        return result.toString();
+    }
+    if(recipientEmail.toLowerCase() == actorEmail.toLowerCase()) { result.put("notificationStatus","skipped_same_user"); return result.toString(); }
+    result.put("notificationStatus","failed");
+    diagnostics.put("phase","render_email");
+    change = changed.get(0);
+    reference = ifnull(booking.get("MFSP_Reference"),bookingId).toString();
+    bookingName = ifnull(booking.get("Deal_Name"),"").toString();
+    noteBody = change.get("note").get("body").toString().htmlEncode().replaceAll("\n","<br>");
+    bookingLink = "https://crm.zoho.eu/crm/org20093299576/tab/WebTab3?widgetparams=%7B%22bookingId%22%3A%22" + bookingId + "%22%2C%22view%22%3A%22prepayment%22%2C%22prepaymentId%22%3A%22" + prepaymentId + "%22%7D";
+    bookingLinkHtml = "<p><strong>Prepayment:</strong> " + ifnull(payment.get("Name"),prepaymentId).toString().htmlEncode() + "<br><strong>ID:</strong> " + prepaymentId + "<br><strong>Amount:</strong> " + ifnull(payment.get("Amount"),"").toString().htmlEncode() + " " + ifnull(payment.get("Currency"),"EUR").toString().htmlEncode() + "</p><p><a href='" + bookingLink.htmlEncode() + "' style='color:#b35e22;font-weight:bold;'>Open prepayment in Bookings Manager &rarr;</a></p>";
+    // Orange Accounting Manager palette, with table layout for Outlook.
+    html = "<!doctype html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;padding:20px;background:#fff6ee;font-family:Arial,Helvetica,sans-serif;color:#20344b;'><table role='presentation' width='100%' cellspacing='0' cellpadding='0'><tr><td align='center'><table role='presentation' width='640' cellspacing='0' cellpadding='0' style='width:100%;max-width:640px;background:#ffffff;'><tr><td bgcolor='#9b501f' style='padding:26px;color:#ffffff;'><div style='font-size:12px;letter-spacing:2px;color:#ffe1c7;'>MADE FOR SPAIN AND PORTUGAL</div><h1 style='margin:10px 0;font-size:28px;'>Accounting Notes updated</h1><p style='margin:0;'>" + reference.htmlEncode() + "</p></td></tr><tr><td style='padding:24px;'><p>Hello " + recipientName.htmlEncode() + ",</p><p><strong>" + actorName.htmlEncode() + "</strong> " + change.get("action") + " an accounting note.</p><table role='presentation' width='100%' cellspacing='0' cellpadding='16'><tr><td bgcolor='#fff0df' style='color:#a35720;'><strong>" + bookingName.htmlEncode() + "</strong><br>" + reference.htmlEncode() + "</td></tr></table><h2 style='font-size:16px;color:#173654;'>" + if(change.get("action") == "deleted","Deleted note","Accounting note") + "</h2><table role='presentation' width='100%' cellspacing='0' cellpadding='16'><tr><td bgcolor='#fffaf5' style='font-size:14px;line-height:1.6;word-break:break-word;'>" + noteBody + "</td></tr></table>" + bookingLinkHtml + "<p style='padding-top:16px;border-top:1px solid #dce4ed;font-size:12px;color:#61758b;'>Continue the conversation in Accounting Notes so that both teams can follow its history.</p></td></tr></table></td></tr></table></body></html>";
+    diagnostics.put("phase","send_email");
+    info "Accounting Notes notification: " + diagnostics.toString();
+    sendmail
+    [
+        from :"crmadmin@madeforspainandportugal.com"
+        to :recipientEmail
+        reply to :actorEmail
+        subject :"Accounting Notes | " + reference + " | " + actorName
+        message :html
+    ];
+    diagnostics.put("phase","sendmail_completed");
+    result.put("notificationStatus","sent");
+}
+catch(error)
+{
+    diagnostics.put("error",error.toString());
+    if(result.get("saved") == true)
+    {
+        result.put("notificationWarning","Notes saved, but the email could not be confirmed. Please contact the other representative; do not repeat the edit.");
+        result.put("notificationStatus","failed");
+    }
+    else { result.put("message","Accounting Notes could not be saved. Reopen the booking and check the CRM function configuration."); }
+    info "accountingNotes_saveAndNotify: " + error.toString();
+}
+result.put("diagnostics",diagnostics); info "Accounting Notes notification: " + diagnostics.toString(); return result.toString();
+}

@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="./styles/explorer.css">
     <link rel="stylesheet" href="./styles/visual-refresh.css">
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+    <link rel="stylesheet" href="./styles/accounting-notes.css">
+    <script src="./scripts/accounting-notes-save.js"></script>
   </head>
   <body>
     <main class="shell">
@@ -177,41 +179,100 @@
                   <button type="button" data-prepayments-status-view="closed" aria-pressed="false">Closed</button>
                   <button type="button" data-prepayments-status-view="all" aria-pressed="false">All</button>
                 </div>
-                <button type="button" class="button secondary prepayments-icon-button" data-prepayments-refresh aria-label="Refresh prepayments" title="Refresh prepayments">&#8635;</button>
+                <button type="button" class="button secondary prepayments-icon-button prepayments-refresh" data-prepayments-refresh aria-label="Refresh prepayments" title="Refresh prepayments">&#8635;</button>
               </div>
-              <form class="prepayments-filters" data-prepayments-filters>
-                <label class="field"><span>MFSP Reference</span><input type="search" data-prepayments-mfsp placeholder="MFSP reference"></label>
-                <label class="field"><span>Supplier Code</span><input type="search" data-prepayments-supplier-code placeholder="Supplier code"></label>
-                <label class="field"><span>Due Date</span><select data-prepayments-date-mode><option value="single">Single</option><option value="range">Range</option></select></label>
-                <label class="field"><span data-prepayments-from-label>Date</span><input type="date" data-prepayments-from></label>
-                <label class="field" data-prepayments-to-field hidden><span>To</span><input type="date" data-prepayments-to disabled></label>
-                <label class="field"><span>Accounting Status</span><select data-prepayments-accounting-status><option value="">All statuses</option><option value="Pending invoice">Pending invoice</option><option value="Pending payment record">Pending payment record</option><option value="Prepayment recorded">Prepayment recorded</option><option value="Cancelled">Cancelled</option><option value="Discard - Credit">Discard - Credit</option><option value="Discard - Already Paid">Discard - Already Paid</option><option value="No status">No status</option></select></label>
-                <label class="field"><span>Bank Payment Requested</span><select data-prepayments-bank-requested><option value="">All</option><option value="yes">Requested</option><option value="no">Not requested</option></select></label>
-                <label class="field"><span>Bank Receipt Needed</span><select data-prepayments-bank-receipt><option value="">All</option><option value="yes">Needed</option><option value="no">Not needed</option></select></label>
-                <div class="prepayments-filter-actions"><button type="submit" class="button primary prepayments-icon-button" aria-label="Apply prepayment filters" title="Apply prepayment filters"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.2"></circle><path d="m16 16 4.3 4.3"></path></svg></button></div>
+              <form class="prepayments-filters" data-prepayments-filters novalidate>
+                <div class="prepayments-general-filters">
+                  <label class="field"><span>MFSP reference</span><input type="search" data-prepayments-mfsp placeholder="MFSP reference"></label>
+                  <label class="field"><span>Supplier code</span><input type="search" data-prepayments-supplier-code placeholder="Supplier code"></label>
+                  <label class="field"><span>Accounting status</span><select data-prepayments-accounting-status><option value="">All statuses</option><option value="Pending invoice">Pending invoice</option><option value="Pending payment record">Pending payment record</option><option value="Prepayment recorded">Prepayment recorded</option><option value="Cancelled">Cancelled</option><option value="Discard - Credit">Discard - Credit</option><option value="Discard - Already Paid">Discard - Already Paid</option><option value="No status">No status</option></select></label>
+                  <label class="field"><span>Bank payment requested</span><select data-prepayments-bank-requested><option value="">All</option><option value="yes">Requested</option><option value="no">Not requested</option></select></label>
+                  <label class="field"><span>Bank receipt needed</span><select data-prepayments-bank-receipt><option value="">All</option><option value="yes">Needed</option><option value="no">Not needed</option></select></label>
+                </div>
+                <div class="prepayments-date-row">
+                  <div class="prepayments-date-filter" role="group" aria-labelledby="prepayments-due-label">
+                    <div class="prepayments-date-heading"><span id="prepayments-due-label">Due date</span><label class="prepayments-due-today-toggle"><input type="checkbox" data-prepayments-due-today checked> Due today</label></div>
+                    <div class="prepayments-date-controls">
+                      <select data-prepayments-date-mode aria-label="Due date mode"><option value="single">Single</option><option value="range">Range</option></select>
+                      <label class="prepayments-date-control"><span data-prepayments-from-label hidden>Date</span><input type="date" data-prepayments-from aria-label="Due date or range start"></label>
+                      <label class="prepayments-date-control" data-prepayments-to-field hidden><input type="date" data-prepayments-to aria-label="Due date range end" disabled></label>
+                    </div>
+                  </div>
+                  <div class="prepayments-date-filter" role="group" aria-labelledby="prepayments-payment-label">
+                    <div class="prepayments-date-heading"><span id="prepayments-payment-label">Payment date</span></div>
+                    <div class="prepayments-date-controls">
+                      <select data-prepayments-payment-date-mode aria-label="Payment date mode"><option value="single">Single</option><option value="range">Range</option></select>
+                      <label class="prepayments-date-control"><span data-prepayments-payment-from-label hidden>Date</span><input type="date" data-prepayments-payment-from aria-label="Payment date or range start"></label>
+                      <label class="prepayments-date-control" data-prepayments-payment-to-field hidden><input type="date" data-prepayments-payment-to aria-label="Payment date range end" disabled></label>
+                    </div>
+                  </div>
+                  <div class="prepayments-filter-actions">
+                    <button type="submit" class="button primary prepayments-icon-button" aria-label="Apply prepayment filters" title="Apply prepayment filters"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.2"></circle><path d="m16 16 4.3 4.3"></path></svg></button>
+                    <button type="button" class="button secondary prepayments-icon-button" data-prepayments-reset aria-label="Reset prepayment filters" title="Reset prepayment filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/></svg></button>
+                  </div>
+                </div>
               </form>
-              <div class="prepayment-bank-toolbar">
-                <span data-prepayments-bank-count aria-live="polite">0 selected</span>
-                <button type="button" class="button secondary" data-prepayments-bank-receipt-bulk disabled>Mark Bank Receipt Needed</button>
-                <button type="button" class="button primary" data-prepayments-bank-open hidden disabled>Send bank payment request</button>
-              </div>
               <dialog class="prepayment-bank-dialog" data-prepayments-bank-dialog aria-labelledby="prepayment-bank-title">
                 <form data-prepayments-bank-form>
-                  <h3 id="prepayment-bank-title">Send bank payment request</h3>
-                  <div class="prepayment-bank-addresses">
-                    <label>To<input type="text" data-prepayments-bank-recipients required value="claudia@madeforspainandportugal.com" autocomplete="off"></label>
-                    <label>CC<input type="text" data-prepayments-bank-cc value="luciano@madeforspainandportugal.com, andersson@madeforspainandportugal.com" autocomplete="off"></label>
+                  <header class="prepayment-bank-dialog-header">
+                    <h3 id="prepayment-bank-title">Send bank payment request</h3>
+                  </header>
+                  <section class="prepayment-bank-details" aria-labelledby="prepayment-bank-details-title">
+                    <h4 id="prepayment-bank-details-title">Email details</h4>
+                    <div class="prepayment-bank-addresses">
+                      <label><span>To</span><input type="text" data-prepayments-bank-recipients required value="claudia@madeforspainandportugal.com" autocomplete="off"></label>
+                      <label><span>CC</span><input type="text" data-prepayments-bank-cc value="luciano@madeforspainandportugal.com, andersson@madeforspainandportugal.com" autocomplete="off"></label>
+                      <div class="prepayment-bank-subject-field"><span id="prepayment-bank-subject-label">Subject</span><span class="prepayment-bank-subject" role="textbox" aria-readonly="true" aria-labelledby="prepayment-bank-subject-label" tabindex="0" data-prepayments-bank-subject></span></div>
+                    </div>
+                  </section>
+                  <section class="prepayment-bank-preview-section" aria-labelledby="prepayment-bank-preview-title">
+                    <div class="prepayment-bank-preview-heading"><h4 id="prepayment-bank-preview-title">Email preview</h4><span class="prepayment-bank-editable-badge" id="prepayment-bank-editor-hint">Editable</span></div>
+                    <div class="prepayment-bank-editor" role="textbox" aria-label="Email content" aria-multiline="true" aria-describedby="prepayment-bank-editor-hint" contenteditable="false" data-prepayments-bank-preview></div>
+                  </section>
+                  <footer class="prepayment-bank-dialog-footer">
+                    <p data-prepayments-bank-message role="status" aria-live="polite"></p>
+                    <div class="prepayment-bank-dialog-actions"><button type="button" class="button secondary" data-prepayments-bank-cancel>Close</button><button type="submit" class="button primary" data-prepayments-bank-send disabled>Send request</button></div>
+                  </footer>
+                </form>
+              </dialog>
+              <dialog class="prepayment-proof-dialog" data-prepayment-proof-dialog aria-labelledby="prepayment-proof-title">
+                <form data-prepayment-proof-form>
+                  <header><h3 id="prepayment-proof-title">Payment proof</h3><p data-prepayment-proof-name></p></header>
+                  <section aria-label="Existing payment proof"><h4>Attached files</h4><p data-prepayment-proof-existing-empty>No payment proof attached yet.</p><ul data-prepayment-proof-existing></ul></section>
+                  <div class="prepayment-proof-dropzone" data-prepayment-proof-dropzone>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></svg>
+                    <strong>Drag and drop your payment proof</strong>
+                    <span>or choose files from your device</span>
+                    <button type="button" class="button secondary" data-prepayment-proof-browse>Browse files</button>
+                    <input type="file" multiple hidden data-prepayment-proof-files aria-label="Add payment proof files" aria-describedby="prepayment-proof-hint">
                   </div>
-                  <p><strong>Subject:</strong> <span data-prepayments-bank-subject></span></p>
-                  <p class="prepayment-bank-editor-hint" id="prepayment-bank-editor-hint">Click inside the email to edit its content before sending.</p>
-                  <div class="prepayment-bank-editor" role="textbox" aria-label="Email content" aria-multiline="true" aria-describedby="prepayment-bank-editor-hint" contenteditable="false" data-prepayments-bank-preview></div>
-                  <p data-prepayments-bank-message role="status" aria-live="polite"></p>
-                  <div class="prepayment-bank-dialog-actions"><button type="button" class="button secondary" data-prepayments-bank-cancel>Close</button><button type="submit" class="button primary" data-prepayments-bank-send disabled>Send request</button></div>
+                  <p id="prepayment-proof-hint" class="prepayment-proof-hint">Up to 5 files in total, 20 MB per file. Existing attachments are kept.</p>
+                  <ul class="prepayment-proof-queue" data-prepayment-proof-queue></ul>
+                  <p class="prepayment-proof-hint">Send the saved payment proof to the requester, with claudia@madeforspainandportugal.com in CC. Subject: Justificante de pago.</p>
+                  <p class="prepayment-proof-message" data-prepayment-proof-message role="status" aria-live="polite"></p>
+                  <footer><button type="button" class="button secondary" data-prepayment-proof-close>Close</button><button type="submit" class="button secondary" data-prepayment-proof-save disabled>Attach files</button><button type="button" class="button primary" data-prepayment-proof-send disabled>Send Payment Proof</button></footer>
                 </form>
               </dialog>
               <div class="prepayments-summary" data-prepayments-summary hidden></div>
               <p class="prepayments-message" data-prepayments-message role="status" aria-live="polite">Open Operations to load prepayment requests and prepayments.</p>
+                <div class="prepayment-bank-toolbar">
+                  <span class="prepayment-selection-count" data-prepayments-bank-count aria-live="polite">0 selected</span>
+                  <button type="button" class="button secondary" data-prepayments-bank-receipt-bulk disabled>Mark Bank Receipt Needed</button>
+                  <button type="button" class="button secondary" data-prepayments-bank-proof-bulk disabled>Send Payment Proof</button>
+                  <button type="button" class="button primary" data-prepayments-bank-open hidden disabled>Send bank payment request</button>
+                </div>
+              <p data-prepayments-bank-proof-status role="status" hidden></p>
               <div class="prepayments-results" data-prepayments-results></div>
+              <dialog class="prepayment-discard-dialog" data-prepayments-delete-dialog aria-labelledby="prepayment-delete-title" aria-describedby="prepayment-delete-description">
+                <form data-prepayments-delete-form>
+                  <h3 id="prepayment-delete-title">Delete prepayment?</h3>
+                  <p><strong data-prepayments-delete-name></strong></p>
+                  <p id="prepayment-delete-description">This will delete the prepayment. If it is the last one, its request and service associations will also be removed, and service statuses will be recalculated.</p>
+                  <p>Prepayments with associated invoices or payments cannot be deleted.</p>
+                  <p class="operations-file-preview-error" data-prepayments-delete-error role="alert"></p>
+                  <div class="inline-actions"><button class="button secondary" type="button" data-prepayments-delete-cancel autofocus>Cancel</button><button class="button primary prepayment-delete-confirm" type="submit" data-prepayments-delete-submit>Delete prepayment</button></div>
+                </form>
+              </dialog>
               <dialog class="prepayment-discard-dialog" data-prepayments-discard-dialog aria-labelledby="prepayment-discard-title">
                 <form data-prepayments-discard-form>
                   <h3 id="prepayment-discard-title">Discard prepayment</h3>
@@ -224,12 +285,19 @@
               <div class="card-purchase-workflow-modal" data-prepayment-workflow hidden>
                 <div class="card-purchase-workflow-backdrop" data-prepayment-workflow-close></div>
                 <aside class="card-purchase-workflow-card" role="dialog" aria-modal="true" aria-labelledby="prepayment-workflow-title">
-                  <header><div><p class="panel-eyebrow">Supplier prepayment</p><h3 id="prepayment-workflow-title" data-prepayment-workflow-title>Register supplier invoice</h3></div><button class="card-purchase-workflow-close" type="button" data-prepayment-workflow-close aria-label="Close">&times;</button></header>
+                  <header><div><p class="panel-eyebrow">Supplier prepayment</p><h3 id="prepayment-workflow-title" data-prepayment-workflow-title>Register supplier invoice</h3></div><div class="prepayment-context-actions"><button class="prepayment-notes-button" type="button" data-prepayment-workflow-notes aria-label="Open Accounting Notes for this prepayment" title="Accounting Notes is currently unavailable." aria-disabled="true" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></svg></button><button class="card-purchase-workflow-close" type="button" data-prepayment-workflow-close aria-label="Close">&times;</button></div></header>
                   <div class="card-purchase-workflow-context" data-prepayment-workflow-context></div>
                   <div class="prepayment-documents card-purchase-workflow-context" data-prepayment-workflow-documents></div>
+                  <details class="prepayment-services" open><summary><span>Associated services</span><button type="button" class="prepayment-services-edit" data-prepayment-workflow-services-edit data-service-edit aria-label="Edit associated services" title="Edit associated services" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary><p class="card-purchase-workflow-message" data-prepayment-workflow-services-message role="status" aria-live="polite" hidden></p><div data-prepayment-workflow-services aria-live="polite"></div></details>
+                  <section class="prepayment-settlement invoice-create-summary-card" aria-label="Associated settlement">
+                    <div class="invoice-create-summary-card-heading"><h3>Settlement Financial Summary</h3></div>
+                    <div data-prepayment-workflow-settlement-summary aria-live="polite"></div>
+                  </section>
                   <form class="prepayment-workflow-form" data-prepayment-workflow-form>
                     <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-fields>
+                      <section data-prepayment-workflow-allocations aria-label="Associated invoices"></section>
                       <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-invoice-fields>
+                        <label class="field"><span>Amount of this prepayment applied to the invoice</span><input type="number" min="0.01" step="0.01" data-prepayment-workflow-allocated required></label>
                         <label class="field"><span>Invoice</span><select data-prepayment-workflow-existing></select></label>
                         <fieldset class="prepayment-workflow-fieldset card-purchase-workflow-fields" data-prepayment-workflow-new-invoice>
                           <label class="field"><span>Settlement</span><select data-prepayment-workflow-settlement required></select></label>
@@ -244,10 +312,10 @@
                         </fieldset>
                       </fieldset>
                       <fieldset class="prepayment-workflow-fieldset card-purchase-workflow-fields" data-prepayment-workflow-payment-fields hidden disabled>
-                        <label class="field"><span>Payment reference</span><input data-prepayment-workflow-payment-reference readonly></label>
-                        <label class="field"><span>Payment date</span><input type="date" data-prepayment-workflow-payment-date required></label>
-                        <label class="field"><span>Prepayment amount</span><input type="number" data-prepayment-workflow-payment-amount readonly></label>
-                        <label class="field"><span>Payment account (Own)</span><select data-prepayment-workflow-account required></select></label>
+                        <label class="field"><span>Payment reference <span aria-hidden="true">*</span></span><input data-prepayment-workflow-payment-reference readonly aria-required="true"></label>
+                        <label class="field"><span>Payment date <span aria-hidden="true">*</span></span><input type="date" data-prepayment-workflow-payment-date readonly aria-describedby="prepayment-payment-date-hint"><small id="prepayment-payment-date-hint">Assigned automatically by CRM when the payment is created.</small></label>
+                        <label class="field"><span>Prepayment amount <span aria-hidden="true">*</span></span><input type="number" data-prepayment-workflow-payment-amount readonly aria-required="true"></label>
+                        <label class="field"><span>Payment account (Own) <span aria-hidden="true">*</span></span><select data-prepayment-workflow-account required></select></label>
                       </fieldset>
                       <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-link-payment-fields hidden disabled>
                         <p>This invoice already has an associated payment. Confirm the link to mark this prepayment as recorded.</p>
@@ -444,6 +512,7 @@
                 <section id="card-purchase-workflow-service" class="card-purchase-workflow-service" aria-label="Associated service" aria-live="polite" hidden></section>
                 <form id="card-purchase-workflow-form" novalidate>
                   <div id="card-purchase-workflow-invoice-fields" class="card-purchase-workflow-fields">
+                    <label class="field"><span>Settlement *</span><select id="card-purchase-settlement" required><option value="">Select settlement</option></select><small id="card-purchase-settlement-message" role="status"></small></label>
                     <label class="field"><span id="card-purchase-reference-label">Invoice number</span><input id="card-purchase-reference" required></label>
                     <label class="field"><span>Invoice type</span><select id="card-purchase-invoice-type"><option value="Tickets" selected>Tickets</option><option value="Final Invoice">Final Invoice</option><option value="Proforma">Proforma</option><option value="Commission">Commission</option></select></label>
                     <label class="field"><span id="card-purchase-date-label">Invoice date</span><input id="card-purchase-date" type="date" required></label>
@@ -742,7 +811,7 @@
           >
             <div class="panel-header">
               <div>
-                <h2 id="invoice-create-title">Create supplier invoice</h2>
+                <div class="invoice-create-title-context"><h2 id="invoice-create-title">Create supplier invoice</h2><div id="invoice-create-header-supplier" hidden></div></div>
               </div>
               <div class="inline-actions">
                 <span id="invoice-create-mode-badge" class="badge subtle">Supplier context required</span>
@@ -1679,6 +1748,10 @@
                 </div>
               </div>
 
+              <div class="inline-actions payment-letter-batch-toolbar">
+                <span id="payment-letter-batch-count" aria-live="polite">0 selected</span>
+                <button id="payment-letter-batch-open" class="button button-accent-alt" type="button" disabled>Send payment letters</button>
+              </div>
               <div id="payments-empty" class="empty-state">
                 No payments found
               </div>
@@ -1835,6 +1908,19 @@
               </section>
             </aside>
           </div>
+          <dialog id="payment-letter-batch" aria-labelledby="payment-letter-batch-title">
+            <h3 id="payment-letter-batch-title">Send payment letters</h3>
+            <p>One letter per payment and supplier, including all their invoices in that payment.</p>
+            <p>Sent letters are excluded from retries while this widget remains open. Unconfirmed deliveries require checking before sending again.</p>
+            <p id="payment-letter-batch-message" role="status" aria-live="polite"></p>
+            <div class="table-wrap">
+              <table class="results-table"><thead><tr><th>Send</th><th>Payment</th><th>Supplier</th><th>Invoices</th><th>Amount</th><th>Email</th><th>Result</th></tr></thead><tbody id="payment-letter-batch-rows"></tbody></table>
+            </div>
+            <div class="actions payment-letter-actions">
+              <button type="button" class="button secondary" data-batch-close>Close</button>
+              <button type="button" class="button primary" data-batch-send>Send selected letters</button>
+            </div>
+          </dialog>
           <section id="selected-payment-letter-panel" class="detail-subsection payment-letter-panel widget-popup-panel" role="dialog" aria-modal="true" aria-labelledby="selected-payment-letter-title" hidden>
             <div class="section-heading compact-section-heading">
               <h3 id="selected-payment-letter-title">Send payment letter</h3>
@@ -2637,6 +2723,7 @@
     <script src="./scripts/helpers.js"></script>
     <script src="./scripts/dom.js"></script>
     <script src="./scripts/crm.js"></script>
+    <script src="./scripts/supplier-accounting-info.js"></script>
     <script src="./scripts/render.js"></script>
     <script src="./scripts/table-columns.js"></script>
     <script src="./scripts/render-invoices.js"></script>
@@ -2646,6 +2733,7 @@
     <script src="./scripts/invoices.js"></script>
     <script src="./scripts/payments.js"></script>
     <script src="./scripts/prepayment-request-sync.js"></script>
+    <script src="./scripts/prepayment-allocations.js"></script>
     <script src="./scripts/payment-operation-sync.js"></script>
     <script src="./scripts/payment-create.js"></script>
     <script src="./scripts/accounting.js"></script>
@@ -2654,12 +2742,17 @@
     <script src="./scripts/invoice-name.js"></script>
     <script src="./scripts/invoice-create.js"></script>
     <script src="./scripts/supplier-activity.js"></script>
+    <script src="./scripts/payment-letter-batch.js"></script>
     <script src="./scripts/invoice-request.js"></script>
     <script src="./scripts/supplier-workspace.js"></script>
     <script src="./scripts/quick-settlement-refresh.js"></script>
     <script src="./scripts/prepayment-bank-request.js"></script>
+    <script src="./scripts/prepayment-proof.js"></script>
+    <script src="./scripts/prepayment-delete.js"></script>
     <script src="./scripts/prepayments.js"></script>
+    <script src="./scripts/prepayment-notes.js"></script>
     <script src="./scripts/prepayment-workflow.js"></script>
+    <script src="./scripts/card-purchase-settlements.js"></script>
     <script src="./scripts/operations.js"></script>
     <script src="./scripts/ministry-traveller-register.js"></script>
     <script src="./scripts/invoice-delete.js"></script>

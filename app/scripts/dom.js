@@ -96,6 +96,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       syncSupplierWithEzus: document.getElementById("sync-supplier-with-ezus"),
       invoiceCreatePanel: document.getElementById("invoice-create-panel"),
       invoiceCreateTitle: document.getElementById("invoice-create-title"),
+      invoiceCreateHeaderSupplier: document.getElementById("invoice-create-header-supplier"),
       invoiceCreateModeBadge: document.getElementById("invoice-create-mode-badge"),
       invoiceCreateClose: document.getElementById("invoice-create-close"),
       invoiceCreateCancel: document.getElementById("invoice-create-cancel"),
