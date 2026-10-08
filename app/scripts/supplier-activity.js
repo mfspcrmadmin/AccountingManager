@@ -289,7 +289,7 @@
           bucket.invoiceCount += 1;
         }
 
-        bucket.totalAllocated += Number(allocation.Allocated_Amount || 0) || 0;
+        bucket.totalAllocated += getPaymentLetterAllocationAmount(allocation);
       });
 
       return Object.keys(groupedBySupplierId).map(function (supplierId) {
@@ -566,6 +566,13 @@
       }) || null;
     }
 
+    function getPaymentLetterAllocationAmount(allocation) {
+      var amount = Number(allocation.Allocated_Amount || 0) || 0;
+      return String(allocation.Movement_Type || "").trim() === "Supplier Refund"
+        ? -Math.abs(amount)
+        : amount;
+    }
+
     function getPaymentLetterAllocationsForSupplier(paymentId, supplierId) {
       return state.records.payAllocations.filter(function (allocation) {
         return helpers.getLookupId(allocation.Supplier_Payment) === String(paymentId || "") &&
@@ -608,7 +615,7 @@
       var paymentReference = helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.reference) || payment.Name || payment.id || "-";
       var paymentDate = helpers.formatDate(helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.date));
       var totalAllocated = allocations.reduce(function (sum, allocation) {
-        return sum + (Number(allocation.Allocated_Amount || 0) || 0);
+        return sum + getPaymentLetterAllocationAmount(allocation);
       }, 0);
       var startIndex = pageIndex * 26;
       var pageRows = allocations.slice(startIndex, startIndex + 26);
@@ -640,7 +647,7 @@
         var invoiceReference = helpers.getLookupName(allocation.Supplier_Invoice) || allocation.Name || "-";
         var mfspReference = allocation.MFSP_Reference || "-";
         var invoiceDate = helpers.formatDate(allocation.Invoice_Date);
-        var amount = helpers.formatCurrency(Number(allocation.Allocated_Amount || 0) || 0);
+        var amount = helpers.formatCurrency(getPaymentLetterAllocationAmount(allocation));
 
         addPdfTextLine(operations, 58, y, 8, truncatePdfText(invoiceReference, 24));
         addPdfTextLine(operations, 205, y, 8, invoiceDate);

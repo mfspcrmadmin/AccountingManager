@@ -4,12 +4,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
   ns.getElements = function () {
     return {
       modeBadge: document.getElementById("mode-badge"),
-      notice: document.getElementById("notice"),
-      noticeText: document.getElementById("notice-text"),
-      noticeDismiss: document.getElementById("notice-dismiss"),
-      error: document.getElementById("error"),
-      errorText: document.getElementById("error-text"),
-      errorDismiss: document.getElementById("error-dismiss"),
       bookingActionsShortcut: document.getElementById("booking-actions-shortcut"),
       bookingActionsPopup: document.getElementById("booking-actions-popup"),
       bookingActionsBackdrop: document.getElementById("booking-actions-backdrop"),
@@ -26,6 +20,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       bookingClosureAccountingRep: document.getElementById("booking-closure-accounting-rep"),
       bookingClosureStatus: document.getElementById("booking-closure-status"),
       bookingClosureContent: document.getElementById("booking-closure-content"),
+      bookingClosureControls: document.getElementById("booking-closure-controls"),
       bookingClosureDetailPopup: document.getElementById("booking-closure-detail-popup"),
       bookingClosureDetailClose: document.getElementById("booking-closure-detail-close"),
       bookingClosureDetailTitle: document.getElementById("booking-closure-detail-title"),
@@ -35,7 +30,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       agentCommissionMessage: document.getElementById("agent-commission-message"),
       agentCommissionRecalculate: document.getElementById("agent-commission-recalculate"),
       searchPanel: document.getElementById("search-panel"),
-      loadingPill: document.getElementById("loading-pill"),
       supplierSearch: document.getElementById("supplier-search"),
       supplierOptions: document.getElementById("supplier-options"),
       loadSupplier: document.getElementById("load-supplier"),

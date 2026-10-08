@@ -455,6 +455,7 @@
       var result;
       var settlement;
       var agentCommissionError;
+      var stage = "recalculate-settlements";
 
       if (!agentCommissionBookingId) {
         setAgentCommissionPopup(true, "This booking is no longer available. Close this window and try again.", false);
@@ -480,21 +481,31 @@
           throw new Error(output.message || result.message || "Settlements could not be recalculated.");
         }
 
+        stage = "validate-agent-commission";
         agentCommissionError = getAgentCommissionRecalculationError(output);
         if (agentCommissionError) {
           throw new Error(agentCommissionError);
         }
 
+        stage = "load-agent-commission-settlement";
         settlement = await findRecalculatedAgentCommissionSettlement(output, agentCommissionBookingId);
         if (!settlement) {
           setAgentCommissionPopup(true, "The agent commission settlement is still missing after recalculation. There is another problem with this booking; please review its agent, agency and commission data.", false);
           return;
         }
 
+        stage = "open-agent-commission-invoice";
         await openAgentCommissionInvoice(settlement);
         setAgentCommissionPopup(false, "", false);
       } catch (error) {
-        debugError("onAgentCommissionRecalculateClick failed", error, { bookingId: agentCommissionBookingId });
+        debugError("onAgentCommissionRecalculateClick failed", error, {
+          bookingId: agentCommissionBookingId,
+          functionName: RECALCULATE_SUPPLIER_SETTLEMENTS_FOR_BOOKING_FUNCTION,
+          stage: stage,
+          functionResponse: response || null,
+          agentCommissionResult: getAgentCommissionRecalculationResult(output),
+          settlementId: settlement && settlement.id || ""
+        });
         setAgentCommissionPopup(true, error.message || "Settlements could not be recalculated. There is another problem with this booking.", false, "error");
       }
     }
@@ -553,7 +564,206 @@
       if (normalized.indexOf("reopen") !== -1) {
         return "is-reopened";
       }
+      if (normalized.indexOf("blocked") !== -1) { return "is-blocked"; }
+      if (normalized.indexOf("review") !== -1) { return "is-review"; }
       return "is-pending";
+    }
+
+    function closureProgress(settlements) {
+      var relevant = settlements.filter(function (item) { return !isNoServicesSettlement(item); });
+      var reviewed = relevant.filter(function (item) { return helpers.normalizeString(getClosureReviewStatus(item)) === "reviewed"; }).length;
+      return { total: relevant.length, reviewed: reviewed, ready: relevant.length > 0 && reviewed === relevant.length };
+    }
+
+    async function loadAllClosureRecords(module, bookingId) {
+      var records = [], page = 1, batch;
+      do {
+        batch = await crm.searchRecordPage(module, "(Booking:equals:" + helpers.escapeCriteriaValue(String(bookingId)) + ")", page++, 200);
+        records = records.concat(batch);
+      } while (batch.length === 200);
+      return records;
+    }
+
+    function requireClosureWriteSuccess(response) {
+      var result = response && response.data && response.data[0];
+      if (!result || result.code !== "SUCCESS") {
+        throw new Error(result && result.message || response && response.message || "CRM did not confirm the change.");
+      }
+    }
+
+    async function saveClosureStatus(closure, status, extra) {
+      var payload = Object.assign({ Closure_Status: status }, extra || {});
+      requireClosureWriteSuccess(await crm.updateRecord(MODULES.bookings, closure.booking.id, payload));
+      Object.assign(closure.booking, payload);
+      (state.views.bookings.records || []).forEach(function (record) {
+        if (String(record.id) === String(closure.booking.id)) { Object.assign(record, payload); }
+      });
+      renderAll();
+    }
+
+    async function refreshClosureBooking(closure) {
+      var booking = await crm.getRecord(MODULES.bookings, closure.booking.id);
+      if (!booking || !booking.id) { throw new Error('The booking could not be loaded. Refresh and try again.'); }
+      closure.booking = booking;
+    }
+
+    async function loadClosureBlockingReason(closure) {
+      if (getBookingClosureStatus(closure.booking) !== 'Closure Blocked') { return; }
+      try {
+        var notes = [], page = 1, batch;
+        do {
+          batch = await crm.getRelatedRecords(MODULES.bookings, closure.booking.id, 'Notes', page++, 200);
+          notes = notes.concat(batch);
+        } while (batch.length === 200);
+        notes = notes.filter(function (note) { return note.Note_Title === 'Trip closure blocking reason'; })
+          .sort(function (a, b) { return String(b.Created_Time || '').localeCompare(String(a.Created_Time || '')); });
+        closure.savedBlockReason = notes.length ? notes[0].Note_Content : '';
+      } catch (error) {
+        closure.savedBlockReason = '';
+      }
+    }
+
+    function closureActionIcon(action) {
+      var paths = { start: '<path d="m9 5 10 7-10 7Z"/>', complete: '<path d="m5 12 4 4L19 6"/>',
+        block: '<circle cx="12" cy="12" r="8"/><path d="m6 6 12 12"/>',
+        reopen: '<path d="M4 10a8 8 0 1 1 2 8M4 4v6h6"/>' };
+      return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (paths[action] || paths.block) + '</svg>';
+    }
+
+    function closureControls(closure) {
+      var status = getBookingClosureStatus(closure.booking);
+      var progress = closureProgress(closure.settlements || []);
+      var completed = status === 'Closure Completed';
+      var blocked = status === 'Closure Blocked';
+      var pending = status === 'Closure Pending';
+      var busy = Boolean(closure.isSaving || closure.loadFailed);
+      var reason = !progress.total ? 'No active settlements to review.' : !progress.ready ? 'Review all settlements to complete closure.' : '';
+      var percent = progress.total ? Math.round(progress.reviewed / progress.total * 100) : 0;
+      function button(action, label, primary, unavailable, description) {
+        var saving = closure.isSaving && closure.savingAction === action;
+        return '<button type="' + (action === 'block' ? 'submit' : 'button') + '" class="button ' + (primary ? 'primary' : 'secondary') +
+          (action === 'block' || action === 'open-block' ? ' closure-block-action' : '') + '" data-closure-action="' + action + '"' +
+          (busy || unavailable ? ' disabled' : '') + (description ? ' aria-describedby="' + description + '"' : '') +
+          (action === 'open-block' ? ' aria-expanded="' + Boolean(closure.blockPopoverOpen) + '" aria-controls="closure-block-popover" aria-haspopup="dialog"' : '') +
+          (saving ? ' aria-busy="true"' : '') + '>' + (action === 'cancel-block' ? '' : closureActionIcon(action)) +
+          '<span>' + (saving ? 'Saving...' : label) + '</span></button>';
+      }
+      var actions = completed ? button('reopen', 'Reopen closure', true) : blocked ? button('start', 'Resume review', true) :
+        (pending ? button('start', 'Start review', true) : '') +
+        (!pending || progress.ready ? '<div class="closure-complete-control">' + button('complete', 'Complete closure', !pending && progress.ready, !progress.ready, reason ? 'closure-complete-help' : '') + '</div>' : '') +
+        '<div class="closure-block-anchor">' + button('open-block', 'Block closure', false) +
+        (closure.blockPopoverOpen ? '<form id="closure-block-popover" class="closure-block-popover" role="dialog" aria-labelledby="closure-block-label" novalidate>' +
+          '<label id="closure-block-label" for="closure-block-reason">Blocking reason</label>' +
+          '<textarea id="closure-block-reason" data-closure-block-reason rows="3" maxlength="2000" required' + (busy ? ' disabled' : '') +
+          (closure.blockError ? ' aria-invalid="true" aria-describedby="closure-block-error"' : '') + '>' + helpers.escapeHtml(closure.blockReason || '') + '</textarea>' +
+          (closure.blockError ? '<p id="closure-block-error" class="booking-closure-error" role="alert">' + helpers.escapeHtml(closure.blockError) + '</p>' : '') +
+          '<div class="closure-block-buttons">' + button('cancel-block', 'Cancel', false) + button('block', 'Block closure', false) + '</div></form>' : '') + '</div>';
+      return '<section class="booking-closure-workflow" aria-label="Closure workflow" aria-busy="' + Boolean(closure.isSaving) + '">' +
+        '<div class="closure-workflow-row"><div class="closure-progress"><div class="closure-progress-copy"><strong>' + progress.reviewed + ' / ' + progress.total +
+        '</strong><span>settlements reviewed</span></div><div class="closure-progress-track' + (progress.ready ? ' is-ready' : '') + '" role="progressbar" aria-label="Settlements reviewed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + percent +
+        '" aria-valuetext="' + progress.reviewed + ' of ' + progress.total + ' settlements reviewed"><span style="width:' + percent + '%"></span></div></div>' +
+        '<div class="closure-workflow-actions">' + actions + '</div></div>' +
+        (!completed && !blocked && !pending && reason ? '<p id="closure-complete-help" class="closure-workflow-help">' + reason + '</p>' : '') +
+        (blocked ? '<p class="closure-blocked-reason">' + closureActionIcon('block') + '<span>' + helpers.escapeHtml(closure.savedBlockReason || 'See the booking Notes for the blocking reason.') + '</span></p>' : '') +
+        (closure.booking.Closure_Completed_By ? '<p class="closure-workflow-audit">Last completed by ' + helpers.escapeHtml(closure.booking.Closure_Completed_By) + ' &middot; ' + helpers.escapeHtml(closure.booking.Closure_Completed_At || '') + '</p>' : '') +
+        (closure.error ? '<p class="booking-closure-error" role="alert">' + helpers.escapeHtml(closure.error) + '</p>' : '') + '</section>';
+    }
+
+    function focusClosureControl(selector) {
+      var control = (elements.bookingClosureControls || elements.bookingClosureContent).querySelector(selector);
+      if (control && typeof control.focus === 'function') { control.focus(); }
+    }
+
+    function closeClosureBlockPopover(returnFocus) {
+      var closure = state.bookingClosure;
+      if (!closure || !closure.blockPopoverOpen || closure.isSaving) { return; }
+      closure.blockPopoverOpen = false;
+      closure.blockError = '';
+      renderBookingClosure();
+      if (returnFocus) { focusClosureControl('[data-closure-action="open-block"]'); }
+    }
+
+    function onClosurePopoverDismiss(event) {
+      var closure = state.bookingClosure;
+      if (!closure || !closure.blockPopoverOpen) { return; }
+      if (event.type === 'keydown') {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeClosureBlockPopover(true); }
+      } else if (!event.target.closest('.closure-block-anchor')) {
+        closeClosureBlockPopover(false);
+      }
+    }
+
+    async function onClosureStatusClick(event) {
+      var target = event.target && event.target.closest('[data-closure-action]');
+      var closure = state.bookingClosure;
+      if (!target || target.disabled || !closure || closure.isSaving || closure.loadFailed) { return; }
+      var action = target.getAttribute('data-closure-action');
+      if (event.preventDefault) { event.preventDefault(); }
+      if (action === 'open-block') {
+        closure.blockPopoverOpen = true;
+        closure.blockError = '';
+        renderBookingClosure();
+        focusClosureControl('[data-closure-block-reason]');
+        return;
+      }
+      if (action === 'cancel-block') { closeClosureBlockPopover(true); return; }
+      var input = (elements.bookingClosureControls || elements.bookingClosureContent).querySelector('[data-closure-block-reason]');
+      closure.blockReason = input ? input.value.trim() : closure.blockReason || '';
+      if (action === 'block' && !closure.blockReason) {
+        closure.blockError = 'Enter a blocking reason.';
+        closure.blockPopoverOpen = true;
+        renderBookingClosure();
+        focusClosureControl('[data-closure-block-reason]');
+        return;
+      }
+      closure.error = '';
+      closure.blockError = '';
+      closure.isSaving = true;
+      closure.savingAction = action;
+      renderBookingClosure();
+      try {
+        await refreshClosureBooking(closure);
+        var status = getBookingClosureStatus(closure.booking);
+        if (action === 'reopen') {
+          if (status !== 'Closure Completed') { throw new Error('Only a completed closure can be reopened.'); }
+          await saveClosureStatus(closure, 'Closure Reopened');
+        } else {
+          if (status === 'Closure Completed') { throw new Error('Reopen the closure before making changes.'); }
+          if (action === 'start') {
+            if (status !== 'Closure Pending' && status !== 'Closure Blocked') { throw new Error('The closure is already being reviewed.'); }
+            await saveClosureStatus(closure, 'Closure In Review');
+          } else if (action === 'block') {
+            if (!closure.blockReason) { throw new Error('Enter a blocking reason.'); }
+            requireClosureWriteSuccess(await crm.insertRecord('Notes', {
+              Parent_Id: closure.booking.id, '$se_module': MODULES.bookings,
+              Note_Title: 'Trip closure blocking reason', Note_Content: closure.blockReason
+            }));
+            await saveClosureStatus(closure, 'Closure Blocked');
+            closure.savedBlockReason = closure.blockReason;
+            closure.blockReason = '';
+            closure.blockPopoverOpen = false;
+          } else if (action === 'complete') {
+            if (status === 'Closure Blocked') { throw new Error('Resolve the block and resume review before completing closure.'); }
+            closure.settlements = await loadAllClosureRecords(MODULES.settlements, closure.booking.id);
+            if (!closureProgress(closure.settlements).ready) { throw new Error('All active settlements must be reviewed before completing closure.'); }
+            var email = await getCurrentUserEmail();
+            if (!email) { throw new Error('The signed-in user is unavailable. Reload before completing closure.'); }
+            await saveClosureStatus(closure, 'Closure Completed', {
+              Closure_Completed_By: email, Closure_Completed_At: new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00')
+            });
+          }
+        }
+      } catch (error) {
+        if (action === 'block') {
+          closure.blockError = error.message || 'Could not block closure.';
+          closure.blockPopoverOpen = true;
+        } else { closure.error = error.message || 'Could not update closure status.'; }
+      } finally {
+        closure.isSaving = false;
+        closure.savingAction = '';
+        renderBookingClosure();
+        focusClosureControl(closure.blockPopoverOpen ? '[data-closure-block-reason]' : '.booking-closure-workflow button:not(:disabled)');
+      }
     }
 
     function getClosureRowColor(tone, isReviewed) {
@@ -632,6 +842,10 @@
       }
 
       elements.bookingClosurePopup.hidden = !closure.isOpen;
+      if (elements.bookingClosureControls) {
+        elements.bookingClosureControls.hidden = !closure.isOpen || closure.isLoading || !booking;
+        elements.bookingClosureControls.innerHTML = elements.bookingClosureControls.hidden ? '' : closureControls(closure);
+      }
       if (elements.bookingClosureAccountingRep) {
         elements.bookingClosureAccountingRep.hidden = !closure.isOpen || closure.isLoading || !booking;
         elements.bookingClosureAccountingRep.textContent = booking
@@ -776,6 +990,10 @@
         '<div class="table-wrap booking-closure-table-wrap"><table class="results-table"><thead><tr>' + visibleClosureColumns.map(function (key) { return ns.tableColumns.resizableHeader(key, closureHeaders[key]); }).join("") + '<th class="table-columns-gear-cell">' + ns.tableColumns.button("tripClosure") + "</th></tr></thead><tbody>" +
         (rows || '<tr><td colspan="' + (visibleClosureColumns.length + 1) + '" class="table-empty">No settlements were found for this booking.</td></tr>') +
         "</tbody></table></div>";
+      elements.bookingClosureContent.querySelectorAll('[data-booking-closure-review-settlement-id], [data-booking-closure-request-invoice]').forEach(function (button) {
+        button.disabled = Boolean(closure.isSaving || closure.loadFailed || bookingClosureStatus === 'Closure Completed');
+        if (bookingClosureStatus === 'Closure Completed') { button.title = 'Reopen closure to make changes'; }
+      });
     }
 
     function onInvoiceRequested(settlementId) {
@@ -793,6 +1011,7 @@
     }
 
     function closeBookingClosure() {
+      if (state.bookingClosure.isSaving) { return; }
       state.bookingClosure.isOpen = false;
       if (state.bookingClosure.detail) {
         state.bookingClosure.detail.isOpen = false;
@@ -918,6 +1137,7 @@
     }
 
     function onBookingClosureRefreshClick() {
+      if (state.bookingClosure && state.bookingClosure.isSaving) { return; }
       var booking = state.bookingClosure && state.bookingClosure.booking;
       var mfspCode = helpers.getCandidateValue(booking, FIELD_CANDIDATES.booking.mfsp);
 
@@ -933,7 +1153,7 @@
       var target = event.target && event.target.closest("[data-booking-closure-review-settlement-id]");
       var settlementId = target && target.getAttribute("data-booking-closure-review-settlement-id");
 
-      if (!settlementId || target.disabled) {
+      if (!settlementId || target.disabled || state.bookingClosure.isSaving || state.bookingClosure.loadFailed) {
         return;
       }
 
@@ -945,12 +1165,20 @@
       }
       var isReviewed = helpers.normalizeString(getClosureReviewStatus(settlement)) === "reviewed";
       var nextReviewStatus = isReviewed ? "Pending review" : "Reviewed";
+      var closure = state.bookingClosure;
 
       target.disabled = true;
+      closure.isSaving = true;
+      closure.error = '';
+      renderBookingClosure();
       try {
-        await crm.updateRecord(MODULES.settlements, settlementId, {
+        await refreshClosureBooking(closure);
+        if (getBookingClosureStatus(closure.booking) === 'Closure Completed') {
+          throw new Error('Reopen the closure before changing settlement reviews.');
+        }
+        requireClosureWriteSuccess(await crm.updateRecord(MODULES.settlements, settlementId, {
           Closure_Review_Status: nextReviewStatus
-        });
+        }));
         state.bookingClosure.settlements = (state.bookingClosure.settlements || []).map(function (settlement) {
           if (String(settlement && settlement.id || "") === settlementId) {
             return Object.assign({}, settlement, {
@@ -960,16 +1188,23 @@
 
           return settlement;
         });
-        renderBookingClosure();
+        if (!isReviewed && getBookingClosureStatus(closure.booking) === 'Closure Pending') {
+          try { await saveClosureStatus(closure, 'Closure In Review'); }
+          catch (error) { throw new Error('Settlement review saved, but the closure status could not advance. Use Start review. ' + error.message); }
+        }
         renderer.showNotice(isReviewed ? "Settlement marked as pending review." : "Settlement marked as reviewed.", { tone: "success" });
       } catch (error) {
-        target.disabled = false;
+        closure.error = error.message;
         debugError("onBookingClosureReviewClick failed", error, { settlementId: settlementId });
         renderer.showError(error.message || "Could not update the settlement review status.");
+      } finally {
+        closure.isSaving = false;
+        renderBookingClosure();
       }
     }
 
     async function onBookingTripClosureClick(mfspOverride) {
+      if (state.bookingClosure && state.bookingClosure.isSaving) { return; }
       var mfspCode = String(mfspOverride || getBookingShortcutMfspValue() || "").trim();
       var bookingRecord;
 
@@ -991,15 +1226,18 @@
         bookingRecord = await resolveBookingShortcutRecordByMfsp(mfspCode);
         state.bookingClosure.booking = bookingRecord;
         await Promise.all([
-          crm.searchRecord(MODULES.settlements, "(Booking:equals:" + bookingRecord.id + ")").then(function (records) {
+          loadClosureBlockingReason(state.bookingClosure),
+          loadAllClosureRecords(MODULES.settlements, bookingRecord.id).then(function (records) {
             state.bookingClosure.settlements = records || [];
           }),
-          crm.searchRecord(MODULES.invoices, "(Booking:equals:" + bookingRecord.id + ")").then(function (records) {
+          loadAllClosureRecords(MODULES.invoices, bookingRecord.id).then(function (records) {
             state.bookingClosure.invoices = records || [];
           })
         ]);
       } catch (error) {
         debugError("onBookingTripClosureClick failed", error, { mfspCode: mfspCode });
+        state.bookingClosure.loadFailed = true;
+        state.bookingClosure.error = 'Could not load all closure data. Refresh before making changes.';
         renderer.showError(error.message || "Could not load the booking closure data.");
       } finally {
         state.bookingClosure.isLoading = false;
@@ -1244,6 +1482,8 @@
       closeBookingClosureDetail: closeBookingClosureDetail,
       onClosureRefreshClick: onBookingClosureRefreshClick,
       onClosureReviewClick: onBookingClosureReviewClick,
+      onClosureStatusClick: onClosureStatusClick,
+      onClosurePopoverDismiss: onClosurePopoverDismiss,
       onInvoiceRequested: onInvoiceRequested,
       onClosureTableControlClick: onBookingClosureTableControlClick,
       onClosureSettlementClick: onBookingClosureSettlementClick,

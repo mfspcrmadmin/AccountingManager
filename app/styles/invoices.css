@@ -71,6 +71,11 @@
   min-width: 1140px;
 }
 
+/* Saved pixel widths must not leave unused space when the viewport grows. */
+#invoices-table-wrap .invoice-results-table.has-column-widths {
+  min-width: 100%;
+}
+
 .invoice-results-table th,
 .invoice-results-table td {
   padding: 7px 8px;
@@ -804,8 +809,8 @@
   box-shadow: 0 16px 30px rgba(16, 24, 40, .16);
 }
 
-#tab-invoices .bookings-stage-filter-field { position: relative; }
-#tab-invoices .bookings-stage-toggle {
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-filter-field { position: relative; }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-toggle {
   position: relative;
   width: 100%;
   min-height: 38px;
@@ -823,18 +828,18 @@
   white-space: nowrap;
   transition: border-color 90ms ease, background-color 90ms ease, transform 70ms ease;
 }
-#tab-invoices .bookings-stage-toggle::after { position: absolute; top: 50%; right: 15px; width: 0; height: 0; border-top: 6px solid currentColor; border-right: 5px solid transparent; border-left: 5px solid transparent; color: #667085; content: ""; transform: translateY(-35%); transition: transform 90ms ease; }
-#tab-invoices .bookings-stage-toggle[aria-expanded="true"]::after { transform: translateY(-60%) rotate(180deg); }
-#tab-invoices .bookings-stage-toggle:hover, #tab-invoices .bookings-stage-toggle:focus-visible { border-color: rgba(209, 136, 87, .42); outline: 0; }
-#tab-invoices .bookings-stage-toggle:active { transform: scale(.985); }
-#tab-invoices .bookings-stage-menu { z-index: 40; width: max-content; min-width: 250px; max-width: min(330px, calc(100vw - 32px)); max-height: 330px; padding: 6px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 16px 30px rgba(16, 24, 40, .16); }
-#tab-invoices .bookings-stage-option { gap: 9px; padding: 8px 9px; border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 600; transition: background-color 80ms ease, transform 60ms ease; }
-#tab-invoices .bookings-stage-option:hover { background: #fff8ef; }
-#tab-invoices .bookings-stage-option:active { transform: scale(.99); }
-#tab-invoices .bookings-stage-option input { width: 15px; height: 15px; min-height: 0; accent-color: var(--accent-strong); }
-#tab-invoices .status-filter-menu-actions { gap: 8px; padding: 3px 3px 8px; border-bottom-color: #eaecf0; }
-#tab-invoices .status-filter-menu-action { padding: 6px 8px; border-radius: 7px; color: var(--accent-strong); font-size: 11px; font-weight: 700; }
-#tab-invoices .status-filter-menu-action:hover { background: #fff8ef; }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-toggle::after { position: absolute; top: 50%; right: 15px; width: 0; height: 0; border-top: 6px solid currentColor; border-right: 5px solid transparent; border-left: 5px solid transparent; color: #667085; content: ""; transform: translateY(-35%); transition: transform 90ms ease; }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-toggle[aria-expanded="true"]::after { transform: translateY(-60%) rotate(180deg); }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-toggle:hover, :is(#tab-invoices, #booking-won-panel) .bookings-stage-toggle:focus-visible { border-color: rgba(209, 136, 87, .42); outline: 0; }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-toggle:active { transform: scale(.985); }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-menu { z-index: 40; width: max-content; min-width: 250px; max-width: min(330px, calc(100vw - 32px)); max-height: 330px; padding: 6px; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 16px 30px rgba(16, 24, 40, .16); }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-option { gap: 9px; padding: 8px 9px; border-radius: 8px; color: var(--text); font-size: 12px; font-weight: 600; transition: background-color 80ms ease, transform 60ms ease; }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-option:hover { background: #fff8ef; }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-option:active { transform: scale(.99); }
+:is(#tab-invoices, #booking-won-panel) .bookings-stage-option input { width: 15px; height: 15px; min-height: 0; accent-color: var(--accent-strong); }
+:is(#tab-invoices, #booking-won-panel) .status-filter-menu-actions { gap: 8px; padding: 3px 3px 8px; border-bottom-color: #eaecf0; }
+:is(#tab-invoices, #booking-won-panel) .status-filter-menu-action { padding: 6px 8px; border-radius: 7px; color: var(--accent-strong); font-size: 11px; font-weight: 700; }
+:is(#tab-invoices, #booking-won-panel) .status-filter-menu-action:hover { background: #fff8ef; }
 .invoices-view-switch { display: inline-flex; flex: 0 0 auto; overflow: hidden; min-height: 36px; border: 1px solid var(--line); border-radius: 11px; background: #f8faf9; }
 .invoices-view-switch button { min-width: 54px; padding: 7px 11px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; transition: background-color 90ms ease, color 90ms ease; }
 .invoices-view-switch button:last-child { border-right: 0; }

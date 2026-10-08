@@ -505,6 +505,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function onCreateAccountingAccountSubmit(event) {
+      var renderer = deps.renderer.withFeedbackTarget ? deps.renderer.withFeedbackTarget("accounting-account-create") : deps.renderer;
       var payload = {};
       var response;
       var created;
@@ -586,6 +587,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function onCreatePaymentAccountSubmit(event) {
+      var renderer = deps.renderer.withFeedbackTarget ? deps.renderer.withFeedbackTarget("payment-account-create") : deps.renderer;
       var payload = {};
       var response;
       var created;

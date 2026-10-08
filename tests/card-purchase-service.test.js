@@ -67,5 +67,5 @@ test('unavailable services show a load error, while absent prices do not show ze
   const app = setup(async () => ({ data: [{ Product_Description: 'Service', Purchase_Price: 50, Total_Purchase_Price: null }] }));
   app.open({ Boking_Service: { id: 'service' } });
   await flush();
-  assert.match(app.element.innerHTML, /Total purchase price<\/dt><dd>—/);
+  assert.match(app.element.innerHTML, /Total Purchase Price<\/span><strong>—/);
 });

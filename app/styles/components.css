@@ -70,98 +70,15 @@
   border-color: rgba(180, 35, 24, 0.2);
 }
 
-.floating-message-stack {
-  --floating-booking-shortcut-clearance: 228px;
-  position: fixed;
-  left: calc(50% - (var(--floating-booking-shortcut-clearance) / 2));
-  transform: translateX(-50%);
-  bottom: 16px;
-  z-index: 2000;
-  display: grid;
-  gap: 10px;
-  width: min(1648px, calc(100vw - 20px - var(--floating-booking-shortcut-clearance)));
-  pointer-events: none;
-}
 
-.floating-app-message {
-  align-items: flex-start;
-  justify-content: space-between;
-  margin: 0;
-  padding: 13px 16px;
-  border-width: 2px;
-  border-radius: 18px;
-  box-shadow: 0 20px 42px rgba(17, 24, 39, 0.22);
-  backdrop-filter: blur(10px);
-  pointer-events: auto;
-  transition: opacity 350ms ease, transform 350ms ease;
-}
 
-.floating-app-message.is-fading-out {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
 
-.floating-app-message.notice.neutral,
-.floating-app-message.notice.info {
-  background: linear-gradient(180deg, rgba(255, 249, 241, 0.98) 0%, rgba(248, 237, 224, 0.98) 100%);
-  border-color: rgba(209, 136, 87, 0.72);
-  color: #6f482c;
-}
 
-.floating-app-message.notice.success {
-  background: linear-gradient(180deg, rgba(238, 252, 241, 0.98) 0%, rgba(221, 246, 228, 0.98) 100%);
-  border-color: rgba(22, 101, 52, 0.58);
-  color: #166534;
-}
 
-.floating-app-message.notice.error {
-  background: linear-gradient(180deg, rgba(255, 245, 245, 0.99) 0%, rgba(254, 226, 226, 0.99) 100%);
-  border-color: rgba(180, 35, 24, 0.72);
-  color: #991b1b;
-}
 
-.floating-message-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 14px;
-  line-height: 1.45;
-  font-weight: 600;
-}
 
-.floating-message-dismiss {
-  flex: 0 0 auto;
-  min-width: 24px;
-  width: 24px;
-  height: 24px;
-  margin: -2px -2px 0 8px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: currentColor;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.72;
-}
 
-.floating-message-dismiss:hover {
-  opacity: 1;
-  background: rgba(21, 32, 43, 0.08);
-}
 
-.floating-booking-shortcut {
-  position: fixed;
-  right: 20px;
-  bottom: 16px;
-  z-index: 1001;
-  display: grid;
-  justify-items: end;
-  gap: 10px;
-  pointer-events: auto;
-}
 
 /* Keep the workspace fixed while a dialog is active. Dialogs that need their
    own scrolling retain it; this only prevents the page behind them from moving.
@@ -484,6 +401,73 @@ body:has(.operations-file-preview) {
   background: #fff7e8;
   color: #9a5b13;
 }
+
+/* Compact closure controls; all styling stays inside the workflow block. */
+.booking-closure-workflow {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--line, #dbe3ec);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+}
+.booking-closure-workflow + .booking-closure-summary { margin-top: 0; }
+.booking-closure-card > .booking-closure-header {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+}
+.booking-closure-heading { min-width: 0; }
+#booking-closure-controls { min-width: 0; width: max-content; max-width: 650px; }
+#booking-closure-controls .closure-progress { flex-basis: 190px; }
+#booking-closure-controls .booking-closure-workflow { margin: 0; padding: 0; border: 0; border-radius: 0; }
+.booking-closure-window-actions { flex-wrap: nowrap; }
+@media (max-width: 1150px) {
+  .booking-closure-card > .booking-closure-header { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .booking-closure-window-actions { grid-column: 2; grid-row: 1; }
+  #booking-closure-controls { grid-column: 1 / -1; width: auto; max-width: none; }
+}
+.closure-workflow-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; }
+.closure-progress { flex: 0 1 220px; min-width: 0; }
+.closure-progress-copy { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.closure-progress-copy strong { font-size: 16px; font-weight: 750; white-space: nowrap; }
+.closure-progress-copy span, .closure-workflow-help, .closure-workflow-audit { color: var(--muted, #64748b); font-size: 12px; }
+.closure-progress-track { width: 190px; max-width: 100%; height: 4px; margin-top: 8px; border-radius: 4px; background: #f0efed; overflow: hidden; }
+.closure-progress-track > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.closure-progress-track.is-ready > span { background: #16764a; }
+.closure-workflow-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.booking-closure-workflow .button { min-height: 38px; padding: 8px 12px; border-radius: 8px; gap: 6px; font-size: 12px; box-shadow: none; }
+.booking-closure-workflow .button:hover:not(:disabled) { transform: none; box-shadow: none; }
+.booking-closure-workflow .button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.booking-closure-workflow .button.primary:hover:not(:disabled) { background: var(--accent-strong); }
+.booking-closure-workflow .button.secondary { background: #fff; color: var(--muted); border-color: var(--line); }
+.booking-closure-workflow .button.closure-block-action { color: #896019; border-color: transparent; }
+.booking-closure-workflow .button.closure-block-action:hover:not(:disabled) { background: #fffbeb; border-color: #ead9ae; }
+.booking-closure-workflow svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.booking-closure-workflow p { margin: 8px 0 0; overflow-wrap: anywhere; line-height: 1.4; }
+.closure-workflow-help { text-align: right; }
+.closure-block-anchor { position: relative; }
+.closure-block-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; width: 300px; max-width: calc(100vw - 80px); padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.closure-block-popover label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.closure-block-popover textarea { display: block; width: 100%; min-width: 0; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; font: inherit; }
+.closure-block-popover textarea[aria-invalid="true"] { border-color: #b42318; }
+.closure-block-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.booking-closure-workflow .closure-block-buttons .closure-block-action { background: #fffbeb; border-color: #ead9ae; }
+.booking-closure-workflow .booking-closure-error { color: #b42318; font-size: 12px; }
+.closure-blocked-reason { display: flex; align-items: flex-start; gap: 7px; color: #896019; border-left: 2px solid #ead9ae; padding-left: 8px; }
+.closure-blocked-reason span { min-width: 0; white-space: pre-wrap; }
+.booking-closure-workflow :is(button, textarea):focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 3px; }
+@media (max-width: 640px) {
+  .closure-workflow-actions { width: 100%; margin-left: 0; }
+  .closure-workflow-help { text-align: left; }
+  .closure-block-anchor { position: static; }
+  .closure-block-popover { top: calc(100% - 4px); left: 12px; right: 12px; width: auto; max-width: none; }
+}
+.booking-closure-status.is-blocked { background: #fee2e2; color: #991b1b; }
+.booking-closure-status.is-review { background: #dbeafe; color: #1e40af; }
+.booking-closure-review-button:disabled { cursor: not-allowed; opacity: .55; }
 
 .booking-closure-status.is-completed {
   background: #ecfdf3;
@@ -5247,18 +5231,7 @@ select.status-select.status-danger {
 }
 
 @media (max-width: 720px) {
-  .floating-message-stack {
-    --floating-booking-shortcut-clearance: 0px;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 10px;
-    width: calc(100vw - 16px);
-  }
 
-  .floating-booking-shortcut {
-    right: 8px;
-    bottom: 86px;
-  }
 
   .booking-actions-popup {
     width: min(340px, calc(100vw - 16px));
@@ -5492,50 +5465,13 @@ textarea:hover {
   box-shadow: 0 6px 16px rgba(15, 118, 110, 0.16);
 }
 
-.floating-message-stack {
-  bottom: 18px;
-  gap: 8px;
-}
 
-.floating-app-message {
-  align-items: center;
-  padding: 12px 14px;
-  border-width: 1px;
-  border-radius: 16px;
-  box-shadow: 0 18px 40px rgba(22, 48, 39, 0.18);
-}
 
-.floating-app-message.notice.neutral,
-.floating-app-message.notice.info {
-  background: rgba(238, 251, 248, 0.97);
-  border-color: rgba(15, 118, 110, 0.22);
-  color: #135e59;
-}
 
-.floating-app-message.notice.success {
-  background: rgba(238, 250, 242, 0.98);
-  border-color: rgba(29, 122, 70, 0.22);
-  color: #1d7a46;
-}
 
-.floating-app-message.notice.error {
-  background: rgba(254, 243, 242, 0.98);
-  border-color: rgba(180, 35, 24, 0.22);
-  color: var(--danger);
-}
 
-.floating-message-text {
-  font-size: 13px;
-  font-weight: 700;
-}
 
-.floating-message-dismiss {
-  margin-top: 0;
-}
 
-.floating-message-dismiss:hover {
-  background: rgba(19, 32, 25, 0.08);
-}
 
 /* Dashboard and bookings surfaces. Data, table structure and interactions are
    intentionally untouched; this phase changes presentation only. */
@@ -5641,7 +5577,21 @@ textarea:hover {
 }
 
 .bookings-filters-grid .bookings-date-filter-controls {
-  grid-template-columns: 72px repeat(auto-fit, minmax(100px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.bookings-date-filter-controls select {
+  flex: 0 0 108px;
+  width: 108px;
+  min-width: 108px;
+}
+
+.bookings-date-filter-controls input[type="date"] {
+  flex: 1 1 140px;
+  min-width: 140px;
+  width: 0;
 }
 
 .bookings-filters-grid > .bookings-load-action {
@@ -5898,12 +5848,6 @@ textarea:hover,
   border-color: rgba(184, 111, 65, 0.28);
 }
 
-.floating-app-message.notice.neutral,
-.floating-app-message.notice.info {
-  border-color: rgba(209, 136, 87, 0.22);
-  background: rgba(253, 244, 236, 0.98);
-  color: #7a4b2b;
-}
 
 .dashboard-hero-panel {
   background:

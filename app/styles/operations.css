@@ -890,3 +890,63 @@
 [data-prepayment-workflow-allocations] ul { list-style: none; margin: 0; padding: 0; }
 [data-prepayment-workflow-allocations] li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0; overflow-wrap: anywhere; }
 [data-prepayment-workflow-allocations] p { margin: 12px 0 0; font-weight: 600; }
+
+/* Keep prepayment reference information in view while completing either form. */
+.card-purchase-workflow-card.prepayment-workflow-card {
+  width: min(1180px, 100vw);
+  overflow: hidden;
+  padding: 0;
+}
+.prepayment-workflow-card > header {
+  flex: 0 0 auto;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border, #dfe5eb);
+}
+.prepayment-workflow-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.prepayment-workflow-summary,
+.prepayment-workflow-card .prepayment-workflow-form {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 22px 24px;
+  scroll-padding-block: 20px;
+}
+.prepayment-workflow-summary {
+  background: #f8fafc;
+  border-right: 1px solid var(--border, #dfe5eb);
+}
+.prepayment-workflow-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.prepayment-workflow-summary > .panel-eyebrow { margin-top: 0; }
+.prepayment-workflow-summary .card-purchase-workflow-context dd {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.prepayment-workflow-summary .prepayment-observations dd { white-space: pre-wrap; }
+.prepayment-workflow-summary .prepayment-settlement,
+.prepayment-workflow-summary [data-prepayment-workflow-allocations] { background: #fff; }
+.prepayment-workflow-summary [data-prepayment-workflow-allocations] { margin-bottom: 0; }
+.prepayment-workflow-card .prepayment-workflow-form { margin: 0; }
+#card-purchase-workflow-form { margin-top: 0; }
+#card-purchase-workflow-service { padding: 0 14px 14px; }
+#card-purchase-service-message { margin: 0 14px 12px; }
+#card-purchase-services .prepayment-service-choice { grid-template-columns: 78px minmax(0, 1fr) 92px; }
+#card-purchase-services .prepayment-service-choice label { grid-column: 1 / -1; }
+.prepayment-workflow-card .prepayment-workflow-fieldset .prepayment-workflow-fieldset:first-child { margin-top: 0; }
+@media (max-width: 760px) {
+  .prepayment-workflow-card > header { padding: 14px 16px; }
+  .prepayment-workflow-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 38%) minmax(0, 1fr); }
+  .prepayment-workflow-summary { border-right: 0; border-bottom: 1px solid var(--border, #dfe5eb); }
+  .prepayment-workflow-summary,
+  .prepayment-workflow-card .prepayment-workflow-form { padding: 16px; }
+  .prepayment-workflow-summary .card-purchase-workflow-context dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

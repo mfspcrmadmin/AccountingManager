@@ -1,0 +1,144 @@
+string standalone.backfillTripAccountingClosure(String phase, String afterId, Bool dryRun)
+{
+// Repair empty closure fields only. Does not execute Blueprint transitions.
+// Start with ("bookings", "0", true) to simulate, or false to apply.
+// Repeat with returned next_phase / next_after_id until complete = true.
+// Start a new run at ("bookings", "0", false) after finishing a simulation.
+// Each call scans at most 100 records. Counts refer to this call only.
+// Uses crm_oauth_connection for COQL (Deals and Supplier_Settlements read).
+// COQL lookup criteria: https://www.zoho.com/crm/developer/docs/api/v8/COQL-Joins.html
+result = Map();
+result.put("error",false);
+result.put("complete",false);
+currentPhase = ifnull(phase,"bookings").trim();
+if(currentPhase == "") { currentPhase = "bookings"; }
+cursor = ifnull(afterId,"0").trim();
+if(cursor == "") { cursor = "0"; }
+simulate = ifnull(dryRun,true);
+result.put("dry_run",simulate);
+result.put("next_phase",currentPhase);
+result.put("next_after_id",cursor);
+scanned = 0;
+eligible = 0;
+updated = 0;
+skipped = 0;
+details = List();
+try
+{
+	if(currentPhase != "bookings" && currentPhase != "settlements") { throw "phase must be bookings or settlements."; }
+	if(!cursor.matches("^[0-9]+$")) { throw "afterId must be empty, 0 or a CRM record ID."; }
+	moduleName = "Deals";
+	statusField = "Closure_Status";
+	targetStatus = "Closure Pending";
+	selectFields = "id, Stage, Closure_Status";
+	stageField = "Stage";
+	if(currentPhase == "settlements")
+	{
+		moduleName = "Supplier_Settlements";
+		statusField = "Closure_Review_Status";
+		targetStatus = "Pending review";
+		selectFields = "id, Booking, Closure_Review_Status";
+		stageField = "Booking.Stage";
+	}
+	// Independent settlement scan: also repairs settlements of bookings whose
+	// Closure_Status was already populated. ID cursor avoids offset skips.
+	query = Map();
+	query.put("select_query","select " + selectFields + " from " + moduleName + " where (" + stageField + " = 'Trip Accounting Closure' and id > " + cursor + ") order by id asc limit 100");
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/coql"
+		type :POST
+		parameters :query.toString()
+		headers :{"Content-Type":"application/json"}
+		connection :"crm_oauth_connection"
+		detailed :true
+	];
+	rows = List();
+	more = false;
+	if(response.get("responseCode") == 200)
+	{
+		body = response.get("responseText").toString().toMap();
+		if(!body.containKey("data") || !body.containKey("info")) { throw "Incomplete COQL response."; }
+		rows = body.get("data");
+		more = body.get("info").get("more_records");
+		if(more == null || (rows.isEmpty() && more == true)) { throw "Invalid COQL pagination response."; }
+	}
+	else if(response.get("responseCode") != 204) { throw "Could not load closure records: " + response.toString(); }
+	for each row in rows
+	{
+		recordId = row.get("id").toString();
+		result.put("processing_id",recordId);
+		// Re-read before writing to preserve statuses already filled since the query.
+		currentRecord = zoho.crm.getRecordById(moduleName,recordId.toLong());
+		if(ifnull(currentRecord.get("id"),"").toString() != recordId || !currentRecord.containKey(statusField)) { throw "Cannot read record or closure field: " + recordId; }
+		bookingRecord = currentRecord;
+		if(currentPhase == "settlements")
+		{
+			bookingId = ifnull(ifnull(currentRecord.get("Booking"),Map()).get("id"),"").toString();
+			if(bookingId == "") { throw "Settlement has no readable Booking: " + recordId; }
+			bookingRecord = zoho.crm.getRecordById("Deals",bookingId.toLong());
+			if(ifnull(bookingRecord.get("id"),"").toString() != bookingId) { throw "Cannot read settlement booking: " + bookingId; }
+		}
+		if(!bookingRecord.containKey("Stage")) { throw "Cannot read booking Stage for record: " + recordId; }
+		currentStatus = ifnull(currentRecord.get(statusField),"").toString().trim();
+		if(bookingRecord.get("Stage") == "Trip Accounting Closure" && (currentStatus == "" || currentStatus == "-None-"))
+		{
+			eligible = eligible + 1;
+			detail = Map();
+			detail.put("id",recordId);
+			detail.put("field",statusField);
+			detail.put("value",targetStatus);
+			if(simulate == false)
+			{
+				payload = Map();
+				payload.put(statusField,targetStatus);
+				// Suppress optional automation: this is a field repair, not a transition.
+				options = Map();
+				options.put("trigger",List());
+				updateResponse = zoho.crm.updateRecord(moduleName,recordId.toLong(),payload,options);
+				if(isnull(updateResponse) || ifnull(updateResponse.get("id"),"").toString() != recordId) { throw "Could not update " + recordId + ": " + updateResponse; }
+				updated = updated + 1;
+				detail.put("action","updated");
+			}
+			else
+			{
+				detail.put("action","would_update");
+			}
+			details.add(detail);
+		}
+		else
+		{
+			skipped = skipped + 1;
+		}
+		scanned = scanned + 1;
+		// Only advance after success or an intentional skip; failures can be retried.
+		cursor = recordId;
+		result.put("next_after_id",cursor);
+	}
+	if(more == false)
+	{
+		if(currentPhase == "bookings")
+		{
+			result.put("next_phase","settlements");
+			result.put("next_after_id","0");
+		}
+		else
+		{
+			result.put("complete",true);
+		}
+	}
+	result.put("message","Batch processed. Continue with next_phase and next_after_id until complete is true.");
+}
+catch (eBackfill)
+{
+	result.put("error",true);
+	result.put("message",eBackfill.toString());
+}
+result.put("phase",currentPhase);
+result.put("scanned",scanned);
+result.put("eligible",eligible);
+result.put("updated",updated);
+result.put("skipped",skipped);
+result.put("details",details);
+return result;
+}

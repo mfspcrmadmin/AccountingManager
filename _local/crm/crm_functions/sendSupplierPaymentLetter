@@ -167,6 +167,11 @@ string standalone.email_sendSupplierPaymentLetter(String paymentId,String suppli
 
 				invoiceLookup = allocation.get("Supplier_Invoice");
 				allocationAmount = ifnull(allocation.get("Allocated_Amount"),0).toDecimal();
+				// Refund allocations reduce both the line amount and the supplier total.
+				if(ifnull(allocation.get("Movement_Type"),"").toString().trim() == "Supplier Refund" && allocationAmount > 0)
+				{
+					allocationAmount = 0 - allocationAmount;
+				}
 				invoiceReference = ifnull(allocation.get("Name"),"").toString().trim();
 				mfspReference = ifnull(allocation.get("MFSP_Reference"),"").toString().trim();
 				invoiceDate = ifnull(allocation.get("Invoice_Date"),"").toString().trim();

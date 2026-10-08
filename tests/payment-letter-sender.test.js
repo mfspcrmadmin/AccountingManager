@@ -14,9 +14,12 @@ function setup(options = {}) {
   state.records.payAllocations = [{ Supplier_Payment: { id: 'p1' }, Supplier: { id: 's1', name: 'Supplier' }, Allocated_Amount: 10 }];
   Object.assign(state.paymentLetter, { paymentId: 'p1', isOpen: true, selectedSupplierIds: { s1: true }, manualEmailBySupplierId: { s1: 'supplier@example.com' } });
   const elements = new Proxy({}, { get(target, key) { return target[key] ||= { closest() { return null; } }; } });
-  const calls = [], popups = [];
+  const calls = [], popups = [], downloads = [];
   const mod = ns.createSupplierActivityModule({
     state, elements, helpers: ns.helpers,
+    FIELD_CANDIDATES: ns.FIELD_CANDIDATES,
+    sanitizeDownloadFileName: value => value,
+    downloadFileFromText: (name, type, text) => downloads.push({ name, type, text }),
     SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION: 'sendsupplierpaymentletter',
     PAYMENT_LETTER_DEFAULT_RECIPIENT: '',
     getCurrentUserEmail: options.getEmail || (async () => '  ALBA@madeforspainandportugal.com '),
@@ -26,8 +29,39 @@ function setup(options = {}) {
     renderer: { showError() {}, showNotice() {}, refreshActionState() {}, showErrorPopup(message) { popups.push(message); } },
     renderAll() {}, debugError() {}
   });
-  return { mod, state, calls, popups };
+  return { mod, state, calls, popups, downloads };
 }
+
+test('individual letter and downloaded PDF subtract refund lines without reversing existing negatives', () => {
+  const ctx = setup();
+  ctx.state.records.payAllocations = [
+    ['invoice', 100, 'Outbound Payment'],
+    ['refund', 30, 'Supplier Refund'],
+    ['negative-refund', -10, 'Supplier Refund'],
+    ['legacy-negative', -5, ''],
+    ['zero-refund', 0, 'Supplier Refund']
+  ].map(([name, amount, movement]) => ({
+    Supplier_Payment: { id: 'p1' }, Supplier: { id: 's1', name: 'Supplier' },
+    Supplier_Invoice: { id: name, name }, Allocated_Amount: amount, Movement_Type: movement
+  }));
+  assert.equal(ctx.mod.getPaymentLetterSuppliers(ctx.state.records.payments[0])[0].totalAllocated, 55);
+  const button = { getAttribute: name => name === 'data-payment-letter-download-pdf' ? 's1' : null };
+  ctx.mod.onSelectedPaymentLetterEmailEditClick({ target: { closest: () => button }, preventDefault() {}, stopPropagation() {} });
+  assert.equal(ctx.downloads.length, 1);
+  const pdf = ctx.downloads[0].text;
+  assert.match(pdf, /Allocated amount: [^\n]*55/);
+  assert.match(pdf, /\(-[^\n]*30/);
+  assert.match(pdf, /\(-[^\n]*10/);
+  assert.match(pdf, /\(-[^\n]*5/);
+});
+
+test('CRM email signs refunds before rendering lines and accumulating the total', () => {
+  const source = fs.readFileSync('_local/crm/crm_functions/sendSupplierPaymentLetter', 'utf8');
+  const sign = source.indexOf('allocationAmount = 0 - allocationAmount;');
+  assert.match(source, /allocation\.get\("Movement_Type"\)[^\n]*== "Supplier Refund" && allocationAmount > 0/);
+  assert.ok(sign > 0 && sign < source.indexOf('totalAllocated = totalAllocated + allocationAmount;'));
+  assert.ok(sign < source.indexOf('allocationAmount.toString() + " EUR'));
+});
 
 test('payment letter sends the current user email and preserves supplier recipients', async () => {
   const ctx = setup();

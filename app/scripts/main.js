@@ -11,6 +11,7 @@ var ns = global.AccountingManagerApp;
   var state = ns.createInitialState();
   var elements = ns.getElements();
   var crm = ns.createCrmClient(global.ZOHO, helpers);
+  ns.initIrpfReport(crm);
   var invoiceDeletionModule = ns.createInvoiceDeletionModule({
     crm: crm, modules: MODULES, helpers: helpers,
     storage: {
@@ -20,6 +21,15 @@ var ns = global.AccountingManagerApp;
     }
   });
   var renderer = ns.createRenderer(elements, state, helpers, FIELD_CANDIDATES);
+  global.document.addEventListener('supplier-accounting-account-saved', function (event) {
+    var saved = event.detail;
+    function update(record) { if (record && String(record.id) === saved.id) { record.Cuenta_Contable = saved.account || null; } }
+    update(state.supplier);
+    (state.recentSuppliers || []).forEach(update);
+    Object.keys(state.supplierIndex || {}).forEach(function (key) { update(state.supplierIndex[key]); });
+    renderAll();
+    renderer.withFeedbackTarget('suppliers').showNotice('Supplier accounting account saved.', { tone: 'success' });
+  });
   var moduleFieldApiCache = {};
   var moduleFieldMetadataCache = {};
   var bookingsLoadPromise = null;
@@ -133,7 +143,7 @@ var ns = global.AccountingManagerApp;
     }
 
     if (global.console && typeof global.console.error === "function") {
-      global.console.error("[AccountingManager] " + label, details);
+      global.console.error("[AccountingManager] " + label + (details.errorMessage ? ": " + details.errorMessage : ""), details);
     }
   }
 
@@ -271,6 +281,7 @@ var ns = global.AccountingManagerApp;
     "Booking Completed"
   ];
   state.views.bookings.filters.stageValues = BOOKING_STAGE_FILTER_OPTIONS.slice();
+  ns.initBookingWonReport(crm, BOOKING_STAGE_FILTER_OPTIONS);
   state.views.bookings.appliedFilters.stageValues = BOOKING_STAGE_FILTER_OPTIONS.slice();
   var INVOICE_STATUS_FILTER_OPTIONS = [
     "-None-",
@@ -456,7 +467,7 @@ var ns = global.AccountingManagerApp;
     helpers: helpers,
     state: state,
     crm: crm,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("invoices"),
     renderAll: renderAll,
     debugError: debugError,
     cloneFilterState: cloneFilterState,
@@ -550,7 +561,7 @@ var ns = global.AccountingManagerApp;
     elements: elements,
     helpers: helpers,
     crm: crm,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("bookings"),
     renderAll: renderAll,
     debugError: debugError,
     resolveFieldApiByCandidates: resolveFieldApiByCandidates,
@@ -606,7 +617,7 @@ var ns = global.AccountingManagerApp;
     elements: elements,
     helpers: helpers,
     crm: crm,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("supplier-activity"),
     renderAll: renderAll,
     debugError: debugError,
     loadInvoicesForSupplier: loadInvoicesForSupplier,
@@ -658,7 +669,7 @@ var ns = global.AccountingManagerApp;
     FIELD_CANDIDATES: FIELD_CANDIDATES,
     helpers: helpers,
     state: state,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("payments"),
     renderAll: renderAll,
     debugError: debugError,
     cloneFilterState: cloneFilterState,
@@ -712,7 +723,7 @@ var ns = global.AccountingManagerApp;
     elements: elements,
     helpers: helpers,
     crm: crm,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("payment-create"),
     renderAll: renderAll,
     debugError: debugError,
     buildInvoicesView: buildInvoicesView,
@@ -782,7 +793,7 @@ var ns = global.AccountingManagerApp;
   var refreshInvoicesAndPaymentsAfterSupplierPayment = paymentCreateModule.refreshInvoicesAndPaymentsAfterSupplierPayment;
   var accountingModule = ns.createAccountingModule({
     state: state,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("accounting"),
     renderAll: renderAll,
     cloneFilterState: cloneFilterState,
     ensureTabDataLoaded: ensureTabDataLoaded,
@@ -852,7 +863,7 @@ var ns = global.AccountingManagerApp;
     elements: elements,
     helpers: helpers,
     crm: crm,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("invoice-create"),
     renderAll: renderAll,
     debugError: debugError,
     debugWarn: debugWarn,
@@ -929,7 +940,7 @@ var ns = global.AccountingManagerApp;
     elements: elements,
     helpers: helpers,
     crm: crm,
-    renderer: renderer,
+    renderer: renderer.withFeedbackTarget("supplier-search"),
     renderAll: renderAll,
     debugError: debugError,
     closeCreateInvoicePanel: closeCreateInvoicePanel,
@@ -990,6 +1001,7 @@ var ns = global.AccountingManagerApp;
   bootstrap();
 
   function bindEvents() {
+    ns.bindSupplierView(document.getElementById("tab-suppliers"));
     elements.loadSupplier.addEventListener("click", onLoadSupplierClick);
     if (elements.focusSupplierSearch) {
       elements.focusSupplierSearch.addEventListener("click", function () {
@@ -1063,10 +1075,21 @@ var ns = global.AccountingManagerApp;
       }, true);
       elements.bookingClosureContent.addEventListener("click", onBookingClosureTableControlClick);
       elements.bookingClosureContent.addEventListener("click", onBookingClosureReviewClick);
+      elements.bookingClosureControls.addEventListener("click", bookingsModule.onClosureStatusClick);
+      elements.bookingClosureControls.addEventListener("keydown", bookingsModule.onClosurePopoverDismiss);
+      document.addEventListener("click", bookingsModule.onClosurePopoverDismiss);
+      elements.bookingClosureControls.addEventListener("submit", function (event) {
+        if (event.target.id !== 'closure-block-popover') { return; }
+        event.preventDefault();
+        bookingsModule.onClosureStatusClick({ target: event.target.querySelector('[data-closure-action="block"]') });
+      });
+      elements.bookingClosureControls.addEventListener("input", function (event) {
+        if (event.target.matches('[data-closure-block-reason]')) { state.bookingClosure.blockReason = event.target.value; }
+      });
       elements.bookingClosureContent.addEventListener("click", onBookingClosureSettlementClick);
       elements.bookingClosureContent.addEventListener("click", async function (event) {
         var target = event.target.closest("[data-booking-closure-request-invoice]");
-        if (!target) { return; }
+        if (!target || target.disabled || state.bookingClosure.isSaving || state.bookingClosure.loadFailed || state.bookingClosure.booking.Closure_Status === 'Closure Completed') { return; }
         event.preventDefault();
         event.stopPropagation();
         var settlementId = target.getAttribute("data-booking-closure-request-invoice");
@@ -2268,7 +2291,7 @@ var ns = global.AccountingManagerApp;
     updateInvoiceCreateComputedAmounts("gross");
     setDefaultInvoiceCreateStatus();
     renderAll();
-    renderer.showNotice("Widget ready. Search a supplier or switch tabs after Zoho CRM finishes loading.");
+    
   }
 
   function getLocalIsoDate() {
@@ -3183,6 +3206,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onInvoiceCreateRequestAccountingAccountClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-create");
     var supplierId = String(state.supplierId || "").trim();
     var accountingAccount = getSupplierResolvedAccountingAccount(state.supplier);
     var response;
@@ -3190,19 +3214,19 @@ var ns = global.AccountingManagerApp;
     var result;
 
     if (!supplierId || !state.supplier) {
-      renderer.showError("Load a supplier first.");
+      feedbackRenderer.showErrorPopup("Load a supplier first.", "Accounting account request failed");
       return;
     }
 
     if (accountingAccount.hasValue) {
-      renderer.showNotice("This supplier already has an accounting account.", {
+      feedbackRenderer.showNotice("This supplier already has an accounting account.", {
         tone: "neutral"
       });
       renderAll();
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
     setInvoiceCreateLoading(true, "Requesting accounting account...");
     renderAll();
 
@@ -3213,11 +3237,11 @@ var ns = global.AccountingManagerApp;
       output = getFunctionOutputObject(response) || {};
       result = getFunctionResponseResult(response);
 
-      if (output.error === true || result.success === false) {
+      if (output.error === true || output.success !== true || output.sent === false || result.success === false) {
         throw new Error(output.message || result.message || "The accounting account request email could not be sent.");
       }
 
-      renderer.showNotice(output.message || result.message || "Email sent successfully. The accounting account has been requested.", {
+      feedbackRenderer.showNotice(output.message || result.message || "Email sent successfully. The accounting account has been requested.", {
         tone: "success",
         persistent: true
       });
@@ -3225,8 +3249,8 @@ var ns = global.AccountingManagerApp;
       debugError("onInvoiceCreateRequestAccountingAccountClick failed", error, {
         supplierId: supplierId
       });
-      renderer.showNotice("");
-      renderer.showError(error.message || "Could not send the accounting account request.");
+      feedbackRenderer.showNotice("");
+      feedbackRenderer.showErrorPopup("The accounting account request email could not be sent or confirmed. " + (error && error.message || "CRM did not confirm the request.") + " Check email delivery before requesting again.", "Accounting account request failed");
     } finally {
       setInvoiceCreateLoading(false, "", {
         preserveNotice: true
@@ -3989,6 +4013,15 @@ var ns = global.AccountingManagerApp;
     // widget context. Loading before it can complete without returning CRM
     // records, while clicking Open later works as expected.
     initialInvoicesLoadPromise = (async function () {
+      var supplierId = helpers.getSupplierIdFromPayload(state.clientPayload) || state.selectedIds[0];
+      if (supplierId) {
+        await setCurrentTab("suppliers");
+        await loadSupplierWorkspace(supplierId);
+        if (state.supplier && state.clientPayload && state.clientPayload.supplierInfoTab === "financial") {
+          setSupplierInfoTab("financial");
+        }
+        return;
+      }
       state.currentTab = "invoices";
       state.views.invoices.view = "open";
       state.views.invoices.page = 1;
@@ -4010,25 +4043,13 @@ var ns = global.AccountingManagerApp;
     }
 
     ZOHO.embeddedApp.on("PageLoad", function (data) {
-      var supplierIdFromPayload;
-
       zohoPageLoadReceived = true;
       state.selectedIds = helpers.readSelectedIds(data);
       state.clientPayload = helpers.getClientPayload(data);
-      supplierIdFromPayload = helpers.getSupplierIdFromPayload(state.clientPayload);
 
       // Keep the context assignment ahead of the initial query.  The loader
       // itself is guarded until both PageLoad and embeddedApp.init have run.
       loadInitialOpenInvoices();
-
-      if (supplierIdFromPayload) {
-        loadSupplierWorkspace(supplierIdFromPayload);
-        return;
-      }
-
-      if (state.selectedIds.length) {
-        loadSupplierWorkspace(state.selectedIds[0]);
-      }
     });
 
     try {
@@ -4050,9 +4071,6 @@ var ns = global.AccountingManagerApp;
       await bootstrapRecentSuppliers();
       state.zohoReady = true;
       renderer.setMode("Connected to CRM");
-      if (!state.supplier) {
-        renderer.showNotice("Supplier list loaded. Search by name, connection reference or Ezus reference.");
-      }
     } catch (error) {
       debugError("bootstrap failed", error);
       renderer.showError("The widget could not initialize inside Zoho CRM.");
@@ -4181,12 +4199,13 @@ var ns = global.AccountingManagerApp;
   }
 
   async function openNativeCreateForModule(moduleApi, label, onRefresh) {
+    var feedbackRenderer = renderer.withFeedbackTarget(ns.inlineFeedback.actionScope());
     if (!(global.ZOHO && ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Record && typeof ZOHO.CRM.UI.Record.create === "function")) {
-      renderer.showError("Zoho native create form is not available in this widget context.");
+      feedbackRenderer.showError("Zoho native create form is not available in this widget context.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
 
     try {
       await ZOHO.CRM.UI.Record.create({
@@ -4200,7 +4219,7 @@ var ns = global.AccountingManagerApp;
       debugError("openNativeCreateForModule failed", error, {
         moduleApi: moduleApi
       });
-      renderer.showError("Could not open the create form for " + label + ".");
+      feedbackRenderer.showError("Could not open the create form for " + label + ".");
     }
   }
 
@@ -4259,6 +4278,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function openNativeEditForModule(moduleApi, recordId, label, onRefresh, options) {
+    var feedbackRenderer = renderer.withFeedbackTarget(ns.inlineFeedback.actionScope());
     var settings = options || {};
     var editUrl;
     var openedWindow;
@@ -4270,7 +4290,7 @@ var ns = global.AccountingManagerApp;
         openedWindow = global.open(editUrl, "_blank", "noopener");
 
         if (openedWindow) {
-          renderer.showNotice("Opened " + label + " in a new tab.", {
+          feedbackRenderer.showNotice("Opened " + label + " in a new tab.", {
             tone: "success"
           });
           return;
@@ -4279,11 +4299,11 @@ var ns = global.AccountingManagerApp;
     }
 
     if (!(global.ZOHO && ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Record && typeof ZOHO.CRM.UI.Record.edit === "function")) {
-      renderer.showError("Zoho native edit form is not available in this widget context.");
+      feedbackRenderer.showError("Zoho native edit form is not available in this widget context.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
 
     try {
       await ZOHO.CRM.UI.Record.edit({
@@ -4299,17 +4319,18 @@ var ns = global.AccountingManagerApp;
         moduleApi: moduleApi,
         recordId: recordId
       });
-      renderer.showError("Could not open the edit form for " + label + ".");
+      feedbackRenderer.showError("Could not open the edit form for " + label + ".");
     }
   }
 
   async function deleteModuleRecord(moduleApi, recordId, label, onRefresh) {
+    var feedbackRenderer = renderer.withFeedbackTarget(ns.inlineFeedback.actionScope());
     var response;
     var result;
     var status;
 
     if (!recordId) {
-      renderer.showError("Select a " + label + " first.");
+      feedbackRenderer.showError("Select a " + label + " first.");
       return false;
     }
 
@@ -4317,11 +4338,11 @@ var ns = global.AccountingManagerApp;
       return false;
     }
 
-    renderer.showError("");
-    renderer.showNotice("Deleting " + label + "...", {
+    feedbackRenderer.showError("");
+    feedbackRenderer.showNotice("Deleting " + label + "...", {
       isLoading: true
     });
-    renderer.setLoading(true, "Deleting " + label + "...");
+    feedbackRenderer.setLoading(true, "Deleting " + label + "...");
     renderAll();
 
     try {
@@ -4337,20 +4358,20 @@ var ns = global.AccountingManagerApp;
         await onRefresh();
       }
 
-      renderer.showNotice(label.charAt(0).toUpperCase() + label.slice(1) + " deleted successfully.", {
+      feedbackRenderer.showNotice(label.charAt(0).toUpperCase() + label.slice(1) + " deleted successfully.", {
         tone: "success"
       });
       return true;
     } catch (error) {
-      renderer.showNotice("");
+      feedbackRenderer.showNotice("");
       debugError("deleteModuleRecord failed", error, {
         moduleApi: moduleApi,
         recordId: recordId
       });
-      renderer.showError(error.message || "Could not delete the " + label + ".");
+      feedbackRenderer.showError(error.message || "Could not delete the " + label + ".");
       return false;
     } finally {
-      renderer.setLoading(false);
+      feedbackRenderer.setLoading(false);
     }
   }
 
@@ -4510,6 +4531,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function syncAccountingEntryForPayment(paymentId, options) {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var settings = options || {};
     var response;
     var result;
@@ -4520,11 +4542,11 @@ var ns = global.AccountingManagerApp;
     }
 
     if (!settings.silent) {
-      renderer.showError("");
+      feedbackRenderer.showError("");
       state.paymentAccounting.isBusy = true;
       state.paymentAccounting.action = "sync";
       renderer.refreshActionState();
-      renderer.showNotice("Syncing accounting entry...", {
+      feedbackRenderer.showNotice("Syncing accounting entry...", {
         isLoading: true
       });
     }
@@ -4573,6 +4595,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function syncAccountingEntryForInvoice(invoiceId, options) {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     var settings = options || {};
     var response;
     var result;
@@ -4583,11 +4606,11 @@ var ns = global.AccountingManagerApp;
     }
 
     if (!settings.silent) {
-      renderer.showError("");
+      feedbackRenderer.showError("");
       state.invoiceAccounting.isBusy = true;
       state.invoiceAccounting.action = "sync";
       renderer.refreshActionState();
-      renderer.showNotice("Syncing accounting entry...", {
+      feedbackRenderer.showNotice("Syncing accounting entry...", {
         isLoading: true
       });
     }
@@ -4804,41 +4827,43 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onSelectedInvoiceSyncAccountingClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     var invoice = getSelectedInvoiceRecord();
     var syncResult;
 
     if (!invoice || !invoice.id) {
-      renderer.showError("Select an invoice first.");
+      feedbackRenderer.showError("Select an invoice first.");
       return;
     }
 
     try {
       syncResult = await syncAccountingEntryForInvoice(invoice.id);
-      renderer.showNotice(syncResult.message, {
+      feedbackRenderer.showNotice(syncResult.message, {
         tone: "success"
       });
     } catch (error) {
       debugError("onSelectedInvoiceSyncAccountingClick failed", error, {
         invoiceId: invoice.id
       });
-      renderer.showError(error.message || "Accounting entry could not be generated.");
+      feedbackRenderer.showError(error.message || "Accounting entry could not be generated.");
     }
   }
 
   async function onSelectedInvoiceRebuildAccountingTotalsClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     var invoice = getSelectedInvoiceRecord();
     var rebuildResult;
 
     if (!invoice || !invoice.id) {
-      renderer.showError("Select an invoice first.");
+      feedbackRenderer.showError("Select an invoice first.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
     state.invoiceAccounting.isBusy = true;
     state.invoiceAccounting.action = "rebuild";
     renderer.refreshActionState();
-    renderer.showNotice("Rebuilding accounting entry totals...", {
+    feedbackRenderer.showNotice("Rebuilding accounting entry totals...", {
       isLoading: true
     });
 
@@ -4847,7 +4872,7 @@ var ns = global.AccountingManagerApp;
       state.invoiceAccounting.lastEntryId = rebuildResult.accountingEntryId || state.invoiceAccounting.lastEntryId;
       await refreshInvoiceAfterAccountingAction(invoice.id);
       renderAll();
-      renderer.showNotice(buildInvoiceAccountingSuccessMessage(null, rebuildResult), {
+      feedbackRenderer.showNotice(buildInvoiceAccountingSuccessMessage(null, rebuildResult), {
         tone: "success"
       });
     } catch (error) {
@@ -4855,7 +4880,7 @@ var ns = global.AccountingManagerApp;
         invoiceId: invoice.id
       });
       renderAll();
-      renderer.showError(error.message || "Accounting entry totals could not be rebuilt.");
+      feedbackRenderer.showError(error.message || "Accounting entry totals could not be rebuilt.");
     } finally {
       state.invoiceAccounting.isBusy = false;
       state.invoiceAccounting.action = "";
@@ -4864,41 +4889,43 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onSelectedPaymentSyncAccountingClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var payment = getSelectedPaymentRecord();
     var syncResult;
 
     if (!payment || !payment.id) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
     try {
       syncResult = await syncAccountingEntryForPayment(payment.id);
-      renderer.showNotice(syncResult.message, {
+      feedbackRenderer.showNotice(syncResult.message, {
         tone: "success"
       });
     } catch (error) {
       debugError("onSelectedPaymentSyncAccountingClick failed", error, {
         paymentId: payment.id
       });
-      renderer.showError(error.message || "Accounting entry could not be generated.");
+      feedbackRenderer.showError(error.message || "Accounting entry could not be generated.");
     }
   }
 
   async function onSelectedPaymentRebuildAccountingTotalsClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var payment = getSelectedPaymentRecord();
     var rebuildResult;
 
     if (!payment || !payment.id) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
     state.paymentAccounting.isBusy = true;
     state.paymentAccounting.action = "rebuild";
     renderer.refreshActionState();
-    renderer.showNotice("Rebuilding accounting entry totals...", {
+    feedbackRenderer.showNotice("Rebuilding accounting entry totals...", {
       isLoading: true
     });
 
@@ -4907,7 +4934,7 @@ var ns = global.AccountingManagerApp;
       state.paymentAccounting.lastEntryId = rebuildResult.accountingEntryId || state.paymentAccounting.lastEntryId;
       await refreshPaymentAfterAccountingAction(payment.id);
       renderAll();
-      renderer.showNotice(buildInvoiceAccountingSuccessMessage(null, rebuildResult), {
+      feedbackRenderer.showNotice(buildInvoiceAccountingSuccessMessage(null, rebuildResult), {
         tone: "success"
       });
     } catch (error) {
@@ -4915,7 +4942,7 @@ var ns = global.AccountingManagerApp;
         paymentId: payment.id
       });
       renderAll();
-      renderer.showError(error.message || "Accounting entry totals could not be rebuilt.");
+      feedbackRenderer.showError(error.message || "Accounting entry totals could not be rebuilt.");
     } finally {
       state.paymentAccounting.isBusy = false;
       state.paymentAccounting.action = "";
@@ -4924,10 +4951,11 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onSelectedInvoiceEditClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     var invoiceId = state.views.invoices.selectedDetailId;
 
     if (!invoiceId) {
-      renderer.showError("Select an invoice first.");
+      feedbackRenderer.showError("Select an invoice first.");
       return;
     }
 
@@ -4937,12 +4965,13 @@ var ns = global.AccountingManagerApp;
   }
 
   function onSelectedInvoiceDeleteClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     if (!state.views.invoices.selectedDetailId) {
-      renderer.showError("Select an invoice first.");
+      feedbackRenderer.showError("Select an invoice first.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
     state.invoiceDeletion.isOpen = true;
     state.invoiceDeletion.isBusy = false;
     if (typeof state.invoiceDeletion.updateSettlement !== "boolean") {
@@ -4952,13 +4981,14 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onSelectedInvoiceDeleteConfirmClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     var invoice = getSelectedInvoiceRecord();
     if (state.invoiceDeletion.isBusy) { return; }
-    if (!invoice) { renderer.showError("Select an invoice first."); return; }
+    if (!invoice) { feedbackRenderer.showError("Select an invoice first."); return; }
     state.invoiceDeletion.isBusy = true;
-    renderer.showError("");
-    renderer.showNotice("Deleting invoice and updating related records...", { isLoading: true });
-    renderer.setLoading(true, "Deleting invoice...");
+    feedbackRenderer.showError("");
+    feedbackRenderer.showNotice("Deleting invoice and updating related records...", { isLoading: true });
+    feedbackRenderer.setLoading(true, "Deleting invoice...");
     renderAll();
     try {
       await invoiceDeletionModule.execute(invoice.id);
@@ -4966,17 +4996,17 @@ var ns = global.AccountingManagerApp;
       try {
         await refreshInvoicesAfterInvoiceDelete(invoice);
         renderAll();
-        renderer.showNotice("Invoice deleted. Related records, balances and statuses were updated.", { tone: "success" });
+        feedbackRenderer.showNotice("Invoice deleted. Related records, balances and statuses were updated.", { tone: "success" });
       } catch (refreshError) {
-        renderer.showNotice("Invoice and related data were updated, but the view could not reload. Refresh the widget.", { tone: "neutral" });
+        feedbackRenderer.showNotice("Invoice and related data were updated, but the view could not reload. Refresh the widget.", { tone: "neutral" });
       }
     } catch (error) {
       debugError("onSelectedInvoiceDeleteConfirmClick failed", error, { invoiceId: invoice.id });
-      renderer.showNotice("");
-      renderer.showError(error.message || "Could not complete invoice deletion.");
+      feedbackRenderer.showNotice("");
+      feedbackRenderer.showError(error.message || "Could not complete invoice deletion.");
     } finally {
       state.invoiceDeletion.isBusy = false;
-      renderer.setLoading(false);
+      feedbackRenderer.setLoading(false);
       renderer.refreshActionState();
     }
   }
@@ -5012,12 +5042,13 @@ var ns = global.AccountingManagerApp;
   }
 
   async function openPaymentAllocationManager() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var paymentId = String(state.views.payments.selectedId || "");
     var payment = state.records.payments.find(function (record) { return String(record.id) === paymentId; });
     var allocations;
     var invoices;
-    if (!paymentId || !payment) { renderer.showError("Select a payment first."); return; }
-    if (isPaymentAllocationEditingLocked(payment) || isPostedAccountingEntry(await getPaymentAccountingEntryForAllocationEdit(paymentId))) { renderer.showError("This payment is locked. Create a reversal instead."); return; }
+    if (!paymentId || !payment) { feedbackRenderer.showError("Select a payment first."); return; }
+    if (isPaymentAllocationEditingLocked(payment) || isPostedAccountingEntry(await getPaymentAccountingEntryForAllocationEdit(paymentId))) { feedbackRenderer.showError("This payment is locked. Create a reversal instead."); return; }
     state.paymentAllocationManager.isOpen = true;
     state.paymentAllocationManager.isLoading = true;
     state.paymentAllocationManager.paymentId = paymentId;
@@ -5069,7 +5100,14 @@ var ns = global.AccountingManagerApp;
   function closePaymentAllocationInvoicePicker() { state.paymentAllocationManager.isPickerOpen = false; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); }
   async function searchPaymentAllocationManagerInvoices() { var manager = state.paymentAllocationManager; var query = String(elements.paymentAllocationManagerSearch.value || "").trim(); var localMatches; var remoteBatches; var searchError = null; var requestId = manager.searchRequestId + 1; manager.searchRequestId = requestId; manager.pickerError = ""; if (!query) { manager.searchResults = []; renderPaymentAllocationManager(); return; } localMatches = state.records.invoices.filter(function (invoice) { return invoiceMatchesPaymentAllocationQuery(invoice, query); }); remoteBatches = await Promise.all([crm.searchRecord(MODULES.invoices, "(Name:starts_with:" + helpers.escapeCriteriaValue(query) + ")").catch(function (error) { searchError = error; return []; }), crm.searchWord(MODULES.invoices, query).catch(function (error) { searchError = searchError || error; return []; })]); if (requestId !== manager.searchRequestId) { return; } manager.searchResults = localMatches.concat(remoteBatches[0], remoteBatches[1]).filter(function (invoice, index, records) { return records.findIndex(function (record) { return String(record.id) === String(invoice.id); }) === index; }).filter(function (invoice) { return !manager.invoices.some(function (allocated) { return String(allocated.id) === String(invoice.id); }); }); if (!manager.searchResults.length && searchError) { manager.pickerError = "Could not search invoices. Try a different invoice number or name."; } renderPaymentAllocationManager(); }
   function addPaymentAllocationManagerInvoice(event) { var id = event.target.getAttribute("data-payment-manager-add"); var manager = state.paymentAllocationManager; var invoice = manager.searchResults.find(function (record) { return String(record.id) === String(id); }); if (invoice && !manager.invoices.some(function (record) { return String(record.id) === String(id); })) { manager.invoices.push(invoice); manager.amounts[id] = Math.max(0, roundCurrency(helpers.getInvoicePendingAmount(invoice, FIELD_CANDIDATES))); manager.newInvoiceIds[id] = true; manager.searchResults = []; manager.isPickerOpen = false; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); } }
-  function renderPaymentAllocationFeedback() { var feedback = state.paymentAllocationFeedback; if (!elements.paymentAllocationFeedbackPopup) { return; } elements.paymentAllocationFeedbackPopup.hidden = !feedback.isOpen; if (!feedback.isOpen) { return; } elements.paymentAllocationFeedbackPopup.classList.toggle("is-success", feedback.mode === "success"); elements.paymentAllocationFeedbackPopup.classList.toggle("is-error", feedback.mode === "error"); elements.paymentAllocationFeedbackSpinner.hidden = feedback.mode !== "loading"; elements.paymentAllocationFeedbackEyebrow.textContent = feedback.mode === "success" ? "Completed" : feedback.mode === "error" ? "Could not save" : "Saving allocations"; elements.paymentAllocationFeedbackTitle.textContent = feedback.mode === "success" ? "Allocations saved" : feedback.mode === "error" ? "Allocations were not saved" : "Saving changes..."; elements.paymentAllocationFeedbackMessage.textContent = feedback.message; elements.paymentAllocationFeedbackClose.hidden = feedback.mode === "loading"; }
+  function renderPaymentAllocationFeedback() {
+    var feedback = state.paymentAllocationFeedback;
+    if (elements.paymentAllocationFeedbackPopup) { elements.paymentAllocationFeedbackPopup.hidden = true; }
+    if (!feedback.isOpen) { return; }
+    var target = renderer.withFeedbackTarget(state.paymentAllocationManager.isOpen ? "#payment-allocation-manager" : "payment-detail");
+    if (feedback.mode === "error") { target.showError(feedback.message); }
+    else { target.showNotice(feedback.message, { tone: feedback.mode === "success" ? "success" : "neutral", isLoading: feedback.mode === "loading" }); }
+  }
   function showPaymentAllocationFeedback(mode, message) { state.paymentAllocationFeedback.isOpen = true; state.paymentAllocationFeedback.mode = mode; state.paymentAllocationFeedback.message = message; renderPaymentAllocationFeedback(); }
   function closePaymentAllocationFeedback() { if (state.paymentAllocationFeedback.mode === "loading") { return; } state.paymentAllocationFeedback = { isOpen: false, mode: "loading", message: "" }; renderPaymentAllocationFeedback(); }
   async function savePaymentAllocationManager() { var manager = state.paymentAllocationManager; var allocations = {}; var pendingUnlinkInvoiceIds = Object.keys(manager.unlinkedAmounts); var result; var liveAllocations; var stillLinkedInvoiceIds; if (manager.isSaving) { return; } manager.invoices.forEach(function (invoice) { var id = String(invoice.id); allocations[invoice.id] = Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id) ? 0 : roundCurrency(Number(manager.amounts[id]) || 0); }); manager.isSaving = true; manager.error = ""; showPaymentAllocationFeedback("loading", "Updating allocations and recalculating related invoices and settlements."); renderPaymentAllocationManager(); try { var response = await crm.executeFunction(MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION, { supplierPaymentId: manager.paymentId, allocationsDataString: JSON.stringify({ allocations: allocations }) }); result = getFunctionOutputObject(response) || getFunctionResponseResult(response); if (result && (result.error || result.success === false)) { throw new Error(result.message || "Could not update allocations."); } if (pendingUnlinkInvoiceIds.length) { liveAllocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + manager.paymentId + ")"); stillLinkedInvoiceIds = (liveAllocations || []).map(function (allocation) { return String(helpers.getLookupId(allocation.Supplier_Invoice) || ""); }).filter(function (invoiceId) { return pendingUnlinkInvoiceIds.indexOf(invoiceId) !== -1; }); if (stillLinkedInvoiceIds.length) { throw new Error("Zoho did not confirm removal of " + String(stillLinkedInvoiceIds.length) + " allocation(s). The changes were not treated as saved."); } } await refreshInvoicesAndPaymentsAfterSupplierPayment(); renderer.showNotice("Payment allocations and balances were recalculated.", { tone: "success" }); closePaymentAllocationManager(); showPaymentAllocationFeedback("success", result && result.message || "Allocations, invoice balances and settlement totals were updated successfully."); } catch (error) { debugError("savePaymentAllocationManager failed", error, { paymentId: manager.paymentId, requestedAllocations: allocations, pendingUnlinkInvoiceIds: pendingUnlinkInvoiceIds, functionResult: result || null }); manager.isSaving = false; manager.error = ""; renderPaymentAllocationManager(); showPaymentAllocationFeedback("error", error.message || "Could not update allocations."); } }
@@ -5151,11 +5189,12 @@ var ns = global.AccountingManagerApp;
   }
 
   async function openPaymentUndoConfirmation() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var paymentId = String(state.views.payments.selectedId || "");
     var allocations = [];
 
     if (!paymentId) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
@@ -5186,6 +5225,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onSelectedPaymentDeleteClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var paymentId = state.views.payments.selectedId;
     var relatedAllocations;
     var liveAllocations;
@@ -5198,7 +5238,7 @@ var ns = global.AccountingManagerApp;
     var undo = state.paymentUndo;
 
     if (!paymentId || !undo.isOpen || undo.paymentId !== String(paymentId) || undo.isLoading || undo.isBusy) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
@@ -5242,7 +5282,7 @@ var ns = global.AccountingManagerApp;
       undo.isBusy = true;
       undo.mode = "loading";
       renderPaymentUndoConfirmation();
-      renderer.showError("");
+      feedbackRenderer.showError("");
       renderAll();
 
       for (var allocationIndex = 0; allocationIndex < allocationsToDelete.length; allocationIndex += 1) {
@@ -5335,9 +5375,9 @@ var ns = global.AccountingManagerApp;
         ". " + (error.message || "Review its allocations and related invoice balances before trying again.");
       renderPaymentUndoConfirmation();
       renderAll();
-      renderer.showNotice("");
+      feedbackRenderer.showNotice("");
     } finally {
-      renderer.setLoading(false);
+      feedbackRenderer.setLoading(false);
     }
   }
 
@@ -5604,6 +5644,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onSelectedPaymentExportBankClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var paymentId = state.views.payments.selectedId;
     var payment;
     var headers;
@@ -5616,7 +5657,7 @@ var ns = global.AccountingManagerApp;
     var fileName;
 
     if (!paymentId) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
@@ -5625,12 +5666,12 @@ var ns = global.AccountingManagerApp;
     }) || null;
 
     if (!payment) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
-    renderer.showError("");
-    renderer.showNotice("Preparing bank export...", {
+    feedbackRenderer.showError("");
+    feedbackRenderer.showNotice("Preparing bank export...", {
       isLoading: true
     });
 
@@ -5702,7 +5743,7 @@ var ns = global.AccountingManagerApp;
       workbookXml = buildBankExportWorkbookXml(headers, workbookRows);
       fileName = sanitizeDownloadFileName((payment.Name || "payment") + "-bank-export") + ".xls";
       downloadFileFromText(fileName, "application/vnd.ms-excel;charset=utf-8", workbookXml);
-      renderer.showNotice(
+      feedbackRenderer.showNotice(
         warningMessages.length
           ? "Bank export generated with warnings: " + warningMessages.join(" | ") + "."
           : "Bank export generated successfully.",
@@ -5714,12 +5755,13 @@ var ns = global.AccountingManagerApp;
       debugError("onSelectedPaymentExportBankClick failed", error, {
         paymentId: paymentId
       });
-      renderer.showNotice("");
-      renderer.showError(error.message || "Could not generate the bank export.");
+      feedbackRenderer.showNotice("");
+      feedbackRenderer.showError(error.message || "Could not generate the bank export.");
     }
   }
 
   async function onSelectedPaymentExportBankByInvoiceClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
     var paymentId = state.views.payments.selectedId;
     var payment;
     var headers;
@@ -5732,7 +5774,7 @@ var ns = global.AccountingManagerApp;
     var fileName;
 
     if (!paymentId) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
@@ -5741,12 +5783,12 @@ var ns = global.AccountingManagerApp;
     }) || null;
 
     if (!payment) {
-      renderer.showError("Select a payment first.");
+      feedbackRenderer.showError("Select a payment first.");
       return;
     }
 
-    renderer.showError("");
-    renderer.showNotice("Preparing bank export by invoice...", {
+    feedbackRenderer.showError("");
+    feedbackRenderer.showNotice("Preparing bank export by invoice...", {
       isLoading: true
     });
 
@@ -5822,7 +5864,7 @@ var ns = global.AccountingManagerApp;
       workbookXml = buildBankExportWorkbookXml(headers, workbookRows);
       fileName = sanitizeDownloadFileName((payment.Name || "payment") + "-bank-export-by-invoice") + ".xls";
       downloadFileFromText(fileName, "application/vnd.ms-excel;charset=utf-8", workbookXml);
-      renderer.showNotice(
+      feedbackRenderer.showNotice(
         warningMessages.length
           ? "Bank export generated with warnings: " + warningMessages.join(" | ") + "."
           : "Bank export by invoice generated successfully.",
@@ -5834,8 +5876,8 @@ var ns = global.AccountingManagerApp;
       debugError("onSelectedPaymentExportBankByInvoiceClick failed", error, {
         paymentId: paymentId
       });
-      renderer.showNotice("");
-      renderer.showError(error.message || "Could not generate the bank export by invoice.");
+      feedbackRenderer.showNotice("");
+      feedbackRenderer.showError(error.message || "Could not generate the bank export by invoice.");
     }
   }
 
@@ -5928,55 +5970,58 @@ var ns = global.AccountingManagerApp;
   }
 
   function onSeeSupplierInEzusClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("suppliers");
     var ezusReference = getSelectedSupplierEzusReference();
     var url;
 
     if (!state.supplierId) {
-      renderer.showError("Load a supplier first.");
+      feedbackRenderer.showError("Load a supplier first.");
       return;
     }
 
     if (!ezusReference) {
-      renderer.showError("This supplier does not have an Ezus Supplier API value.");
+      feedbackRenderer.showError("This supplier does not have an Ezus Supplier API value.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
     url = "https://pro.ezus.io/supplier?id=" + encodeURIComponent(ezusReference);
     global.open(url, "_blank", "noopener");
   }
 
   function onSeeSupplierInCrmClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("suppliers");
     var supplierId = String(state.supplierId || "").trim();
     var url;
     var openedWindow;
 
     if (!supplierId) {
-      renderer.showError("Load a supplier first.");
+      feedbackRenderer.showError("Load a supplier first.");
       return;
     }
 
-    renderer.showError("");
+    feedbackRenderer.showError("");
     url = "https://crm.zoho.eu/crm/org20093299576/tab/Vendors/" + encodeURIComponent(supplierId);
 
     openedWindow = global.open(url, "_blank", "noopener");
 
     if (!openedWindow) {
-      renderer.showError("The supplier could not be opened in CRM.");
+      feedbackRenderer.showError("The supplier could not be opened in CRM.");
     }
   }
 
   async function onSyncSupplierWithEzusClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("suppliers");
     var response;
     var result;
 
     if (!state.supplierId) {
-      renderer.showError("Load a supplier first.");
+      feedbackRenderer.showError("Load a supplier first.");
       return;
     }
 
-    renderer.showError("");
-    renderer.setLoading(true, "Syncing supplier from Ezus...");
+    feedbackRenderer.showError("");
+    feedbackRenderer.setLoading(true, "Syncing supplier from Ezus...");
 
     try {
       response = await crm.executeFunction(SYNC_SUPPLIER_FROM_EZUS_FUNCTION, {
@@ -5996,7 +6041,7 @@ var ns = global.AccountingManagerApp;
       }
 
       renderAll();
-      renderer.showNotice(result.message || "Supplier synced from Ezus.", {
+      feedbackRenderer.showNotice(result.message || "Supplier synced from Ezus.", {
         tone: "success"
       });
     } catch (error) {
@@ -6004,15 +6049,16 @@ var ns = global.AccountingManagerApp;
         functionName: SYNC_SUPPLIER_FROM_EZUS_FUNCTION,
         supplierId: state.supplierId
       });
-      renderer.showNotice("");
-      renderer.showError(error.message || "Could not sync the supplier from Ezus.");
+      feedbackRenderer.showNotice("");
+      feedbackRenderer.showError(error.message || "Could not sync the supplier from Ezus.");
       renderAll();
     } finally {
-      renderer.setLoading(false);
+      feedbackRenderer.setLoading(false);
     }
   }
 
   async function ensureTabDataLoaded(tabName) {
+    var feedbackRenderer = renderer.withFeedbackTarget(tabName);
     var activePaymentsSection = normalizePaymentsSection(state.views.payments.section);
     var labelByTab = {
       payments: "Loading payments...",
@@ -6034,8 +6080,8 @@ var ns = global.AccountingManagerApp;
     }
 
     if (shouldShowLoading) {
-      renderer.showNotice(labelByTab[tabName]);
-      renderer.setLoading(true, labelByTab[tabName]);
+      feedbackRenderer.showNotice(labelByTab[tabName]);
+      feedbackRenderer.setLoading(true, labelByTab[tabName]);
       renderAll();
     }
 
@@ -6062,11 +6108,11 @@ var ns = global.AccountingManagerApp;
         }
       }
     } catch (error) {
-      renderer.showError(error.message || "Could not load data for that tab.");
+      feedbackRenderer.showError(error.message || "Could not load data for that tab.");
     } finally {
       if (shouldShowLoading) {
-        renderer.setLoading(false);
-        renderer.showNotice("");
+        feedbackRenderer.setLoading(false);
+        feedbackRenderer.showNotice("");
       }
     }
   }
@@ -6372,6 +6418,7 @@ var ns = global.AccountingManagerApp;
   }
 
   async function onAccountingEntryLinesExportContasolClick() {
+    var feedbackRenderer = renderer.withFeedbackTarget("accounting");
     var appliedFilters = cloneFilterState(state.views.accountingEntryLines.appliedFilters || state.views.accountingEntryLines.filters);
     var whereClause;
     var orderByClause;
@@ -6383,12 +6430,12 @@ var ns = global.AccountingManagerApp;
     var today = helpers.toIsoDate(new global.Date());
 
     if (!state.views.accountingEntryLines.hasLoaded) {
-      renderer.showError("Load accounting entry lines first.");
+      feedbackRenderer.showError("Load accounting entry lines first.");
       return;
     }
 
-    renderer.showError("");
-    renderer.showNotice("Preparing Contasol export...", {
+    feedbackRenderer.showError("");
+    feedbackRenderer.showNotice("Preparing Contasol export...", {
       isLoading: true
     });
 
@@ -6453,15 +6500,15 @@ var ns = global.AccountingManagerApp;
       workbookXml = buildSpreadsheetWorkbookXml("Contasol", headers, workbookRows);
       fileName = sanitizeDownloadFileName("accounting-entry-lines-contasol-" + (today || "export")) + ".xls";
       downloadFileFromText(fileName, "application/vnd.ms-excel;charset=utf-8", workbookXml);
-      renderer.showNotice("Contasol export generated successfully.", {
+      feedbackRenderer.showNotice("Contasol export generated successfully.", {
         tone: "success"
       });
     } catch (error) {
       debugError("onAccountingEntryLinesExportContasolClick failed", error, {
         filters: appliedFilters
       });
-      renderer.showNotice("");
-      renderer.showError(error.message || "Could not generate the Contasol export.");
+      feedbackRenderer.showNotice("");
+      feedbackRenderer.showError(error.message || "Could not generate the Contasol export.");
     }
   }
 

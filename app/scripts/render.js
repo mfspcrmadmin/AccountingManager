@@ -1,96 +1,39 @@
 (function (global) {
 var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
+  ns.showErrorPopup = function (message, title) {
+    if (ns.inlineFeedback) {
+      ns.inlineFeedback.show((title ? title + ": " : "") + message, { tone: "error" }, ns.inlineFeedback.actionScope());
+    }
+  };
+
   ns.createRenderer = function (elements, state, helpers, fieldCandidates) {
-    var MESSAGE_AUTO_DISMISS_DELAY = 5000;
-    var MESSAGE_FADE_DURATION = 350;
-    var noticeAutoDismissTimer = null;
-    var errorAutoDismissTimer = null;
+    var feedback = ns.createInlineFeedback(state);
+    ns.inlineFeedback = feedback;
+    var loadingScopes = new Set();
 
-    function clearMessageAutoDismissTimer(type) {
-      var timer = type === "error" ? errorAutoDismissTimer : noticeAutoDismissTimer;
+    function hideNotice(scope) { feedback.show("", { clearTone: "notice" }, scope); }
+    function hideError(scope) { feedback.show("", { clearTone: "error" }, scope); }
 
-      if (timer) {
-        global.clearTimeout(timer);
-      }
-
-      if (type === "error") {
-        errorAutoDismissTimer = null;
-      } else {
-        noticeAutoDismissTimer = null;
-      }
-    }
-
-    function scheduleMessageAutoDismiss(type) {
-      var element = type === "error" ? elements.error : elements.notice;
-      var hideMessage = type === "error" ? hideError : hideNotice;
-
-      if (!element) {
-        return;
-      }
-
-      clearMessageAutoDismissTimer(type);
-      var fadeTimer = global.setTimeout(function () {
-        element.classList.add("is-fading-out");
-        if (type === "error") {
-          errorAutoDismissTimer = global.setTimeout(hideMessage, MESSAGE_FADE_DURATION);
-        } else {
-          noticeAutoDismissTimer = global.setTimeout(hideMessage, MESSAGE_FADE_DURATION);
-        }
-      }, MESSAGE_AUTO_DISMISS_DELAY);
-
-      if (type === "error") {
-        errorAutoDismissTimer = fadeTimer;
-      } else {
-        noticeAutoDismissTimer = fadeTimer;
-      }
-    }
-
-    function hideNotice() {
-      if (!elements.notice) {
-        return;
-      }
-
-      clearMessageAutoDismissTimer("notice");
-      elements.notice.hidden = true;
-      elements.notice.classList.remove("is-loading", "is-fading-out");
-      elements.notice.removeAttribute("aria-busy");
-      if (elements.noticeText) {
-        elements.noticeText.textContent = "";
-      }
-    }
-
-    function hideError() {
-      if (!elements.error) {
-        return;
-      }
-
-      clearMessageAutoDismissTimer("error");
-      elements.error.hidden = true;
-      elements.error.classList.remove("is-fading-out");
-      if (elements.errorText) {
-        elements.errorText.textContent = "";
-      }
-    }
-
-    function setLoading(isLoading, label) {
-      state.isLoading = isLoading;
-      if (elements.loadingPill) {
-        elements.loadingPill.hidden = !isLoading;
-        elements.loadingPill.textContent = label || "Loading...";
-      }
-      if (isLoading && label) {
-        showNotice(label, {
-          isLoading: true
-        });
-      } else if (!isLoading && elements.notice) {
-        elements.notice.classList.remove("is-loading");
-        elements.notice.removeAttribute("aria-busy");
-        if (!elements.notice.hidden && elements.noticeText && elements.noticeText.textContent) {
-          scheduleMessageAutoDismiss("notice");
-        }
-      }
+    function setLoading(isLoading, label, scope) {
+      var target = scope || state.currentTab || "invoices";
+      if (isLoading) { loadingScopes.add(target); }
+      else { loadingScopes.delete(target); }
+      state.isLoading = loadingScopes.size > 0;
+      if (isLoading && label) { feedback.show(label, { isLoading: true }, target); }
+      else if (!isLoading) { feedback.finish(target); }
       refreshActionState();
+    }
+
+    function withFeedbackTarget(scope) {
+      var scoped = Object.create(api);
+      scoped.showNotice = function (message, options) { feedback.show(message, Object.assign({ clearTone: "notice" }, options), scope); };
+      scoped.showError = function (message) { feedback.show(message, { tone: "error", clearTone: "error" }, scope); };
+      scoped.showErrorPopup = function (message, title) { scoped.showError((title ? title + ": " : "") + message); };
+      scoped.hideNotice = function () { hideNotice(scope); };
+      scoped.hideError = function () { hideError(scope); };
+      scoped.setLoading = function (loading, label) { setLoading(loading, label, scope); };
+      return scoped;
     }
 
     function refreshActionState() {
@@ -225,78 +168,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function showNotice(message, options) {
-      var isLoading = Boolean(options && options.isLoading);
-      var tone = options && options.tone === "success" ? "success" : "neutral";
-      var persistent = Boolean(options && options.persistent);
-
-      if (message) {
-        hideError();
-      }
-
-      if (elements.noticeText) {
-        elements.noticeText.textContent = message || "";
-      }
-      elements.notice.hidden = !message;
-      elements.notice.classList.remove("info", "neutral", "success", "is-fading-out");
-      elements.notice.classList.add(tone);
-      elements.notice.classList.toggle("is-loading", Boolean(message) && isLoading);
-      if (message && isLoading) {
-        elements.notice.setAttribute("aria-busy", "true");
-      } else {
-        elements.notice.removeAttribute("aria-busy");
-      }
-
-      if (message && !isLoading && !persistent) {
-        scheduleMessageAutoDismiss("notice");
-      } else {
-        clearMessageAutoDismissTimer("notice");
-      }
+      feedback.show(message, Object.assign({ clearTone: "notice" }, options), feedback.actionScope());
     }
 
     function showError(message) {
-      if (message) {
-        hideNotice();
-      }
-
-      if (elements.errorText) {
-        elements.errorText.textContent = message || "";
-      }
-      elements.error.hidden = !message;
-      elements.error.classList.remove("is-fading-out");
-      if (message) {
-        scheduleMessageAutoDismiss("error");
-      } else {
-        clearMessageAutoDismissTimer("error");
-      }
-    }
-
-    function showErrorPopup(message, title) {
-      var dialog = global.document.createElement("dialog");
-      var heading = global.document.createElement("h3");
-      var description = global.document.createElement("p");
-      var close = global.document.createElement("button");
-      var previousFocus = global.document.activeElement;
-      dialog.className = "error-popup-dialog";
-      dialog.setAttribute("role", "alertdialog");
-      dialog.setAttribute("aria-label", title || "Error");
-      description.id = "error-popup-message";
-      dialog.setAttribute("aria-describedby", description.id);
-      heading.textContent = title || "Error";
-      description.textContent = message;
-      close.type = "button";
-      close.className = "button primary compact-action-button";
-      close.textContent = "OK";
-      close.addEventListener("click", function () { dialog.close(); });
-      dialog.addEventListener("close", function () {
-        dialog.remove();
-        if (previousFocus && previousFocus.isConnected) { previousFocus.focus(); }
-      });
-      dialog.appendChild(heading);
-      dialog.appendChild(description);
-      dialog.appendChild(close);
-      global.document.body.appendChild(dialog);
-      dialog.showModal();
-      close.focus();
+      feedback.show(message, { tone: "error", clearTone: "error" }, feedback.actionScope());
     }
 
     function setTextWithTitle(element, value) {
@@ -311,9 +187,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function formatSupplierDetailValue(value, multiline) {
-      var text = helpers.textValue(value);
+      var text = helpers.textValue(value, "Not provided");
 
-      if (!multiline || text === "-") {
+      if (!multiline || text === "Not provided") {
         return helpers.escapeHtml(text);
       }
 
@@ -325,12 +201,18 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var cardClassName = "supplier-fact supplier-detail-card" + (settings.wide ? " supplier-detail-card-wide" : "");
       var valueMarkup;
       var href;
+      var missing = value === null || value === undefined || value === "" || value === "-";
+      if (missing) {
+        value = "";
+        cardClassName += " supplier-detail-missing";
+      }
 
       if (settings.accountingStatus) {
-        valueMarkup = '<dd class="supplier-detail-value supplier-detail-value-rich"><span class="accounting-status ' +
-          (value ? "present" : "missing") + '">' +
-          helpers.escapeHtml(value ? helpers.textValue(value) : "Missing") +
-          "</span>" + (!value && settings.supplierId && ns.supplierAccountingInfo ? ns.supplierAccountingInfo.requestHtml(settings.supplierId) : "") + "</dd>";
+        valueMarkup = '<dd class="supplier-detail-value supplier-detail-value-rich">' +
+          (settings.supplierId && ns.supplierAccountingInfo
+            ? ns.supplierAccountingInfo.editorHtml(settings.supplierId, value)
+            : '<span class="accounting-status ' + (value ? 'present' : 'missing') + '">' + helpers.escapeHtml(missing ? 'Not provided' : helpers.textValue(value)) + '</span>') +
+          (!value && settings.supplierId && ns.supplierAccountingInfo ? ns.supplierAccountingInfo.requestHtml(settings.supplierId) : '') + '</dd>';
       } else if (settings.link && value && value !== "-") {
         href = /^https?:\/\//i.test(String(value)) ? String(value) : "https://" + String(value);
         valueMarkup = '<dd class="supplier-detail-value supplier-detail-value-rich"><a class="supplier-inline-link" href="' +
@@ -341,6 +223,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         valueMarkup = '<dd class="supplier-detail-value' + (settings.multiline ? " supplier-detail-value-multiline" : "") + '">' +
           formatSupplierDetailValue(value, settings.multiline) +
           "</dd>";
+      }
+
+      if (settings.copy && !missing) {
+        valueMarkup = valueMarkup.replace("</dd>", '<button type="button" class="supplier-copy" data-supplier-copy="' +
+          helpers.escapeHtml(String(value)) + '" aria-label="Copy ' + helpers.escapeHtml(label) + '" title="Copy ' +
+          helpers.escapeHtml(label) + '"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button></dd>');
       }
 
       return [
@@ -403,41 +291,41 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function buildSupplierInfoBasic(supplier) {
       return buildSupplierInfoPanels([
-        buildSupplierInfoBlock("Overview", [
-          buildSupplierDetailCard("Supplier", helpers.getCandidateValue(supplier, fieldCandidates.supplier.name)),
-          buildSupplierDetailCard("Vendor Type", helpers.getCandidateValue(supplier, fieldCandidates.supplier.vendorType)),
-          buildSupplierDetailCard("Connection Reference", helpers.getCandidateValue(supplier, fieldCandidates.supplier.connectionReference)),
-          buildSupplierDetailCard("Ezus Identifier", helpers.getCandidateValue(supplier, fieldCandidates.supplier.ezusReference))
+        buildSupplierInfoBlock("Classification", [
+          buildSupplierDetailCard("Vendor type", helpers.getCandidateValue(supplier, fieldCandidates.supplier.vendorType)),
+          buildSupplierDetailCard("Category", helpers.getCandidateValue(supplier, fieldCandidates.supplier.category)),
+          buildSupplierDetailCard("Subcategory", helpers.getCandidateValue(supplier, fieldCandidates.supplier.subcategory))
         ], {
           compact: true
         }),
-        buildSupplierInfoBlock("Classification & coverage", [
-          buildSupplierDetailCard("Category", helpers.getCandidateValue(supplier, fieldCandidates.supplier.category)),
-          buildSupplierDetailCard("Subcategory", helpers.getCandidateValue(supplier, fieldCandidates.supplier.subcategory)),
+        buildSupplierInfoBlock("Location & website", [
           buildSupplierDetailCard("Destination", helpers.getCandidateValue(supplier, fieldCandidates.supplier.destination)),
-          buildSupplierDetailCard("Subdestination", helpers.getCandidateValue(supplier, fieldCandidates.supplier.subdestination))
+          buildSupplierDetailCard("Subdestination", helpers.getCandidateValue(supplier, fieldCandidates.supplier.subdestination)),
+          buildSupplierDetailCard("Website", helpers.getCandidateValue(supplier, fieldCandidates.supplier.website), { link: true, wide: true })
         ], {
           compact: true
-        })
+        }),
+        buildSupplierInfoBlock("Integration references", [
+          buildSupplierDetailCard("Connection reference", helpers.getCandidateValue(supplier, fieldCandidates.supplier.connectionReference), { copy: true }),
+          buildSupplierDetailCard("Ezus identifier", helpers.getCandidateValue(supplier, fieldCandidates.supplier.ezusReference), { copy: true })
+        ])
       ]);
     }
 
     function buildSupplierInfoFinancial(supplier) {
       return buildSupplierInfoPanels([
-        buildSupplierInfoBlock("Financial setup", [
+        buildSupplierInfoBlock("Tax details", [
+          buildSupplierDetailCard("Tax name", helpers.getCandidateValue(supplier, fieldCandidates.supplier.taxName), { wide: true }),
+          buildSupplierDetailCard("CIF / NIF", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cifNif), { copy: true }),
+          buildSupplierDetailCard("Self-employed", formatSupplierBooleanValue(
+            helpers.getCandidateValue(supplier, fieldCandidates.supplier.selfEmployed)
+          ))
+        ]),
+        buildSupplierInfoBlock("Banking & accounting", [
           buildSupplierDetailCard("Accounting account", helpers.getCandidateValue(supplier, fieldCandidates.supplier.accounting), {
             accountingStatus: true, supplierId: supplier.id
           }),
-          buildSupplierDetailCard("Account number", helpers.getCandidateValue(supplier, fieldCandidates.supplier.accountNumber)),
-          buildSupplierDetailCard("CIF / NIF", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cifNif)),
-          buildSupplierDetailCard("Is Self Employed", formatSupplierBooleanValue(
-            helpers.getCandidateValue(supplier, fieldCandidates.supplier.selfEmployed)
-          ))
-        ], {
-          compact: true,
-          emphasis: true
-        }),
-        buildSupplierInfoBlock("Defaults", [
+          buildSupplierDetailCard("IBAN / account number", helpers.getCandidateValue(supplier, fieldCandidates.supplier.accountNumber), { copy: true, wide: true }),
           buildSupplierDetailCard("Default accounting account", helpers.getCandidateValue(supplier, fieldCandidates.supplier.defaultAccountingAccount)),
           buildSupplierDetailCard("Default accounting rule", helpers.getCandidateValue(supplier, fieldCandidates.supplier.defaultAccountingRule))
         ], {
@@ -448,62 +336,52 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function buildSupplierInfoPayment(supplier) {
       return buildSupplierInfoPanels([
-        buildSupplierInfoBlock("Payment setup", [
-          buildSupplierDetailCard("Payment Method", helpers.getCandidateValue(supplier, fieldCandidates.supplier.paymentMethod)),
-          buildSupplierDetailCard("Payment Conditions", helpers.getCandidateValue(supplier, fieldCandidates.supplier.paymentConditions), {
-            multiline: true,
-            wide: true
-          }),
-          buildSupplierDetailCard("Cancellation Policy", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cancellationPolicy), {
-            multiline: true,
-            wide: true
-          })
-        ], {
-          compact: true
-        }),
-        buildSupplierInfoBlock("Commission", [
-          buildSupplierDetailCard("Commission Status", helpers.getCandidateValue(supplier, fieldCandidates.supplier.commissionStatus)),
-          buildSupplierDetailCard("Commission Amount", helpers.getCandidateValue(supplier, fieldCandidates.supplier.commissionAmount)),
-          buildSupplierDetailCard("Commission Notes", helpers.getCandidateValue(supplier, fieldCandidates.supplier.commissionNotes), {
-            multiline: true,
-            wide: true
-          })
-        ], {
-          compact: true
-        })
-      ]);
+        buildSupplierInfoBlock("Payment & commission", [
+          buildSupplierDetailCard("Payment method", helpers.getCandidateValue(supplier, fieldCandidates.supplier.paymentMethod)),
+          buildSupplierDetailCard("Commission status", helpers.getCandidateValue(supplier, fieldCandidates.supplier.commissionStatus)),
+          buildSupplierDetailCard("Commission amount / rate", helpers.getCandidateValue(supplier, fieldCandidates.supplier.commissionAmount)),
+          buildSupplierDetailCard("Commission notes & exceptions", helpers.getCandidateValue(supplier, fieldCandidates.supplier.commissionNotes), { multiline: true, wide: true })
+        ]),
+        buildSupplierInfoBlock("Payment conditions", [
+          buildSupplierDetailCard("Terms", helpers.getCandidateValue(supplier, fieldCandidates.supplier.paymentConditions), { multiline: true, wide: true })
+        ]),
+        buildSupplierInfoBlock("Cancellation policy", [
+          buildSupplierDetailCard("Terms", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cancellationPolicy), { multiline: true, wide: true })
+        ])
+      ], "supplier-payment-panels");
     }
 
     function buildSupplierInfoAddress(supplier) {
+      var billingFields = ["mailingAddress", "mailingCity", "postCode", "mailingCountry"];
+      var hasBilling = billingFields.some(function (key) {
+        var value = helpers.getCandidateValue(supplier, fieldCandidates.supplier[key]);
+        return value !== null && value !== undefined && String(value).trim() !== "";
+      });
       return buildSupplierInfoPanels([
-        buildSupplierInfoBlock("Physical Address", [
+        buildSupplierInfoBlock("Physical address", [
           buildSupplierDetailCard("Address", helpers.getCandidateValue(supplier, fieldCandidates.supplier.address), {
             multiline: true,
             wide: true
           }),
-          buildSupplierDetailCard("City/Town", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cityTown)),
-          buildSupplierDetailCard("Analysis City", helpers.getCandidateValue(supplier, fieldCandidates.supplier.analysisCity)),
+          buildSupplierDetailCard("City / town", helpers.getCandidateValue(supplier, fieldCandidates.supplier.cityTown)),
+          buildSupplierDetailCard("Analysis city", helpers.getCandidateValue(supplier, fieldCandidates.supplier.analysisCity)),
           buildSupplierDetailCard("Country", helpers.getCandidateValue(supplier, fieldCandidates.supplier.country)),
-          buildSupplierDetailCard("Zip Code", helpers.getCandidateValue(supplier, fieldCandidates.supplier.zipCode)),
-          buildSupplierDetailCard("Website", helpers.getCandidateValue(supplier, fieldCandidates.supplier.website), {
-            link: true
-          })
+          buildSupplierDetailCard("Zip code", helpers.getCandidateValue(supplier, fieldCandidates.supplier.zipCode))
         ], {
           compact: true,
-          description: "Operational and destination-related details."
         }).replace('class="supplier-info-block', 'class="supplier-info-block supplier-address-card supplier-address-card-physical'),
-        buildSupplierInfoBlock("Billing Address", [
-          buildSupplierDetailCard("Mailing Address", helpers.getCandidateValue(supplier, fieldCandidates.supplier.mailingAddress), {
+        hasBilling ? buildSupplierInfoBlock("Billing address", [
+          buildSupplierDetailCard("Mailing address", helpers.getCandidateValue(supplier, fieldCandidates.supplier.mailingAddress), {
             multiline: true,
             wide: true
           }),
           buildSupplierDetailCard("City", helpers.getCandidateValue(supplier, fieldCandidates.supplier.mailingCity)),
-          buildSupplierDetailCard("Post Code", helpers.getCandidateValue(supplier, fieldCandidates.supplier.postCode)),
-          buildSupplierDetailCard("Mailing Country", helpers.getCandidateValue(supplier, fieldCandidates.supplier.mailingCountry))
+          buildSupplierDetailCard("Post code", helpers.getCandidateValue(supplier, fieldCandidates.supplier.postCode)),
+          buildSupplierDetailCard("Mailing country", helpers.getCandidateValue(supplier, fieldCandidates.supplier.mailingCountry))
         ], {
           compact: true,
-          description: "Tax and mailing information used for invoicing."
-        }).replace('class="supplier-info-block', 'class="supplier-info-block supplier-address-card supplier-address-card-billing')
+        }).replace('class="supplier-info-block', 'class="supplier-info-block supplier-address-card supplier-address-card-billing') :
+          '<section class="supplier-info-block"><h3 class="supplier-info-section-title">Billing address</h3><p class="supplier-missing-copy">Billing address not provided</p></section>'
       ], "supplier-address-panels");
     }
 
@@ -586,14 +464,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       paymentsRenderer.renderPaymentsWorkspaceSections(activeSection);
     }
 
-    if (elements.noticeDismiss) {
-      elements.noticeDismiss.addEventListener("click", hideNotice);
-    }
-
-    if (elements.errorDismiss) {
-      elements.errorDismiss.addEventListener("click", hideError);
-    }
-
     function hideSearchResults() {
       elements.searchResultsCard.hidden = true;
       elements.searchResultsCount.textContent = "0 matches";
@@ -616,7 +486,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.searchResultsCount.textContent = records.length + (records.length === 1 ? " match" : " matches");
       elements.searchResultsBody.innerHTML = records.map(function (record) {
         return [
-          '<tr class="is-clickable" data-supplier-id="' + helpers.escapeHtml(record.id) + '">',
+          '<tr class="is-clickable" tabindex="0" data-supplier-id="' + helpers.escapeHtml(record.id) + '">',
           "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.name) || "-") + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.connectionReference) || "-") + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.ezusReference) || "-") + "</td>",
@@ -625,6 +495,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }).join("");
 
       Array.prototype.forEach.call(elements.searchResultsBody.querySelectorAll("tr[data-supplier-id]"), function (row) {
+        row.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); row.click(); }
+        });
         row.addEventListener("click", function () {
           var supplierId = row.getAttribute("data-supplier-id");
           var match = records.find(function (record) {
@@ -658,7 +531,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           return helpers.textValue(value);
         }
 
-        return parsedDate.toLocaleString(undefined, {
+        return parsedDate.toLocaleString("en-GB", {
           day: "2-digit",
           month: "short",
           year: "numeric",
@@ -737,15 +610,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.supplierEzusSyncStrip.hidden = false;
       }
       if (elements.supplierLastEzusSyncAt) {
-        elements.supplierLastEzusSyncAt.textContent = lastEzusSyncAt || lastEzusSyncBy
-          ? "Last sync: " + formatSyncDate(lastEzusSyncAt) +
-            (lastEzusSyncBy ? " · By " + helpers.textValue(lastEzusSyncBy) : "")
+        elements.supplierLastEzusSyncAt.textContent = lastEzusSyncAt
+          ? "Last sync: " + formatSyncDate(lastEzusSyncAt)
           : "Not synced yet";
       }
       if (elements.supplierLastEzusSyncBy) {
         elements.supplierLastEzusSyncBy.textContent = helpers.textValue(
           lastEzusSyncBy,
-          "-"
+          "Not provided"
         );
       }
       elements.createInvoiceFromSupplier.hidden = false;
@@ -766,6 +638,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.supplierInfoTabPayment.setAttribute("aria-selected", state.supplierInfoTab === "payment" ? "true" : "false");
       elements.supplierInfoTabAddress.classList.toggle("is-active", state.supplierInfoTab === "address");
       elements.supplierInfoTabAddress.setAttribute("aria-selected", state.supplierInfoTab === "address" ? "true" : "false");
+      ["basic", "financial", "payment", "address"].forEach(function (tab) {
+        var button = elements.supplierInfoTabs.querySelector("#supplier-info-tab-" + tab);
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-controls", "supplier-info-content");
+        button.tabIndex = state.supplierInfoTab === tab ? 0 : -1;
+      });
+      elements.supplierInfoContent.setAttribute("aria-labelledby", "supplier-info-tab-" + (state.supplierInfoTab || "basic"));
       refreshActionState();
     }
 
@@ -974,7 +853,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.supplierExportPayments.disabled = !state.supplier || payments.length === 0;
       }
 
-      renderSupplierActivityStats(showingInvoices, invoices, payments);
+      elements.supplierRelatedTabInvoices.tabIndex = showingInvoices ? 0 : -1;
+      elements.supplierRelatedTabPayments.tabIndex = showingInvoices ? -1 : 0;
+      elements.supplierRelatedTabInvoices.setAttribute("aria-controls", "supplier-invoices-table-wrap supplier-invoices-empty");
+      elements.supplierRelatedTabPayments.setAttribute("aria-controls", "supplier-payments-table-wrap supplier-payments-empty");
+      renderSupplierActivityStats(true, invoices, payments);
 
       if (!state.supplier) {
         elements.supplierInvoicesEmpty.textContent = "Search a supplier to load its related invoices.";
@@ -1328,7 +1211,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       accountingRenderer.renderSelectedAccountingRule(rule);
     }
 
-    return {
+    var api = {
+      withFeedbackTarget: withFeedbackTarget,
       renderAccountingEntriesWorkspace: renderAccountingEntriesWorkspace,
       renderAccountingEntryLinesWorkspace: renderAccountingEntryLinesWorkspace,
       renderBookingsWorkspace: renderBookingsWorkspace,
@@ -1358,8 +1242,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       hideError: hideError,
       hideNotice: hideNotice,
       showError: showError,
-      showErrorPopup: showErrorPopup,
+      showErrorPopup: ns.showErrorPopup,
       showNotice: showNotice
     };
+    return api;
   };
 }(window));

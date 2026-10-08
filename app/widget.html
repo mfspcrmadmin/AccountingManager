@@ -7,12 +7,16 @@
     <link rel="stylesheet" href="./styles/theme.css">
     <link rel="stylesheet" href="./styles/layout.css">
     <link rel="stylesheet" href="./styles/components.css">
+    <link rel="stylesheet" href="./styles/inline-feedback.css">
     <link rel="stylesheet" href="./styles/invoices.css">
+    <link rel="stylesheet" href="./styles/irpf-report.css">
+    <link rel="stylesheet" href="./styles/booking-won-report.css">
     <link rel="stylesheet" href="./styles/payments.css">
     <link rel="stylesheet" href="./styles/accounting.css">
     <link rel="stylesheet" href="./styles/operations.css">
     <link rel="stylesheet" href="./styles/explorer.css">
     <link rel="stylesheet" href="./styles/visual-refresh.css">
+    <link rel="stylesheet" href="./styles/suppliers.css">
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
     <link rel="stylesheet" href="./styles/accounting-notes.css">
     <script src="./scripts/accounting-notes-save.js"></script>
@@ -32,17 +36,6 @@
           <button id="booking-actions-toggle" class="button secondary quick-actions-toggle" type="button" aria-label="Quick actions" title="Quick actions" aria-expanded="false" aria-controls="booking-actions-popup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg></button>
         </div>
       </header>
-
-      <div class="floating-message-stack" aria-live="polite" aria-atomic="true">
-        <section id="notice" class="notice neutral floating-app-message" hidden>
-          <span id="notice-text" class="floating-message-text"></span>
-          <button id="notice-dismiss" class="floating-message-dismiss" type="button" aria-label="Dismiss message">×</button>
-        </section>
-        <section id="error" class="notice error floating-app-message" hidden role="alert">
-          <span id="error-text" class="floating-message-text"></span>
-          <button id="error-dismiss" class="floating-message-dismiss" type="button" aria-label="Dismiss error">×</button>
-        </section>
-      </div>
 
       <section id="booking-actions-shortcut" class="quick-actions-aside" hidden role="dialog" aria-modal="true" aria-labelledby="booking-actions-title">
         <div id="booking-actions-backdrop" class="quick-actions-aside-backdrop"></div>
@@ -65,6 +58,15 @@
             </div>
           </section>
 
+          <section class="quick-actions-aside-section" aria-labelledby="quick-access-title">
+            <div class="quick-actions-aside-section-heading">
+              <p id="quick-access-title" class="panel-eyebrow">Quick access</p>
+            </div>
+            <div class="quick-actions-external-links">
+              <a class="quick-actions-external-link" href="https://creatorapp.zoho.eu/madeforspainandportugal/product-manager/page-perma/Product_Request_Form" target="_blank" rel="noopener"><span>Create product request</span><span aria-hidden="true">&#8599;</span></a>
+            </div>
+          </section>
+
           <section class="quick-actions-aside-section quick-actions-booking-section">
       <div class="quick-actions-aside-section-heading">
         <p class="panel-eyebrow">Booking actions</p>
@@ -80,8 +82,8 @@
 
       <section id="booking-closure-popup" class="booking-closure-popup" role="dialog" aria-modal="true" aria-labelledby="booking-closure-title" hidden>
         <div class="booking-closure-card">
-          <div class="panel-header">
-            <div>
+          <div class="panel-header booking-closure-header">
+            <div class="booking-closure-heading">
               <p class="booking-actions-eyebrow">Booking financial review</p>
               <div class="booking-closure-title-row">
                 <h2 id="booking-closure-title">Trip closure</h2>
@@ -89,7 +91,8 @@
               </div>
               <p id="booking-closure-accounting-rep" class="booking-closure-accounting-rep" hidden></p>
             </div>
-            <div class="inline-actions">
+            <div id="booking-closure-controls" hidden></div>
+            <div class="inline-actions booking-closure-window-actions">
               <button id="booking-closure-refresh" class="button secondary icon-button refresh-icon-button" type="button" aria-label="Refresh trip closure" title="Refresh trip closure">&#8635;</button>
               <button id="booking-closure-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
             </div>
@@ -284,8 +287,11 @@
               </dialog>
               <div class="card-purchase-workflow-modal" data-prepayment-workflow hidden>
                 <div class="card-purchase-workflow-backdrop" data-prepayment-workflow-close></div>
-                <aside class="card-purchase-workflow-card" role="dialog" aria-modal="true" aria-labelledby="prepayment-workflow-title">
+                <aside class="card-purchase-workflow-card prepayment-workflow-card" role="dialog" aria-modal="true" aria-labelledby="prepayment-workflow-title">
                   <header><div><p class="panel-eyebrow">Supplier prepayment</p><h3 id="prepayment-workflow-title" data-prepayment-workflow-title>Register supplier invoice</h3></div><div class="prepayment-context-actions"><button class="prepayment-notes-button" type="button" data-prepayment-workflow-notes aria-label="Open Accounting Notes for this prepayment" title="Accounting Notes is currently unavailable." aria-disabled="true" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></svg></button><button class="card-purchase-workflow-close" type="button" data-prepayment-workflow-close aria-label="Close">&times;</button></div></header>
+                  <div class="prepayment-workflow-layout">
+                  <section class="prepayment-workflow-summary" aria-label="Prepayment summary" tabindex="0">
+                  <p class="panel-eyebrow">Prepayment overview</p>
                   <div class="card-purchase-workflow-context" data-prepayment-workflow-context></div>
                   <div class="prepayment-documents card-purchase-workflow-context" data-prepayment-workflow-documents></div>
                   <details class="prepayment-services" open><summary><span>Associated services</span><button type="button" class="prepayment-services-edit" data-prepayment-workflow-services-edit data-service-edit aria-label="Edit associated services" title="Edit associated services" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary><p class="card-purchase-workflow-message" data-prepayment-workflow-services-message role="status" aria-live="polite" hidden></p><div data-prepayment-workflow-services aria-live="polite"></div></details>
@@ -293,9 +299,10 @@
                     <div class="invoice-create-summary-card-heading"><h3>Settlement Financial Summary</h3></div>
                     <div data-prepayment-workflow-settlement-summary aria-live="polite"></div>
                   </section>
+                      <section data-prepayment-workflow-allocations aria-label="Associated invoices"></section>
+                  </section>
                   <form class="prepayment-workflow-form" data-prepayment-workflow-form>
                     <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-fields>
-                      <section data-prepayment-workflow-allocations aria-label="Associated invoices"></section>
                       <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-invoice-fields>
                         <label class="field"><span>Amount of this prepayment applied to the invoice</span><input type="number" min="0.01" step="0.01" data-prepayment-workflow-allocated required></label>
                         <label class="field"><span>Invoice</span><select data-prepayment-workflow-existing></select></label>
@@ -337,6 +344,7 @@
                       <button class="button primary" type="submit" data-prepayment-workflow-submit>Create invoice</button>
                     </div>
                   </form>
+                  </div>
                 </aside>
               </div>
               <div class="pagination-bar" data-prepayments-pager hidden><button type="button" class="button secondary" data-prepayments-previous>Previous</button><span data-prepayments-page-copy></span><button type="button" class="button secondary" data-prepayments-next>Next</button></div>
@@ -500,7 +508,7 @@
 
             <div id="card-purchase-workflow-modal" class="card-purchase-workflow-modal" hidden>
               <div class="card-purchase-workflow-backdrop" data-card-purchase-close></div>
-              <section class="card-purchase-workflow-card" role="dialog" aria-modal="true" aria-labelledby="card-purchase-workflow-title">
+              <section class="card-purchase-workflow-card prepayment-workflow-card" role="dialog" aria-modal="true" aria-labelledby="card-purchase-workflow-title">
                 <header>
                   <div>
                     <p id="card-purchase-workflow-eyebrow" class="panel-eyebrow">Card purchase</p>
@@ -508,9 +516,17 @@
                   </div>
                   <button class="card-purchase-workflow-close" type="button" data-card-purchase-close aria-label="Close">&times;</button>
                 </header>
-                <div id="card-purchase-workflow-context" class="card-purchase-workflow-context"></div>
-                <section id="card-purchase-workflow-service" class="card-purchase-workflow-service" aria-label="Associated service" aria-live="polite" hidden></section>
-                <form id="card-purchase-workflow-form" novalidate>
+                <div class="prepayment-workflow-layout">
+                <section class="prepayment-workflow-summary" aria-label="Card purchase summary" tabindex="0">
+                  <p class="panel-eyebrow">Card purchase overview</p>
+                  <div id="card-purchase-workflow-context" class="card-purchase-workflow-context"></div>
+                  <details class="prepayment-services" id="card-purchase-services" open>
+                    <summary><span>Associated Service</span><button type="button" id="card-purchase-service-edit" class="prepayment-services-edit" aria-label="Edit associated service" title="Edit associated service" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary>
+                    <p id="card-purchase-service-message" class="card-purchase-workflow-message" role="status" aria-live="polite" hidden></p>
+                    <div id="card-purchase-workflow-service" aria-live="polite"></div>
+                  </details>
+                </section>
+                <form id="card-purchase-workflow-form" class="prepayment-workflow-form card-purchase-workflow-form" novalidate>
                   <div id="card-purchase-workflow-invoice-fields" class="card-purchase-workflow-fields">
                     <label class="field"><span>Settlement *</span><select id="card-purchase-settlement" required><option value="">Select settlement</option></select><small id="card-purchase-settlement-message" role="status"></small></label>
                     <label class="field"><span id="card-purchase-reference-label">Invoice number</span><input id="card-purchase-reference" required></label>
@@ -529,10 +545,12 @@
                   <div class="inline-actions card-purchase-workflow-actions">
                     <p id="card-purchase-workflow-message" class="card-purchase-workflow-message" aria-live="polite"></p>
                     <span id="card-purchase-workflow-spinner" class="card-purchase-workflow-spinner" role="status" aria-live="polite" hidden></span>
+                    <button class="button tertiary" type="button" data-card-purchase-close>Cancel</button>
                     <button id="card-purchase-workflow-needs-review" class="button secondary" type="button">Mark needs review</button>
                     <button id="card-purchase-workflow-submit" class="button primary" type="submit">Save</button>
                   </div>
                 </form>
+                </div>
               </section>
             </div>
           </section>
@@ -544,8 +562,45 @@
               <div>
                 <h2>Bookings</h2>
               </div>
-              <span id="bookings-count" class="badge subtle">0 bookings</span>
+              <div class="inline-actions">
+                <button id="booking-won-open" class="button secondary" type="button" aria-expanded="false" aria-controls="booking-won-panel">Daily bookings report</button>
+                <span id="bookings-count" class="badge subtle">0 bookings</span>
+              </div>
             </div>
+
+            <section id="booking-won-panel" class="booking-won-report" aria-labelledby="booking-won-title" hidden>
+              <h3 id="booking-won-title">Bookings won by day</h3>
+              <div class="booking-won-controls">
+                <label class="field"><span>Booking Won Date</span><input id="booking-won-date" type="date" required></label>
+                <div id="booking-won-stage-field" class="field booking-won-stage-field bookings-stage-filter-field">
+                  <span>Booking stages</span>
+                  <button id="booking-won-stage-summary" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="booking-won-stage-menu">All stages</button>
+                  <div id="booking-won-stage-menu" class="bookings-stage-menu" hidden>
+                    <fieldset id="booking-won-stage-controls">
+                      <legend class="sr-only">Booking stages</legend>
+                      <div class="status-filter-menu-actions">
+                        <button id="booking-won-stages-all" class="status-filter-menu-action" type="button">Select all</button>
+                        <button id="booking-won-stages-none" class="status-filter-menu-action" type="button">Deselect all</button>
+                      </div>
+                      <div id="booking-won-stages"></div>
+                    </fieldset>
+                  </div>
+                </div>
+                <button id="booking-won-generate" class="button primary" type="button">Generate preview</button>
+                <button id="booking-won-export-sales" class="button secondary" type="button" disabled>Download Ventas</button>
+                <button id="booking-won-export-invoices" class="button secondary" type="button" disabled>Download Relación facturas</button>
+              </div>
+              <div id="booking-won-loading" class="booking-won-loading" role="status" aria-live="polite" hidden>
+                <span class="booking-won-spinner" aria-hidden="true"></span>
+                <div><strong>Preparing your preview</strong><span>Loading bookings and agency details…</span></div>
+              </div>
+              <p id="booking-won-message" role="status" aria-live="polite"></p>
+              <div id="booking-won-results" hidden>
+                <p>Preview shows up to 100 bookings. Excel includes all matching bookings.</p>
+                <details open><summary>Ventas</summary><div class="booking-won-table-wrap" tabindex="0" role="region" aria-label="Ventas preview"><table id="booking-won-sales-table" class="results-table"></table></div></details>
+                <details><summary>Relación facturas</summary><div class="booking-won-table-wrap" tabindex="0" role="region" aria-label="Relación facturas preview"><table id="booking-won-invoices-table" class="results-table"></table></div></details>
+              </div>
+            </section>
 
             <div class="table-filter-bar bookings-filters-grid">
               <label class="field">
@@ -629,7 +684,7 @@
             <aside class="suppliers-rail panel">
               <section id="search-panel" class="search-panel supplier-rail-section compact-search-panel">
                 <div class="supplier-rail-section-heading">
-                  <label class="panel-kicker-title" for="supplier-search">Search supplier</label>
+                  <h1 class="supplier-page-title">Suppliers</h1>
                 </div>
                 <div class="search-bar compact-search-bar supplier-toolbar-search supplier-rail-search">
                   <label class="field search-field supplier-toolbar-field">
@@ -638,19 +693,24 @@
                       type="search"
                       list="supplier-options"
                       aria-label="Search supplier"
-                      placeholder="Supplier name, connection reference or Ezus reference"
+                      placeholder="Supplier name, CIF/NIF, connection reference or Ezus reference"
                     >
                     <datalist id="supplier-options"></datalist>
                   </label>
+                  <button id="clear-supplier-search" class="supplier-search-clear" type="button" aria-label="Clear search text" title="Clear search text" hidden>&times;</button>
                   <button
                     id="load-supplier"
                     class="button secondary icon-button supplier-load-button"
                     type="button"
-                    aria-label="Load supplier"
-                    title="Load supplier"
-                  >&#8981;</button>
+                    aria-label="Search supplier"
+                    title="Search supplier"
+                  ><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
                 </div>
               </section>
+              <div id="supplier-info-empty" class="supplier-onboarding">
+                <p>Select a supplier to view accounting details</p>
+                <button id="focus-supplier-search" type="button" hidden>Search suppliers</button>
+              </div>
 
               <section id="search-results-card" class="supplier-rail-section search-results-panel" hidden>
                 <div class="panel-header">
@@ -679,12 +739,6 @@
 
             <section id="supplier-workspace-main" class="supplier-main-stack supplier-main-shell">
               <section class="context-panel supplier-context-panel supplier-main-section">
-                <div id="supplier-info-empty" class="supplier-onboarding">
-                  <h2>No supplier selected</h2>
-                  <p>Select a supplier to view its accounting information and available actions.</p>
-                  <button id="focus-supplier-search" type="button" hidden>Search suppliers</button>
-                </div>
-
                 <div id="supplier-info-content-shell" class="supplier-info-shell" hidden>
                   <header class="supplier-summary-header">
                     <div class="supplier-summary-title-block">
@@ -695,6 +749,7 @@
                       <div class="supplier-summary-sync" aria-label="Ezus synchronization status">
                         <span id="supplier-header-ezus-status" class="supplier-ezus-status"></span>
                         <span id="supplier-last-ezus-sync-at" class="supplier-last-sync">Not synced yet</span>
+                        <details class="supplier-sync-details"><summary title="View synchronization details">Sync details</summary><div>Synced by <span id="supplier-last-ezus-sync-by">Not provided</span></div></details>
                         <button id="sync-supplier-with-ezus" class="button button-supplier-sync supplier-sync-action" type="button" hidden disabled>Sync from Ezus</button>
                       </div>
                     </div>
@@ -704,11 +759,11 @@
                         <button id="create-refund-from-supplier" class="button secondary compact-action-button" type="button" disabled>Create refund</button>
                       </div>
                       <div class="supplier-action-group supplier-action-group-open">
-                        <button id="see-supplier-in-crm" class="button secondary compact-action-button supplier-quick-link" type="button" hidden disabled>Open native CRM</button>
-                        <button id="see-supplier-in-ezus" class="button secondary compact-action-button supplier-quick-link" type="button" hidden disabled>Open in Ezus</button>
+                        <button id="see-supplier-in-crm" class="button secondary compact-action-button supplier-quick-link" type="button" hidden disabled>Open in CRM <span aria-hidden="true">↗</span></button>
+                        <button id="see-supplier-in-ezus" class="button secondary compact-action-button supplier-quick-link" type="button" hidden disabled>Open in Ezus <span aria-hidden="true">↗</span></button>
                       </div>
                     </div>
-                    <button id="close-supplier-workspace" class="close-supplier-control" type="button" aria-label="Close" title="Close" hidden disabled>&times;</button>
+                    <button id="close-supplier-workspace" class="close-supplier-control" type="button" aria-label="Clear selected supplier" title="Clear selected supplier" hidden disabled>&times;</button>
                   </header>
 
                   <div id="supplier-activity-stats" class="activity-stats-grid supplier-financial-summary" hidden>
@@ -725,7 +780,8 @@
                     <button id="supplier-info-tab-address" class="segmented-control-button" type="button" aria-selected="false">Address</button>
                   </div>
 
-                  <div id="supplier-info-content"></div>
+                  <div id="supplier-info-content" role="tabpanel" tabindex="0" aria-labelledby="supplier-info-tab-basic"></div>
+                  <span id="supplier-copy-feedback" class="supplier-copy-feedback" role="status" aria-live="polite"></span>
                 </div>
               </section>
 
@@ -737,7 +793,7 @@
                       <button id="supplier-related-tab-invoices" class="segmented-control-button is-active" type="button" aria-selected="true">Invoices</button>
                       <button id="supplier-related-tab-payments" class="segmented-control-button" type="button" aria-selected="false">Payments</button>
                     </div>
-                    <span id="supplier-activity-count" class="badge subtle">0 invoices</span>
+                    <span id="supplier-activity-count" class="badge subtle" hidden>0 invoices</span>
                     <button id="supplier-export-invoices" class="button secondary compact-action-button" type="button" hidden disabled>Export invoices</button>
                     <button id="supplier-export-payments" class="button secondary compact-action-button" type="button" hidden disabled>Export payments</button>
                   </div>
@@ -1151,6 +1207,7 @@
                   <h2>Invoices</h2>
                 </div>
                 <div class="inline-actions">
+                  <button id="irpf-open" class="button secondary" type="button" aria-expanded="false" aria-controls="irpf-panel">IRPF report</button>
                   <div class="invoices-view-switch" role="group" aria-label="Invoice view">
                     <button class="is-active" type="button" data-invoice-view="open" aria-pressed="true">Open</button>
                     <button type="button" data-invoice-view="closed" aria-pressed="false">Closed</button>
@@ -1159,6 +1216,26 @@
                   <span id="invoices-count" class="badge subtle">0 invoices</span>
                 </div>
               </div>
+
+              <section id="irpf-panel" class="irpf-report" aria-labelledby="irpf-title" hidden>
+                <h3 id="irpf-title">IRPF report · Spain</h3>
+                <p>Self-employed suppliers in Spain (Country). Uses invoice dates across all invoices, independently of the list filters and Open / Closed view.</p>
+                <div class="irpf-controls">
+                  <label class="field"><span>Year</span><input id="irpf-year" type="number" min="1900" max="9999"></label>
+                  <label class="field"><span>Quarter</span><select id="irpf-quarter"><option value="">Custom dates</option><option value="1">Q1 · Jan–Mar</option><option value="2">Q2 · Apr–Jun</option><option value="3">Q3 · Jul–Sep</option><option value="4">Q4 · Oct–Dec</option></select></label>
+                  <label class="field"><span>Invoice date from</span><input id="irpf-from" type="date" required></label>
+                  <label class="field"><span>Invoice date to</span><input id="irpf-to" type="date" required></label>
+                  <button id="irpf-generate" class="button primary" type="button">Generate preview</button>
+                  <button id="irpf-export" class="button secondary" type="button" disabled>Download Excel</button>
+                </div>
+                <p id="irpf-message" role="status" aria-live="polite">Generate a preview for the selected period.</p>
+                <div id="irpf-results" hidden>
+                  <p>Amounts include additional VAT bases and IRPF. Credit notes subtract. Totals are separate per currency. Each preview shows up to 100 rows; Excel includes all rows.</p>
+                  <details open><summary>Supplier summary</summary><div class="table-wrap"><table id="irpf-summary" class="results-table"></table></div></details>
+                  <details><summary>Invoice detail</summary><div class="table-wrap"><table id="irpf-detail" class="results-table"></table></div></details>
+                  <details><summary>Records to review · excluded from totals</summary><p>Includes incomplete supplier data, proformas, unknown invoice types, cancelled or rejected records. Correct the source data and generate again where appropriate.</p><div class="table-wrap"><table id="irpf-review" class="results-table"></table></div></details>
+                </div>
+              </section>
 
               <div id="invoices-filter-toolbar" class="table-filter-bar invoices-filters-grid list-toolbar is-custom-date-range">
                 <label class="field">
@@ -2724,6 +2801,7 @@
     <script src="./scripts/dom.js"></script>
     <script src="./scripts/crm.js"></script>
     <script src="./scripts/supplier-accounting-info.js"></script>
+    <script src="./scripts/inline-feedback.js"></script>
     <script src="./scripts/render.js"></script>
     <script src="./scripts/table-columns.js"></script>
     <script src="./scripts/render-invoices.js"></script>
@@ -2745,6 +2823,7 @@
     <script src="./scripts/payment-letter-batch.js"></script>
     <script src="./scripts/invoice-request.js"></script>
     <script src="./scripts/supplier-workspace.js"></script>
+    <script src="./scripts/supplier-view.js"></script>
     <script src="./scripts/quick-settlement-refresh.js"></script>
     <script src="./scripts/prepayment-bank-request.js"></script>
     <script src="./scripts/prepayment-proof.js"></script>
@@ -2753,9 +2832,13 @@
     <script src="./scripts/prepayment-notes.js"></script>
     <script src="./scripts/prepayment-workflow.js"></script>
     <script src="./scripts/card-purchase-settlements.js"></script>
+    <script src="./scripts/card-purchase-services.js"></script>
     <script src="./scripts/operations.js"></script>
     <script src="./scripts/ministry-traveller-register.js"></script>
     <script src="./scripts/invoice-delete.js"></script>
+    <script src="./scripts/excel-workbook.js"></script>
+    <script src="./scripts/booking-won-report.js"></script>
+    <script src="./scripts/irpf-report.js"></script>
     <script src="./scripts/main.js"></script>
   </body>
 </html>

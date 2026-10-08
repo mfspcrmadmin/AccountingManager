@@ -27,6 +27,7 @@
     }
 
     async function bootstrapRecentSuppliers() {
+      var renderer = deps.renderer.withFeedbackTarget ? deps.renderer.withFeedbackTarget("supplier-bootstrap") : deps.renderer;
       renderer.setLoading(true, "Loading suppliers...");
 
       try {
@@ -84,12 +85,17 @@
 
       if (!rawValue) {
         renderer.hideSearchResults();
-        renderer.showError("Enter a supplier name, connection reference or Ezus reference.");
+        renderer.showError("Enter a supplier name, CIF/NIF, connection reference or Ezus reference.");
         return;
       }
 
       if (!supplier) {
-        matches = await searchSuppliers(rawValue);
+        renderer.setLoading(true, "Searching suppliers...");
+        try {
+          matches = await searchSuppliers(rawValue);
+        } finally {
+          renderer.setLoading(false);
+        }
 
         if (matches.length > 1) {
           renderer.showNotice("More than one supplier matches that search. Choose the correct one below.");
@@ -166,7 +172,8 @@
       return [
         "Vendor_Name",
         "TP_Reference",
-        "Ezus_Supplier_API"
+        "Ezus_Supplier_API",
+        "CIF_NIF"
       ];
     }
 

@@ -70,6 +70,7 @@ test('Card Purchase recalculates after creation and before linking the payment t
     lookupId: value => value && value.id || '', lookupName: () => '',
     workflowReference: { value: 'INV1' }, workflowDate: { value: '2026-09-16' }, workflowAmount: { value: '1320' }, workflowVat: { value: '0' }, workflowInvoiceType: { value: 'Tickets' }, workflowNotes: { value: '' },
     workflowPaymentAccount: { value: 'own-bank' }, workflowPaymentReference: { value: 'PAY1' }, workflowPaymentDate: { value: '2026-09-16' },
+    workflowSettlement: { value: 'settlement', disabled: false }, settlementLoading: false,
     api: () => ({ getRecord: async () => ({ data: [{ id: 'own-bank', Owner_Type: 'Own', Status: 'Active' }] }) }),
     responseRecords: response => response.data,
     create: async (module, data) => { calls.push(module); return { details: { id: module === 'Supplier_Invoices' ? 'i1' : 'allocation' } }; },
@@ -81,6 +82,7 @@ test('Card Purchase recalculates after creation and before linking the payment t
       return { details: { output: { payment_id: 'pay1', error: false } } };
     } } } }, AccountingManagerApp: {
       isOwnQuickPaymentAccount: window.AccountingManagerApp.isOwnQuickPaymentAccount,
+      cardPurchaseSettlements: { validate: async () => ({ id: 'settlement', Name: 'Settlement' }) },
       refreshQuickInvoiceSettlements: async (zoho, invoiceId) => { assert.equal(invoiceId, 'i1'); assert.equal(purchase.Vendor_Invoice.id, 'i1'); calls.push('rebuild'); return ''; }
     } }
   };

@@ -1,5 +1,13 @@
 # Payment letter: remitente del usuario del widget
 
+Las devoluciones (`Movement_Type = Supplier Refund`) se muestran en negativo y
+se restan del total asignado al proveedor. Los importes que ya sean negativos
+conservan su signo. El criterio se aplica por línea, no por el movimiento global
+del pago, para admitir pagos con facturas y devoluciones mezcladas.
+El widget aplica el mismo cálculo al envío individual, al resumen por lotes y
+al PDF descargable. Publicar también el código actualizado de
+`sendSupplierPaymentLetter` en CRM: actualizar solo el widget no corrige el correo.
+
 Actualizar la función CRM existente `email_sendSupplierPaymentLetter` (nombre de
 ejecución del widget: `sendsupplierpaymentletter`) con el contenido de
 `sendSupplierPaymentLetter` y añadir el argumento **actingUserEmail**, tipo String.

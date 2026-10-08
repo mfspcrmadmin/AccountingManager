@@ -80,6 +80,15 @@ test('mixed payments create one letter per supplier with all related invoices', 
   assert.deepEqual(JSON.parse(ctx.calls[2].supplierEmailMapStr), { s2: 's2@example.com' });
   await ctx.batch.open(); await ctx.batch.send(); assert.equal(ctx.calls.length, 3);
 });
+test('batch letter amounts subtract refunds separately for each supplier', async () => {
+  const ctx = setup();
+  ctx.state.records.payAllocations[2].Movement_Type = 'Supplier Refund';
+  await ctx.batch.open();
+  assert.deepEqual(Array.from(ctx.batch.getRows(), row => row.supplier.totalAllocated), [10, -10, 40]);
+  await ctx.batch.send();
+  assert.equal(ctx.calls.length, 3);
+});
+
 test('partial failures only retry failed letters, including after closing and reopening', async () => {
   const ctx = setup({ send: (_, index) => ({ success: index !== 2, sentCount: index === 2 ? 0 : 1, message: 'result' }) });
   await ctx.batch.open(); await ctx.batch.send();

@@ -1,0 +1,361 @@
+string standalone.bp_orchestrateBookingTransition(String bookingReference, String referenceType, String transitionCode)
+{
+res = Map();
+res.put("error",false);
+res.put("transition",transitionCode);
+booking = Map();
+ezusProjectRef = "";
+if(referenceType.equals("booking_id"))
+{
+	booking = zoho.crm.getRecordById("Deals",bookingReference.toLong());
+	if(isnull(booking) || booking.isEmpty())
+	{
+		res.put("error",true);
+		res.put("message","Booking not found: " + bookingReference);
+		return res;
+	}
+	ezusProjectRef = ifnull(booking.get("Ezus_Project_ID"),"");
+}
+else if(referenceType.equals("ezus_project_ref"))
+{
+	ezusProjectRef = ifnull(bookingReference,"");
+}
+else
+{
+	res.put("error",true);
+	res.put("message","Unsupported booking reference type: " + referenceType);
+	return res;
+}
+// The Blueprint only supplies the transition. All side effects are centralized here.
+if(transitionCode.equals("create_project"))
+{
+	if(!referenceType.equals("booking_id"))
+	{
+		res.put("error",true);
+		res.put("message","create_project requires a booking id.");
+		return res;
+	}
+	creationResult = standalone.createProjectInEzus(bookingReference.toLong());
+	res.put("create_project",creationResult);
+	if(isnull(creationResult) || ifnull(creationResult.get("error"),true).toString() != "false")
+	{
+		res.put("error",true);
+		res.put("message",ifnull(ifnull(creationResult,Map()).get("message"),"Ezus project creation was not confirmed."));
+	}
+	return res;
+}
+if(transitionCode.equals("booking_won"))
+{
+	if(!referenceType.equals("booking_id"))
+	{
+		res.put("error",true);
+		res.put("message","booking_won requires a booking id.");
+		return res;
+	}
+	arrivalDate = ifnull(booking.get("Arrival_Date"),"");
+	if(arrivalDate != "")
+	{
+		isHighPriority = false;
+		daysUntilArrival = zoho.currentdate.daysBetween(arrivalDate.toDate());
+		if(daysUntilArrival >= 0 && daysUntilArrival <= 15)
+		{
+			isHighPriority = true;
+		}
+		highPriorityUpdate = Map();
+		highPriorityUpdate.put("High_Priority_Booking",isHighPriority);
+		res.put("high_priority",zoho.crm.updateRecord("Deals",bookingReference.toLong(),highPriorityUpdate));
+	}
+	if(ezusProjectRef != "")
+	{
+		res.put("ezus_stage",standalone.changeEzusProjectStage(ezusProjectRef,"pending-res-assignment"));
+		options = Map();
+		options.put("syncProject",true);
+		options.put("syncTravellers",true);
+		options.put("syncServices",true);
+		options.put("dryRun",false);
+		options.put("skipDeletes",false);
+		syncArgs = Map();
+		syncArgs.put("options",options);
+		res.put("sync",standalone.sync_syncFullProjectFromEzus(bookingReference,syncArgs.toString()));
+	}
+	else
+	{
+		res.put("message","Booking has no Ezus project reference. Ezus sync skipped.");
+	}
+	res.put("notification",standalone.notif_sendEmailViaTemplate("Deals",bookingReference.toLong(),"616617000135016204",standalone.email_getTeamEmails(),"",""));
+	return res;
+}
+if(transitionCode.equals("auto_assign_booking_won"))
+{
+	if(!referenceType.equals("booking_id"))
+	{
+		res.put("error",true);
+		res.put("message","auto_assign_booking_won requires a booking id.");
+		return res;
+	}
+	// Auto Assign uses the booking's Sales Rep, including native CRM transitions.
+	salesRepId = ifnull(ifnull(booking.get("Sales_Rep"),Map()).get("id"),"").toString().trim();
+	if(salesRepId == "")
+	{
+		res.put("error",true);
+		res.put("message","Auto Assign requires a Sales Rep on the booking.");
+		return res;
+	}
+	reservationRep = Map();
+	reservationRep.put("id",salesRepId);
+	assignment = Map();
+	assignment.put("Reservation_Rep",reservationRep);
+	assignmentResult = zoho.crm.updateRecord("Deals",bookingReference.toLong(),assignment);
+	res.put("reservation_assignment",assignmentResult);
+	if(isnull(assignmentResult) || isnull(assignmentResult.get("id")))
+	{
+		res.put("error",true);
+		res.put("message","Could not assign Sales Rep to Reservation Rep. Details: " + assignmentResult);
+		return res;
+	}
+	if(ezusProjectRef.trim() == "")
+	{
+		res.put("message","Booking has no Ezus project reference. Operation aborted.");
+		return res;
+	}
+	arrivalDate = ifnull(booking.get("Arrival_Date"),"");
+	if(arrivalDate != "")
+	{
+		isHighPriority = false;
+		daysUntilArrival = zoho.currentdate.daysBetween(arrivalDate.toDate());
+		if(daysUntilArrival >= 0 && daysUntilArrival <= 15)
+		{
+			isHighPriority = true;
+		}
+		highPriorityUpdate = Map();
+		highPriorityUpdate.put("High_Priority_Booking",isHighPriority);
+		res.put("high_priority",zoho.crm.updateRecord("Deals",bookingReference.toLong(),highPriorityUpdate));
+	}
+	else
+	{
+		res.put("high_priority_message","Booking has no arrival date. High Priority Booking flag was not updated.");
+	}
+	deskTicketId = ifnull(booking.get("Desk_Ticket_ID"),"");
+	if(deskTicketId != "" && deskTicketId != "-")
+	{
+		deskOrgId = 20093303993;
+		ticketUpdateMap = Map();
+		ticketUpdateMap.put("teamId",152133000000252571);
+		res.put("desk_team",zoho.desk.update(deskOrgId,"tickets",deskTicketId,ticketUpdateMap));
+	}
+	else
+	{
+		res.put("desk_team_message","Booking has no Desk ticket id. Desk team update skipped.");
+	}
+	res.put("ezus_stage",standalone.changeEzusProjectStage(ezusProjectRef,"reservation-in-progress_1"));
+	options = Map();
+	options.put("syncProject",true);
+	options.put("syncTravellers",true);
+	options.put("syncServices",true);
+	options.put("dryRun",false);
+	options.put("skipDeletes",false);
+	syncArgs = Map();
+	syncArgs.put("options",options);
+	res.put("sync",standalone.sync_syncFullProjectFromEzus(bookingReference,syncArgs.toString()));
+	res.put("notification",standalone.notif_sendEmailViaTemplate("Deals",bookingReference.toLong(),"616617000135016204",standalone.email_getTeamEmails(),"",""));
+	return res;
+}
+if(transitionCode.equals("cancelled") || transitionCode.equals("cancelled_with_charges") || transitionCode.equals("have_departed") || transitionCode.equals("marked_dead"))
+{
+	if(referenceType.equals("booking_id"))
+	{
+		if(transitionCode.equals("cancelled") || transitionCode.equals("cancelled_with_charges") || transitionCode.equals("have_departed"))
+		{
+			res.put("owner_assignment",standalone.bp_assignBookingAndDeskToAccountingRep(bookingReference));
+		}
+		else if(transitionCode.equals("marked_dead"))
+		{
+			ownerUpdate = Map();
+			ownerUpdate.put("Owner","616617000000365001");
+			res.put("owner_assignment",zoho.crm.updateRecord("Deals",bookingReference.toLong(),ownerUpdate));
+		}
+		deskTicketId = ifnull(booking.get("Desk_Ticket_ID"),"");
+		if((transitionCode.equals("cancelled") || transitionCode.equals("cancelled_with_charges") || transitionCode.equals("marked_dead")) && deskTicketId != "" && deskTicketId != "-")
+		{
+			res.put("desk",standalone.updateDeskTicketStatusByTransition(deskTicketId,"dead"));
+		}
+	}
+}
+ezusStageByTransition = Map();
+ezusStageByTransition.put("proposal_changes_requested","quotation");
+ezusStageByTransition.put("proposal_sent","proposal_sent");
+ezusStageByTransition.put("fid_review_requested","pending-review");
+ezusStageByTransition.put("fid_review_started","fid-in-review");
+ezusStageByTransition.put("fid_sent","fid-sent");
+ezusStageByTransition.put("fid_review_completed","review-done");
+ezusStageByTransition.put("changes_completed","reservation-in-progress_1");
+ezusStageByTransition.put("trip_changes_requested","changes-requested");
+ezusStageByTransition.put("guests_arrived","on-tour");
+ezusStageByTransition.put("have_departed","trip-accounting-closure");
+ezusStageByTransition.put("trip_accounting_closure","trip-accounting-closure");
+ezusStageByTransition.put("all_services_booked","all-services-confirmed");
+ezusStageByTransition.put("accounting_completed","booking-completed");
+ezusStageByTransition.put("cancelled","cancelled");
+ezusStageByTransition.put("cancelled_with_charges","cancelled-with-charges_1");
+ezusStageByTransition.put("marked_dead","dead");
+newStage = ifnull(ezusStageByTransition.get(transitionCode),"");
+if(newStage == "")
+{
+	res.put("error",true);
+	res.put("message","Unsupported booking transition: " + transitionCode);
+	return res;
+}
+if(ezusProjectRef == "")
+{
+	res.put("message","Booking has no Ezus project reference. Ezus stage update skipped.");
+}
+else
+{
+	res.put("ezus_stage",standalone.changeEzusProjectStage(ezusProjectRef,newStage));
+	if(transitionCode.equals("fid_sent") || transitionCode.equals("changes_completed"))
+	{
+		syncBookingId = bookingReference;
+		if(referenceType.equals("ezus_project_ref"))
+		{
+			bookingMatches = zoho.crm.searchRecords("Deals","(Ezus_Project_ID:equals:" + ezusProjectRef + ")",1,2);
+			if(isnull(bookingMatches) || bookingMatches.size() != 1)
+			{
+				res.put("error",true);
+				res.put("message","Full sync requires exactly one CRM booking for Ezus project: " + ezusProjectRef);
+				return res;
+			}
+			syncBookingId = ifnull(bookingMatches.get(0).get("id"),"").toString();
+			if(syncBookingId == "")
+			{
+				res.put("error",true);
+				res.put("message","Could not resolve CRM booking id for Ezus project: " + ezusProjectRef);
+				return res;
+			}
+		}
+		options = Map();
+		options.put("syncProject",true);
+		options.put("syncTravelers",true);
+		options.put("syncServices",true);
+		options.put("dryRun",false);
+		options.put("skipDeletes",false);
+		syncArgs = Map();
+		syncArgs.put("options",options);
+		res.put("sync",standalone.sync_syncFullProjectFromEzus(syncBookingId,syncArgs.toString()));
+	}
+}
+// Initialize accounting review for both transitions into Trip Accounting Closure.
+if(transitionCode.equals("have_departed") || transitionCode.equals("trip_accounting_closure"))
+{
+	try 
+	{
+		closureBookingId = bookingReference;
+		if(referenceType.equals("ezus_project_ref"))
+		{
+			closureBookingMatches = zoho.crm.searchRecords("Deals","(Ezus_Project_ID:equals:" + ezusProjectRef + ")",1,2);
+			if(isnull(closureBookingMatches) || closureBookingMatches.size() != 1)
+			{
+				res.put("error",true);
+				res.put("message","Accounting closure requires exactly one CRM booking for Ezus project: " + ezusProjectRef);
+				return res;
+			}
+			closureBookingId = ifnull(closureBookingMatches.get(0).get("id"),"").toString();
+		}
+		closureBookingUpdate = Map();
+		closureBookingUpdate.put("Closure_Status","Closure Pending");
+		closureBookingResponse = zoho.crm.updateRecord("Deals",closureBookingId.toLong(),closureBookingUpdate);
+		res.put("closure_booking",closureBookingResponse);
+		if(isnull(closureBookingResponse) || isnull(closureBookingResponse.get("id")))
+		{
+			res.put("error",true);
+			res.put("message","Could not initialize booking Closure_Status: " + closureBookingResponse);
+			return res;
+		}
+		// Collect all supplier and agent commission settlements before updating them.
+		closureBatches = List();
+		closureBatch = List();
+		closurePages = "1,2,3,4,5,6,7,8,9,10".toList(",");
+		closureLoadingComplete = false;
+		for each  closurePage in closurePages
+		{
+			if(closureLoadingComplete == false)
+			{
+				closureSettlements = zoho.crm.searchRecords("Supplier_Settlements","(Booking:equals:" + closureBookingId + ")",closurePage.toLong(),200);
+				if(isnull(closureSettlements) || closureSettlements.isEmpty())
+				{
+					closureLoadingComplete = true;
+				}
+				else
+				{
+					for each  closureSettlement in closureSettlements
+					{
+						closureSettlementUpdate = Map();
+						closureSettlementUpdate.put("id",closureSettlement.get("id"));
+						closureSettlementUpdate.put("Closure_Review_Status","Pending review");
+						closureBatch.add(closureSettlementUpdate);
+						if(closureBatch.size() == 100)
+						{
+							closureBatches.add(closureBatch);
+							closureBatch = List();
+						}
+					}
+					if(closureSettlements.size() < 200)
+					{
+						closureLoadingComplete = true;
+					}
+				}
+			}
+		}
+		if(closureLoadingComplete == false)
+		{
+			res.put("error",true);
+			res.put("message","Accounting closure settlement search reached the 2000-record limit; review initialization was not completed.");
+			return res;
+		}
+		if(closureBatch.size() > 0)
+		{
+			closureBatches.add(closureBatch);
+		}
+		closureUpdatedCount = 0;
+		closureErrors = List();
+		for each  closureUpdateBatch in closureBatches
+		{
+			closureResponses = zoho.crm.bulkUpdate("Supplier_Settlements",closureUpdateBatch);
+			if(isnull(closureResponses) || closureResponses.size() != closureUpdateBatch.size())
+			{
+				closureErrors.add("Incomplete settlement update response");
+			}
+			if(!isnull(closureResponses))
+			{
+				for each  closureResponse in closureResponses
+				{
+					if(ifnull(closureResponse.get("status"),"") == "success" || ifnull(closureResponse.get("code"),"") == "SUCCESS")
+					{
+						closureUpdatedCount = closureUpdatedCount + 1;
+					}
+					else
+					{
+						closureErrors.add(closureResponse);
+					}
+				}
+			}
+		}
+		res.put("closure_settlements_updated",closureUpdatedCount);
+		if(!closureErrors.isEmpty())
+		{
+			res.put("error",true);
+			res.put("message","Booking closure is pending, but some settlements could not be set to Pending review.");
+			res.put("closure_errors",closureErrors);
+		}
+	}
+	catch (eClosureInitialization)
+	{
+		res.put("error",true);
+		res.put("message","Could not initialize accounting closure review: " + eClosureInitialization.toString());
+	}
+}
+if(transitionCode.equals("marked_dead") && referenceType.equals("booking_id"))
+{
+	res.put("notification",standalone.notif_sendManagerDeadBooking(bookingReference.toLong()));
+}
+return res;
+}

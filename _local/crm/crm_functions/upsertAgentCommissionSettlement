@@ -139,14 +139,49 @@ string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
 		{
 			for each vendorMatch in vendorMatches
 			{
-				if(vendorMatch != null && vendorMatch.containKey("id") && ifnull(vendorMatch.get("Vendor_Type"),"").toString() == "Agency")
+				if(vendorMatch != null && vendorMatch.containKey("id") && ifnull(vendorMatch.get("TP_Reference"),"").toString().trim().equalsIgnoreCase(agencyCode))
 				{
+					vendorType = ifnull(vendorMatch.get("Vendor_Type"),"").toString().trim();
 					vendorAgencyLookup = vendorMatch.get("Agency");
-					if(vendorAgencyLookup != null && ifnull(vendorAgencyLookup.get("id"),"").toString() == agencyId)
+					vendorAgencyId = "";
+					if(vendorAgencyLookup != null)
 					{
-						vendorId = vendorMatch.get("id").toString();
-						break;
+						vendorAgencyId = ifnull(vendorAgencyLookup.get("id"),"").toString().trim();
 					}
+					if(vendorAgencyId != "" && vendorAgencyId != agencyId)
+					{
+						res.put("error",true);
+						res.put("message","The existing Vendor for TP Reference " + agencyCode + " is linked to another Agency. Review its Agency link before recalculating.");
+						return res;
+					}
+					if(vendorType != "" && vendorType != "-None-" && vendorType != "Agency")
+					{
+						res.put("error",true);
+						res.put("message","The existing Vendor for TP Reference " + agencyCode + " has Vendor Type " + vendorType + ". Review its type before recalculating.");
+						return res;
+					}
+					vendorRepairMap = Map();
+					if(vendorType == "" || vendorType == "-None-")
+					{
+						vendorRepairMap.put("Vendor_Type","Agency");
+					}
+					if(vendorAgencyId == "")
+					{
+						vendorRepairMap.put("Agency",agencyId);
+					}
+					if(vendorRepairMap.size() > 0)
+					{
+						vendorRepairResponse = zoho.crm.updateRecord("Vendors",vendorMatch.get("id").toString(),vendorRepairMap);
+						if(vendorRepairResponse == null || !vendorRepairResponse.containKey("id"))
+						{
+							res.put("error",true);
+							res.put("message","The existing Agency Vendor could not be updated. Zoho: " + ifnull(vendorRepairResponse,Map()).toString());
+							res.put("vendor_update_response",vendorRepairResponse);
+							return res;
+						}
+					}
+					vendorId = vendorMatch.get("id").toString();
+					break;
 				}
 			}
 		}
@@ -209,7 +244,24 @@ string standalone.venSet_upsertAgentCommissionSettlement(String bookingId)
 			if(vendorResponse == null || !vendorResponse.containKey("id"))
 			{
 				res.put("error",true);
-				res.put("message","Agency Vendor could not be created.");
+				vendorErrorMessage = "Agency Vendor could not be created.";
+				if(vendorResponse != null)
+				{
+					vendorErrorCode = ifnull(vendorResponse.get("code"),"").toString();
+					vendorErrorReason = ifnull(vendorResponse.get("message"),"").toString();
+					vendorErrorDetails = ifnull(vendorResponse.get("details"),Map());
+					vendorErrorMessage = vendorErrorMessage + " Zoho: " + vendorErrorCode + " - " + vendorErrorReason + " Details: " + vendorErrorDetails.toString();
+					if(vendorErrorCode == "DUPLICATE_DATA")
+					{
+						vendorErrorMessage = vendorErrorMessage + " Check the existing Vendor for TP Reference " + agencyCode + ", including its Vendor Type and Agency link.";
+					}
+				}
+				else
+				{
+					vendorErrorMessage = vendorErrorMessage + " Zoho returned an empty response.";
+				}
+				res.put("message",vendorErrorMessage);
+				res.put("vendor_create_response",vendorResponse);
 				return res;
 			}
 			vendorId = vendorResponse.get("id").toString();

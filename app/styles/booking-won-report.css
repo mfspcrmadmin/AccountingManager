@@ -1,0 +1,23 @@
+.booking-won-report { margin: 16px 0; padding: 18px; border: 1px solid var(--border, #d8e1ea); border-radius: 12px; background: var(--surface, #fff); min-width: 0; }
+.booking-won-report[hidden] { display: none !important; }
+.booking-won-report [hidden] { display: none !important; }
+#booking-won-results { min-width: 0; }
+#booking-won-results details { margin-top: 14px; min-width: 0; }
+#booking-won-results summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.booking-won-table-wrap { max-height: 380px; max-width: 100%; overflow: auto; }
+.booking-won-table-wrap th, .booking-won-table-wrap td { white-space: nowrap; }
+.booking-won-report h3 { margin: 0 0 8px; }
+.booking-won-report p { font-size: 13px; line-height: 1.5; }
+.booking-won-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.booking-won-controls .field { flex: 0 1 230px; min-width: 0; }
+.booking-won-controls input { width: 100%; box-sizing: border-box; }
+#booking-won-stage-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+@media (max-width: 600px) { .booking-won-controls .field, .booking-won-controls .button { flex: 1 1 100%; } }
+.booking-won-loading { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding: 18px 20px; border: 1px solid var(--line, #e4e7ec); border-radius: 12px; background: linear-gradient(120deg, #fff8ef, #fff); }
+.booking-won-loading div { display: grid; gap: 5px; }
+.booking-won-loading strong { font-size: 14px; color: var(--text); }
+.booking-won-loading div span { font-size: 12px; color: var(--muted); }
+.booking-won-spinner { flex: 0 0 26px; width: 26px; height: 26px; border: 3px solid #f2dfc8; border-top-color: var(--accent-strong, #c97709); border-radius: 50%; animation: booking-won-spin .8s linear infinite; }
+@keyframes booking-won-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .booking-won-spinner { animation-duration: 2s; } }
+#booking-won-message:empty { display: none; }

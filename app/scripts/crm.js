@@ -181,7 +181,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
     }
 
-    async function coql(selectQuery) {
+    async function coql(selectQuery, options) {
       var response;
       var records;
 
@@ -192,13 +192,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         response = await getApi().coql({
           select_query: selectQuery
         });
-        records = helpers.extractRecords(response);
+        records = options && options.strict ? extractReadRecords(response) : helpers.extractRecords(response);
         debugLog("coql response", {
           select_query: selectQuery,
           count: records.length
         });
         return records;
       } catch (error) {
+        if (options && options.strict && isNoContent(error)) { return []; }
         debugError("coql failed", error, {
           select_query: selectQuery
         });

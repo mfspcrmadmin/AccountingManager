@@ -314,7 +314,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var fields = [
       getCandidateValue(record, supplierCandidates.name),
       getCandidateValue(record, supplierCandidates.connectionReference),
-      getCandidateValue(record, supplierCandidates.ezusReference)
+      getCandidateValue(record, supplierCandidates.ezusReference),
+      getCandidateValue(record, supplierCandidates.cifNif)
     ];
     var score = 0;
 
@@ -350,7 +351,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     return [
       getCandidateValue(record, supplierCandidates.name),
       getCandidateValue(record, supplierCandidates.connectionReference),
-      getCandidateValue(record, supplierCandidates.ezusReference)
+      getCandidateValue(record, supplierCandidates.ezusReference),
+      getCandidateValue(record, supplierCandidates.cifNif)
     ].some(function (value) {
       return normalizeString(value).indexOf(normalizedQuery) !== -1;
     });
@@ -429,19 +431,25 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
   }
 
   function getClientPayload(data) {
+    if (typeof data === "string") {
+      try { return getClientPayload(JSON.parse(data)); } catch (error) {
+        try { return getClientPayload(JSON.parse(decodeURIComponent(data))); } catch (ignored) { return null; }
+      }
+    }
     if (!data || typeof data !== "object") {
       return null;
     }
 
-    if (data.data && typeof data.data === "object") {
-      return data.data;
+    if (data.widgetparams) {
+      return getClientPayload(data.widgetparams);
     }
-
-    if (data.Message && typeof data.Message === "object") {
-      return data.Message;
+    if (data.data) {
+      return getClientPayload(data.data);
     }
-
-    return null;
+    if (data.Message) {
+      return getClientPayload(data.Message);
+    }
+    return data;
   }
 
   function getSupplierIdFromPayload(payload) {

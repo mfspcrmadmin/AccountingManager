@@ -364,6 +364,12 @@ for each  srv in allServices
 			purchasePrice = 0.0;
 		}
 	}
+	// Additional Alhambra supplier cost is calculated from each active service's PAX.
+	if(supplierId == "616617000003010705")
+	{
+		alhambraServicePax = ifnull(srv.get("Number_of_Pax"),0).toDecimal();
+		groupData.put("alhambra_extra_cost",ifnull(groupData.get("alhambra_extra_cost"),0.0) + 1.27 * alhambraServicePax);
+	}
 	currentTotal = groupData.get("total_cost");
 	groupData.put("total_cost",currentTotal + purchasePrice);
 	currentCount = groupData.get("service_count");
@@ -399,6 +405,34 @@ for each  srv in allServices
 		}
 	}
 	groupDataByKey.put(settlementTechnicalKey,groupData);
+}
+// Alhambra requires an additional supplier settlement for the same booking.
+// Reuse the normal supplier key so repeated recalculations cannot duplicate it.
+alhambraGroup = groupDataByKey.get(bookingId + ":616617000003010705");
+if(!isnull(alhambraGroup))
+{
+	alhambraExtraKey = bookingId + ":616617000003265040";
+	if(isnull(groupDataByKey.get(alhambraExtraKey)))
+	{
+		alhambraExtraGroup = Map();
+		alhambraExtraGroup.put("technical_key",alhambraExtraKey);
+		alhambraExtraGroup.put("supplier_id","616617000003265040");
+		alhambraExtraGroup.put("supplier_name","");
+		alhambraExtraGroup.put("ezus_supplier_reference","");
+		alhambraExtraGroup.put("supplier_key_source","CRM Supplier");
+		alhambraExtraGroup.put("total_cost",ifnull(alhambraGroup.get("alhambra_extra_cost"),0.0).round(2));
+		// Recalculate the cost from current service PAX on every run.
+		alhambraExtraExisting = existingSettlementByTechnicalKey.get(alhambraExtraKey);
+		if(!isnull(alhambraExtraExisting))
+		{
+			alhambraExtraGroup.put("supplier_name",ifnull(alhambraExtraExisting.get(settlementSupplierNameField),""));
+		}
+		alhambraExtraGroup.put("service_count",alhambraGroup.get("service_count"));
+		alhambraExtraGroup.put("first_service_date",alhambraGroup.get("first_service_date"));
+		alhambraExtraGroup.put("last_service_date",alhambraGroup.get("last_service_date"));
+		alhambraExtraGroup.put("alhambra_extra",true);
+		groupDataByKey.put(alhambraExtraKey,alhambraExtraGroup);
+	}
 }
 for each  groupSummaryKey in groupDataByKey.keys()
 {
@@ -469,6 +503,32 @@ for each  settlementTechnicalKey in groupDataByKey.keys()
 	{
 		supplierShortCode = "NOSUPPLIER";
 	}
+	// Prefer the associated CRM supplier's reference over the service fallback.
+	supplierIdForSettlement = ifnull(groupData.get("supplier_id"),"").toString();
+	if(supplierIdForSettlement != "")
+	{
+		try
+		{
+			supplierRecordForCode = zoho.crm.getRecordById("Vendors",supplierIdForSettlement);
+			if(!isnull(supplierRecordForCode) && supplierRecordForCode.containKey("id"))
+			{
+				if(ifnull(groupData.get("alhambra_extra"),false))
+				{
+					groupData.put("supplier_name",ifnull(supplierRecordForCode.get("Vendor_Name"),groupData.get("supplier_name")));
+					supplierShortCode = supplierIdForSettlement;
+				}
+				supplierTPReference = ifnull(supplierRecordForCode.get("TP_Reference"),"").toString().trim();
+				if(supplierTPReference != "")
+				{
+					supplierShortCode = supplierTPReference;
+				}
+			}
+		}
+		catch (eSupplierDisplayCode)
+		{
+			info "Could not load supplier TP_Reference for settlement naming: " + supplierIdForSettlement + " | " + eSupplierDisplayCode.toString();
+		}
+	}
 	displayCode = supplierShortCode;
 	if(mfspReference != "")
 	{
@@ -498,7 +558,6 @@ for each  settlementTechnicalKey in groupDataByKey.keys()
 	{
 		settlementMap.put(settlementLastServiceDateField,groupData.get("last_service_date"));
 	}
-	supplierIdForSettlement = ifnull(groupData.get("supplier_id"),"").toString();
 	if(supplierIdForSettlement != "")
 	{
 		supplierLookupMap = Map();

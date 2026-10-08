@@ -82,21 +82,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function renderPaymentCreateFeedback() {
       var feedback = state.paymentCreation.feedback || {};
-      var isError = feedback.status === "error";
-
-      if (!elements.paymentCreateFeedbackPopup) {
-        return;
-      }
-      elements.paymentCreateFeedbackPopup.hidden = !feedback.isOpen;
-      elements.paymentCreateFeedbackPopup.classList.toggle("is-error", isError);
+      if (elements.paymentCreateFeedbackPopup) { elements.paymentCreateFeedbackPopup.hidden = true; }
       if (!feedback.isOpen) {
+        if (ns.inlineFeedback) { ns.inlineFeedback.finish('payment-create'); }
         return;
       }
-      elements.paymentCreateFeedbackEyebrow.textContent = isError ? "Payment not created" : "Creating payment";
-      elements.paymentCreateFeedbackTitle.textContent = isError ? "Payment could not be created" : "Creating supplier payment...";
-      elements.paymentCreateFeedbackMessage.textContent = feedback.message || (isError ? "Review the error and try again." : "Preparing payment, allocations and related accounts.");
-      elements.paymentCreateFeedbackSpinner.hidden = isError;
-      elements.paymentCreateFeedbackClose.hidden = !isError;
+      if (feedback.status === "error") { renderer.showError(feedback.message || "Payment could not be created. Review the error and try again."); }
+      else { renderer.showNotice(feedback.message || "Creating supplier payment...", { isLoading: true }); }
     }
 
     function closePaymentCreateFeedback() {
