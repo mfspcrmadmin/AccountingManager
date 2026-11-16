@@ -1,0 +1,71 @@
+{
+  "checked_on": "2026-10-23",
+  "missing_invoice_status": "disabled",
+  "missing_invoice_disabled_on": "2026-10-23",
+  "missing_invoice_disable_validation": "Both reminder types blocked before planning or reservation. CRM schedule disabled and published source read back on 2026-10-23.",
+  "status": "disabled",
+  "sender": "proveedores@madeforspainandportugal.com",
+  "reply_to": "proveedores@madeforspainandportugal.com",
+  "sender_verification_error": null,
+  "functions": {
+    "invoicereminder_policy": "616617000174959040",
+    "invoicereminder_body": "616617000174940028",
+    "invoicereminder_plan": "616617000174944031",
+    "invoicereminder_send": "616617000174946061",
+    "invoicereminder_run": "616617000174975044",
+    "schedule_invoicereminders": "616617000174948032",
+    "schedule_invoicereminderspreview": "616617000174948021"
+  },
+  "published_send_source": "invoiceReminder_send.dg",
+  "send_source_for_activation_after_verification": "invoiceReminder_send.dg",
+  "schedule": {
+    "id": "616617000175029042",
+    "status": "deactive",
+    "batch_size_per_rule": 25,
+    "pagination": "Persistent keyset cursors; wraps to the beginning after completing a scan. Threshold is checked at or after the due date, not equality-only. Full-scan latency depends on dataset size.",
+    "next_execution_time": null,
+    "last_execution_time": "2026-10-23T09:01:27+02:00",
+    "frequency": "daily",
+    "time": "09:00",
+    "timezone": "Europe/Madrid"
+  },
+  "preview": {
+    "schedule_id": "616617000174944034",
+    "schedule_status": "deactive",
+    "result_record_id": "616617000174937156",
+    "processed": 50,
+    "eligible": 20,
+    "sent": 0,
+    "missing_contact_email": 4,
+    "scope": "First batch only, not an audit of all records"
+  },
+  "storage": {
+    "module": "Admin_Process_Jobs",
+    "unique_send_reservation": "Active_Key",
+    "history_key": "Related_Technical_Key",
+    "status_before_send": "On Hold",
+    "status_after_send": "Done",
+    "note": "On Hold keeps reminder reservations outside the general job retry scheduler. An unconfirmed outcome prevents automatic resend. No new modules or fields were created."
+  },
+  "confirmed_rules": {
+    "missing_invoice": "Disabled at user request on 2026-10-23. Read-only previews remain available.",
+    "proforma": "Disabled at user request on 2026-10-23. Read-only previews remain available.",
+    "contacts": "First valid AC - Accounts email ordered by CRM id; fallback to RE - Reservas. No vendor generic-email fallback.",
+    "incomplete_data": "Missing dates or contacts, incomplete invoice registration/edit, or ambiguous legacy coverage do not authorize email.",
+    "excluded_services": "Deleted, cancelled without charges, NBTM, and non-positive purchase cost."
+  },
+  "activation_requirements": [],
+  "validation": {
+    "local_policy_and_failure_tests": 9,
+    "setup_browser_check": "passed desktop/mobile, profile filtering and denied-access clearing",
+    "crm_preview": "completed without sending mail",
+    "production_guard": "Published send function blocks all send mode calls. Schedule read back as deactive with no next execution. No manual execution."
+  },
+  "sender_verification": "User confirmed approval; CRM accepted publication with proveedores From and Reply-to on 2026-10-16. No email sent.",
+  "creator_coexistence": "Creator handles legacy invoices per user confirmation on 2026-10-16. Creator unchanged; CRM reminders disabled on 2026-10-23.",
+  "follow_up": [
+    "Setup updated locally; widget ZIP/upload left to user."
+  ],
+  "proforma_status": "disabled",
+  "proforma_disabled_on": "2026-10-23"
+}

@@ -151,6 +151,8 @@ function uiFixture() {
   panel.querySelectorAll = selector => selector === '[data-prepayment-select]' ? f.inputs : selector === '[data-prepayment-select-all]' ? [f.selectAll] : [];
   f.el('dialog').showModal = () => { f.el('dialog').open = true; };
   f.el('dialog').close = () => { f.el('dialog').open = false; };
+  f.el('preparation').showModal = () => { f.el('preparation').open = true; };
+  f.el('preparation').close = () => { f.el('preparation').open = false; };
   f.reloads = 0; f.errors = [];
   f.actions = f.window.AccountingManagerApp.createPrepaymentBankActions(panel, f.zoho, async () => { f.reloads++; }, e => f.errors.push(e.message));
   f.change = input => panel.listeners.change({ target: input });
@@ -227,6 +229,9 @@ test('a recipient typo preserves the edited message and allows correction withou
   f.el('preview').innerHTML = '<p>My edited message</p>';
   await f.el('form').listeners.submit({ preventDefault() {} });
   assert.equal(f.calls.length, 1);
+  assert.equal(f.el('send').disabled, true);
+  f.el('cc').value = 'correct@example.com';
+  f.el('cc').listeners.input();
   assert.equal(f.el('send').disabled, false);
   assert.equal(f.el('preview').contentEditable, 'true');
   assert.equal(f.el('preview').innerHTML, '<p>My edited message</p>');
@@ -300,4 +305,88 @@ test('bulk receipt failures remain selected and do not prevent the other updates
   assert.equal(f.inputs[0].checked, true);
   assert.equal(f.inputs[1].checked, false);
   assert.match(f.errors[0], /Permission denied/);
+});
+
+test('preparation opens only the small modal, suppresses double clicks and discards closed requests', async () => {
+  const f = uiFixture(); f.render(); f.inputs[0].checked = true; await f.change(f.inputs[0]);
+  const pending = [];
+  f.zoho.CRM.FUNCTIONS.execute = () => new Promise(resolve => pending.push(resolve));
+  const first = f.el('open').listeners.click();
+  await f.el('open').listeners.click();
+  assert.equal(pending.length, 1);
+  assert.equal(f.el('preparation').open, true);
+  assert.notEqual(f.el('dialog').open, true);
+  f.el('preparation-close').listeners.click();
+  const second = f.el('open').listeners.click();
+  pending[0]({ details: { output: JSON.stringify({ ...f.output, subject: 'Old request' }) } });
+  await first;
+  assert.notEqual(f.el('dialog').open, true);
+  assert.equal(f.el('preparation').open, true);
+  pending[1]({ details: { output: JSON.stringify(f.output) } });
+  await second;
+  assert.equal(f.el('preparation').open, false);
+  assert.equal(f.el('dialog').open, true);
+  assert.equal(f.el('subject').textContent, 'PREPAGOS');
+});
+
+test('preparation errors remain in small modal and retry performs a fresh request', async () => {
+  const f = uiFixture(); f.render(); f.inputs[0].checked = true; await f.change(f.inputs[0]);
+  f.networkError = true;
+  await f.el('open').listeners.click();
+  assert.equal(f.el('preparation').open, true);
+  assert.notEqual(f.el('dialog').open, true);
+  assert.equal(f.el('preparation-title').textContent, 'Connection failed');
+  assert.equal(f.el('retry').hidden, false);
+  f.networkError = false;
+  await f.el('retry').listeners.click();
+  assert.equal(f.calls.length, 2);
+  assert.ok(f.calls.every(call => call.args.action === 'prepare'));
+  assert.equal(f.el('dialog').open, true);
+});
+
+test('blank subject or body cannot open the complete modal or enable sending', async () => {
+  for (const patch of [{ subject: '' }, { html: '<p> &nbsp; </p>' }, { token: '' }]) {
+    const f = uiFixture(); f.render(); f.inputs[0].checked = true; await f.change(f.inputs[0]);
+    Object.assign(f.output, patch);
+    await f.el('open').listeners.click();
+    assert.notEqual(f.el('dialog').open, true);
+    assert.equal(f.el('send').disabled, true);
+    assert.equal(f.el('retry').hidden, false);
+  }
+});
+
+test('legacy bank error resolves the allocation account and distinguishes missing IBAN from supplier lookup', async () => {
+  const f = fixture();
+  f.output = { success: false, message: 'The supplier payment account needs a valid IBAN and supplier owner for 123.' };
+  const account = { id: '789', Name: 'Aena, S.M.E, S.A.', IBAN: null, Owner_Supplier: { id: '456', name: 'Aena Sevilla' }, Status: 'Active' };
+  f.zoho.CRM.API.getRecord = async ({ Entity }) => ({ data: [Entity === 'Prepayments' ? { id: '123', Prepayment_Request: { id: '234' }, Vendor_Payment: { id: '345' } } : Entity === 'Prepayment_Requests' ? { id: '234', Supplier: { id: '456' } } : account] });
+  f.zoho.CRM.API.searchRecord = async () => ({ data: [{ Payment_Account: { id: '789' } }] });
+  await assert.rejects(f.service.prepare(['123']), error => {
+    assert.match(error.message, /Aena, S.M.E, S.A.: IBAN is missing/);
+    assert.doesNotMatch(error.message, /Owner Supplier/);
+    assert.equal(error.record.module, 'Payment_Accounts');
+    assert.equal(error.record.id, '789');
+    return true;
+  });
+  account.IBAN = 'present'; account.Owner_Supplier = null;
+  await assert.rejects(f.service.prepare(['123']), /Owner Supplier is missing/);
+  delete account.IBAN;
+  await assert.rejects(f.service.prepare(['123']), error => error.code === 'ACCESS_ERROR');
+});
+
+test('send failure preserves recipient edits and content, blocks duplicate and ambiguous sends', async () => {
+  const f = uiFixture(); f.render(); f.inputs[0].checked = true; await f.change(f.inputs[0]);
+  await f.el('open').listeners.click();
+  f.el('preview').innerHTML = '<p>Edited email</p>'; f.el('cc').value = 'edited@example.com';
+  let rejectSend, sends = 0;
+  f.zoho.CRM.FUNCTIONS.execute = () => { sends++; return new Promise((resolve, reject) => { rejectSend = reject; }); };
+  const sending = f.el('form').listeners.submit({ preventDefault() {} });
+  await f.el('form').listeners.submit({ preventDefault() {} });
+  assert.equal(sends, 1); assert.equal(f.el('send-spinner').hidden, false);
+  rejectSend(Error('timeout')); await sending;
+  assert.equal(f.el('dialog').open, true);
+  assert.equal(f.el('preview').innerHTML, '<p>Edited email</p>');
+  assert.equal(f.el('cc').value, 'edited@example.com');
+  assert.match(f.el('message').textContent, /Check email delivery/);
+  assert.equal(f.el('send').disabled, true);
 });

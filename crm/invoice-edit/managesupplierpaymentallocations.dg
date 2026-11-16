@@ -1,0 +1,541 @@
+string standalone.manageSupplierPaymentAllocations(String supplierPaymentId, String allocationsDataString)
+{
+if(supplierPaymentId == "capabilities") { return {"success":true,"error":false,"consistency_version":2,"reconcile_batch_version":1}; }
+res = Map();
+res.put("error",false);
+res.put("success",false);
+res.put("retryable",false);
+res.put("message","");
+res.put("payment_id","");
+res.put("payment_amount",0.0);
+res.put("affected_invoice_ids",List());
+res.put("affected_settlement_ids",List());
+res.put("created_allocation_ids",List());
+res.put("updated_allocation_ids",List());
+res.put("deleted_allocation_ids",List());
+createdAllocationIds = List();
+updatedAllocationIds = List();
+deletedAllocationIds = List();
+try 
+{
+	supplierPaymentId = ifnull(supplierPaymentId,"").toString().trim();
+	allocationsDataString = ifnull(allocationsDataString,"").toString().trim();
+	if(supplierPaymentId == "" || allocationsDataString == "")
+	{
+		res.put("error",true);
+		res.put("message","supplierPaymentId and allocationsDataString are required.");
+		return res;
+	}
+	payment = zoho.crm.getRecordById("Supplier_Payments",supplierPaymentId.toLong());
+	if(payment == null || !payment.containKey("id"))
+	{
+		res.put("error",true);
+		res.put("message","Supplier payment was not found.");
+		return res;
+	}
+	paymentStatus = ifnull(payment.get("Status"),"").toString().trim().toLowerCase();
+	accountingStatus = ifnull(payment.get("Accounting_Status"),"").toString().trim().toLowerCase();
+	if(paymentStatus == "reconciled" || paymentStatus == "cancelled" || paymentStatus == "canceled" || payment.get("Locked__s") == true || ifnull(payment.get("Zoho_Books_Payment_ID"),"") != "" || accountingStatus == "sent to books" || accountingStatus == "posted" || accountingStatus == "synced" || accountingStatus == "exported" || accountingStatus == "reconciled")
+	{
+		res.put("error",true);
+		res.put("message","This payment is locked by its payment or accounting status. Create a reversal instead.");
+		return res;
+	}
+	requestData = allocationsDataString.toMap();
+	desiredAmounts = ifnull(requestData.get("allocations"),Map());
+    batchIds = requestData.get("reconcile_invoice_ids");
+    batchMode = batchIds != null;
+    if(!batchMode && requestData.get("reconcile_only") == true && requestData.get("validate_only") == false && desiredAmounts.keys().size() > 5)
+    {
+        throw "This remittance needs the updated widget to verify invoices in small batches. Reload the updated widget and resume this same payment. Saved records will be reused.";
+    }
+    if(batchMode && (requestData.get("reconcile_only") != true || requestData.get("validate_only") == true || batchIds.isEmpty() || batchIds.size() > 5)) { throw "Invalid reconciliation batch."; }
+	logMessage = "manageSupplierPaymentAllocations start | payment=" + supplierPaymentId + " | requested_invoices=" + desiredAmounts.keys().size();
+	info logMessage;
+	paymentAmount = ifnull(payment.get("Payment_Amount"),0).toDecimal();
+	desiredTotal = 0.0;
+	for each  invoiceIdValue in desiredAmounts.keys()
+	{
+		amount = ifnull(desiredAmounts.get(invoiceIdValue),0).toDecimal();
+		if(amount < 0 || amount != amount.round(2))
+		{
+			res.put("error",true);
+			res.put("message","Allocation amounts cannot be negative.");
+			return res;
+		}
+		desiredTotal = desiredTotal + amount;
+	}
+	existingByInvoiceId = Map();
+    read = standalone.supplierPayment_readAllocations(supplierPaymentId).toMap();
+    if(read.get("success") != true) { throw read.get("message"); }
+    for each allocation in read.get("records")
+    {
+        if(allocation.get("Supplier_Invoice") == null || allocation.get("Locked__s") == true) { throw "An allocation is locked or has no invoice."; }
+        invoiceId = allocation.get("Supplier_Invoice").get("id").toString();
+        if(existingByInvoiceId.containKey(invoiceId)) { throw "Duplicate allocations require review."; }
+        existingByInvoiceId.put(invoiceId,allocation);
+        // Patch semantics: preserve omitted rows; explicit zero unlinks.
+        if(!desiredAmounts.containKey(invoiceId))
+        {
+            if(batchMode) { throw "The saved payment contains an unexpected allocation. Review it before resuming."; }
+            desiredAmounts.put(invoiceId,allocation.get("Allocated_Amount"));
+        }
+    }
+	logMessage = "manageSupplierPaymentAllocations loaded allocations | payment=" + supplierPaymentId + " | existing_invoices=" + existingByInvoiceId.keys().size();
+	info logMessage;
+    if(batchMode)
+    {
+        fullTotal = 0.0;
+        for each fullId in desiredAmounts.keys()
+        {
+            savedRow = existingByInvoiceId.get(fullId);
+            if(savedRow == null || savedRow.get("Allocated_Amount") != desiredAmounts.get(fullId)) { throw "Saved allocations do not match the original payment."; }
+            if(!"Outbound Payment,Supplier Refund".toList(",").contains(ifnull(savedRow.get("Movement_Type"),""))) { throw "Review allocation movement types before reconciliation."; }
+            signedAmount = savedRow.get("Allocated_Amount").toDecimal();
+            if(savedRow.get("Movement_Type") == "Supplier Refund") { signedAmount = 0 - signedAmount; }
+            fullTotal = fullTotal + signedAmount;
+        }
+        fullMovement = "Outbound Payment";
+        if(fullTotal < 0) { fullTotal = 0 - fullTotal; fullMovement = "Supplier Refund"; }
+        if(fullTotal.round(2) != paymentAmount || ifnull(payment.get("Movement_Type"),"Outbound Payment") != fullMovement) { throw "The payment total differs from its saved allocations."; }
+        batchAmounts = Map();
+        for each batchId in batchIds
+        {
+            if(!desiredAmounts.containKey(batchId) || batchAmounts.containKey(batchId)) { throw "Invalid or repeated reconciliation invoice."; }
+            batchAmounts.put(batchId,desiredAmounts.get(batchId));
+        }
+        desiredAmounts = batchAmounts;
+    }
+	affectedInvoiceIds = List();
+	affectedSettlementIds = List();
+    desiredTotal = 0.0;
+    changed = false;
+    supplierIds = List(); bookingIds = List(); activeSettlementIds = List(); allocationCount = 0;
+    invoicePlans = Map();
+    for each invoiceId in desiredAmounts.keys()
+    {
+        if(!invoiceId.matches("[0-9]+")) { throw "Invalid invoice."; }
+        amount = ifnull(desiredAmounts.get(invoiceId),0).toDecimal();
+        if(amount < 0 || amount != amount.round(2)) { throw "Use non-negative amounts with at most two decimals."; }
+        invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+        if(invoice.get("id") == null || invoice.get("Locked__s") == true || invoice.get("Edit_Status") == "Pending" || ifnull(invoice.get("Registration_Key"),"") != "" && invoice.get("Registration_Status") != "Complete") { throw "An invoice is locked, unavailable or has an unfinished save."; }
+        if(!"Received,Partially Paid,Paid".toList(",").contains(ifnull(invoice.get("Status"),""))) { throw "Review the invoice administrative status before allocating a payment."; }
+        if(ifnull(invoice.get("Currency"),"EUR") != ifnull(payment.get("Currency"),"EUR")) { throw "Payment and invoice currencies must match."; }
+        old = existingByInvoiceId.get(invoiceId); before = 0.0;
+        if(batchMode && old.get("Movement_Type") != if(invoice.get("Invoice_Type") == "Credit Note","Supplier Refund","Outbound Payment")) { throw "The saved allocation movement does not match its invoice."; }
+        if(old != null) { before = ifnull(old.get("Allocated_Amount"),0).toDecimal(); }
+        if(before != amount) { changed = true; }
+        if(requestData.get("reconcile_only") == true && before != amount) { throw "Saved allocations do not match the pending payment. Resume the same operation."; }
+        links = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Invoice",invoiceId).toMap();
+        if(links.get("success") != true) { throw links.get("message"); }
+        reserved = 0.0; seen = List();
+        for each link in links.get("records")
+        {
+            if(link.get("Supplier_Payment") == null) { throw "An allocation has no payment."; }
+            pid = link.get("Supplier_Payment").get("id").toString();
+            if(seen.contains(pid)) { throw "Duplicate allocations require review."; }
+            seen.add(pid);
+            p = zoho.crm.getRecordById("Supplier_Payments",pid.toLong());
+            if(p.get("id") == null) { throw "A related payment could not be read."; }
+            if(ifnull(p.get("Currency"),ifnull(invoice.get("Currency"),"EUR")) != ifnull(invoice.get("Currency"),"EUR") || ifnull(link.get("Currency"),ifnull(invoice.get("Currency"),"EUR")) != ifnull(invoice.get("Currency"),"EUR")) { throw "An existing payment allocation uses another currency. Review its conversion before saving."; }
+            value = ifnull(link.get("Allocated_Amount"),0).toDecimal();
+            if(value < 0 || value != value.round(2)) { throw "An existing allocation requires review."; }
+            if(pid != supplierPaymentId && p.get("Status") != "Cancelled") { reserved = reserved + value; }
+        }
+        payable = ifnull(invoice.get("Total_Payable_Amount"),ifnull(invoice.get("Invoice_Total"),0)).toDecimal();
+        if(reserved + amount > payable) { throw "Allocation exceeds the available payable balance of invoice " + invoiceId; }
+        sign = 1;
+        if(invoice.get("Invoice_Type") == "Credit Note") { sign = -1; }
+        desiredTotal = desiredTotal + amount * sign;
+        if(amount > 0)
+        {
+            allocationCount = allocationCount + 1;
+            if(invoice.get("Supplier") != null && !supplierIds.contains(invoice.get("Supplier").get("id").toString())) { supplierIds.add(invoice.get("Supplier").get("id").toString()); }
+            if(invoice.get("Booking") != null && !bookingIds.contains(invoice.get("Booking").get("id").toString())) { bookingIds.add(invoice.get("Booking").get("id").toString()); }
+            if(invoice.get("Supplier_Settlement") != null && !activeSettlementIds.contains(invoice.get("Supplier_Settlement").get("id").toString())) { activeSettlementIds.add(invoice.get("Supplier_Settlement").get("id").toString()); }
+        }
+        invoicePlans.put(invoiceId,invoice);
+        splits = standalone.supplierInvoiceEdit_read("Inv_Set_Allocations","Vendor_Invoice",invoiceId).toMap();
+        if(splits.get("success") != true) { throw splits.get("message"); }
+        for each split in splits.get("records")
+        {
+            if(split.get("Vendor_Settlement") != null && !"Void,Cancelled".toList(",").contains(ifnull(split.get("Status"),"")))
+            {
+                sid = split.get("Vendor_Settlement").get("id").toString();
+                if(!affectedSettlementIds.contains(sid)) { affectedSettlementIds.add(sid); }
+                if(amount > 0 && !activeSettlementIds.contains(sid)) { activeSettlementIds.add(sid); }
+            }
+        }
+    }
+    movement = "Outbound Payment";
+    if(desiredTotal < 0) { desiredTotal = 0 - desiredTotal; movement = "Supplier Refund"; }
+    desiredTotal = desiredTotal.round(2);
+    if(!batchMode && (changed || paymentAmount != desiredTotal))
+    {
+        entries = standalone.supplierInvoiceEdit_read("Accounting_Entries","Payment_Source",supplierPaymentId).toMap();
+        if(entries.get("success") != true || !entries.get("records").isEmpty()) { throw "Use the invoice correction workflow for a payment with accounting entries."; }
+        sourceModules = "Prepayments,Card_Purchases".toList(",");
+        for each moduleName in sourceModules
+        {
+            operations = standalone.supplierInvoiceEdit_read(moduleName,"Vendor_Payment",supplierPaymentId).toMap();
+            if(operations.get("success") != true) { throw "Could not read linked payment operations."; }
+            // Deletion may preview a zero-allocation plan before detaching its sources.
+            // Actual mutations still require all source links to have been cleared.
+            if(!operations.get("records").isEmpty() && !(requestData.get("validate_only") == true && requestData.get("undo_preview") == true && allocationCount == 0)) { throw "This payment has linked operations. Undo or correct them before changing allocations."; }
+        }
+    }
+    if(!batchMode && requestData.get("reconcile_only") == true && (paymentAmount != desiredTotal || ifnull(payment.get("Movement_Type"),"Outbound Payment") != movement)) { throw "The payment does not match its complete allocation list."; }
+    if(requestData.get("validate_only") == true) { res.put("success",true); return res; }
+    res.put("retryable",true);
+	for each  invoiceIdValue in desiredAmounts.keys()
+	{
+		invoiceId = invoiceIdValue.toString().trim();
+		desiredAmount = ifnull(desiredAmounts.get(invoiceIdValue),0).toDecimal();
+        currentInvoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+        if(currentInvoice.get("Modified_Time") != invoicePlans.get(invoiceId).get("Modified_Time")) { throw "An invoice changed after validation. Review and retry."; }
+        existingAllocation = existingByInvoiceId.get(invoiceId);
+		existingAmount = 0.0;
+		if(existingAllocation != null)
+		{
+			existingAmount = ifnull(existingAllocation.get("Allocated_Amount"),0).toDecimal();
+		}
+		if(desiredAmount == existingAmount)
+		{
+			// Recalculate unchanged rows too. This repairs any earlier partial save
+			// where CRM created an allocation but the invoice/settlement update did not run.
+			unchangedInvoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+            if(unchangedInvoice != null && unchangedInvoice.get("Edit_Status") == "Pending") { throw "Finish the pending invoice correction before changing payment allocations."; }
+			if(unchangedInvoice == null || !unchangedInvoice.containKey("id"))
+			{
+				res.put("error",true);
+				res.put("message","An invoice linked to this payment no longer exists.");
+				return res;
+			}
+			if(!affectedInvoiceIds.contains(invoiceId))
+			{
+				affectedInvoiceIds.add(invoiceId);
+			}
+			unchangedSettlementLookup = unchangedInvoice.get("Supplier_Settlement");
+			unchangedSettlementId = "";
+			if(unchangedSettlementLookup != null)
+			{
+				unchangedSettlementId = ifnull(unchangedSettlementLookup.get("id"),"").toString();
+			}
+			if(unchangedSettlementId != "" && !affectedSettlementIds.contains(unchangedSettlementId))
+			{
+				affectedSettlementIds.add(unchangedSettlementId);
+			}
+			continue;
+		}
+		invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+        if(invoice != null && invoice.get("Edit_Status") == "Pending") { throw "Finish the pending invoice correction before changing payment allocations."; }
+		if(invoice == null || !invoice.containKey("id"))
+		{
+			res.put("error",true);
+			res.put("message","An invoice selected for allocation no longer exists.");
+			return res;
+		}
+		if(existingAllocation != null && desiredAmount == 0)
+		{
+			logMessage = "manageSupplierPaymentAllocations unlink request | payment=" + supplierPaymentId + " | invoice=" + invoiceId + " | allocation=" + existingAllocation.get("id").toString();
+			info logMessage;
+			deleteResult = standalone.supplierPayment_deleteAllocation(existingAllocation.get("id").toString()).toMap();
+			logMessage = "manageSupplierPaymentAllocations unlink response | allocation=" + existingAllocation.get("id").toString() + " | response=" + ifnull(deleteResult,Map()).toString();
+			info logMessage;
+			deleteMessage = "";
+			if(deleteResult != null)
+			{
+				deleteMessage = ifnull(deleteResult.get("message"),"").toString();
+			}
+			if(deleteResult == null || !deleteResult.containKey("data"))
+			{
+				if(deleteMessage == "" && deleteResult != null)
+				{
+					deleteMessage = deleteResult.toString();
+				}
+				res.put("error",true);
+				res.put("message","Could not remove an allocation." + if(deleteMessage == "",""," " + deleteMessage));
+				return res;
+			}
+			deleteItems = deleteResult.get("data");
+			if(deleteItems == null || deleteItems.isEmpty())
+			{
+				if(deleteMessage == "")
+				{
+					deleteMessage = deleteResult.toString();
+				}
+				res.put("error",true);
+				res.put("message","Could not remove an allocation." + if(deleteMessage == "",""," " + deleteMessage));
+				return res;
+			}
+			deleteItem = deleteItems.get(0);
+			deleteCode = ifnull(deleteItem.get("code"),ifnull(deleteItem.get("status"),"")).toString().toLowerCase();
+			if(deleteCode != "success")
+			{
+				deleteMessage = ifnull(deleteItem.get("message"),deleteMessage).toString();
+				res.put("error",true);
+				res.put("message","Could not remove an allocation." + if(deleteMessage == "",""," " + deleteMessage));
+				return res;
+			}
+			deletedAllocationIds.add(existingAllocation.get("id").toString());
+			try 
+			{
+				deletedAllocationCheck = zoho.crm.getRecordById("Supplier_Pay_Allocations",existingAllocation.get("id").toLong());
+				if(deletedAllocationCheck != null && deletedAllocationCheck.containKey("id"))
+				{
+					res.put("error",true);
+					res.put("message","Zoho did not remove allocation " + existingAllocation.get("id").toString() + ".");
+					return res;
+				}
+			}
+			catch (deletedAllocationCheckError)
+			{
+				// A deleted CRM record can raise an invalid-data error when re-read.
+				logMessage = "manageSupplierPaymentAllocations unlink verification | allocation=" + existingAllocation.get("id").toString() + " | result=not_found";
+				info logMessage;
+			}
+			logMessage = "manageSupplierPaymentAllocations unlink succeeded | allocation=" + existingAllocation.get("id").toString();
+			info logMessage;
+		}
+		else if(existingAllocation != null)
+		{
+			updateMap = Map();
+			updateMap.put("Allocated_Amount",desiredAmount);
+			updateResult = standalone.supplierInvoiceEdit_write("Supplier_Pay_Allocations",existingAllocation.get("id").toString(),existingAllocation.get("Modified_Time"),updateMap).toMap();
+            if(updateResult.get("error") == false) { updateResult.put("id",existingAllocation.get("id")); }
+			logMessage = "manageSupplierPaymentAllocations allocation update response | allocation=" + existingAllocation.get("id").toString() + " | response=" + ifnull(updateResult,Map()).toString();
+			info logMessage;
+			if(updateResult == null || !updateResult.containKey("id"))
+			{
+				updateMessage = if(updateResult == null,"",ifnull(updateResult.get("message"),updateResult.toString()).toString());
+				res.put("error",true);
+				res.put("message","Could not update an allocation." + if(updateMessage == "",""," " + updateMessage));
+				return res;
+			}
+			updatedAllocationIds.add(existingAllocation.get("id").toString());
+		}
+		else if(desiredAmount > 0)
+		{
+			createMap = Map();
+			createMap.put("Name",ifnull(payment.get("Name"),supplierPaymentId).toString() + " - " + ifnull(invoice.get("Name"),invoiceId).toString());
+            if(createMap.get("Name").length() > 120) { createMap.put("Name",createMap.get("Name").subString(0,120)); }
+			paymentLookup = Map();
+			paymentLookup.put("id",supplierPaymentId);
+			createMap.put("Supplier_Payment",paymentLookup);
+			invoiceLookup = Map();
+			invoiceLookup.put("id",invoiceId);
+			createMap.put("Supplier_Invoice",invoiceLookup);
+			createMap.put("Allocated_Amount",desiredAmount);
+            createMap.put("Invoice_Edit_Key","payment-" + supplierPaymentId + "-invoice-" + invoiceId);
+            createMap.put("Currency",ifnull(payment.get("Currency"),"EUR"));
+            createMap.put("Movement_Type",if(invoice.get("Invoice_Type") == "Credit Note","Supplier Refund","Outbound Payment"));
+			createMap.put("Allocation_Date",payment.get("Payment_Date"));
+			createMap.put("Payment_Date",payment.get("Payment_Date"));
+			createMap.put("Payment_Status",payment.get("Status"));
+			createMap.put("Supplier",invoice.get("Supplier"));
+			createMap.put("Booking",invoice.get("Booking"));
+			createMap.put("Supplier_Settlement",invoice.get("Supplier_Settlement"));
+			createMap.put("Supplier_Name",invoice.get("Supplier_Name"));
+			createMap.put("MFSP_Reference",invoice.get("MFSP_Reference"));
+			createMap.put("Invoice_Date",invoice.get("Invoice_Date"));
+			createMap.put("Invoice_Status",invoice.get("Status"));
+			if(payment.get("Payment_Account") != null)
+			{
+				// No supplier account has been selected in this manager; keep the lookup empty.
+			}
+			createResult = zoho.crm.createRecord("Supplier_Pay_Allocations",createMap,{"trigger":List()});
+			logMessage = "manageSupplierPaymentAllocations allocation create response | invoice=" + invoiceId + " | response=" + ifnull(createResult,Map()).toString();
+			info logMessage;
+			if(createResult == null || !createResult.containKey("id"))
+			{
+				createMessage = if(createResult == null,"",ifnull(createResult.get("message"),createResult.toString()).toString());
+				res.put("error",true);
+				res.put("message","Could not create an allocation." + if(createMessage == "",""," " + createMessage));
+				return res;
+			}
+			createdAllocationIds.add(createResult.get("id").toString());
+		}
+		if(!affectedInvoiceIds.contains(invoiceId))
+		{
+			affectedInvoiceIds.add(invoiceId);
+		}
+		settlementLookup = invoice.get("Supplier_Settlement");
+		settlementId = "";
+		if(settlementLookup != null)
+		{
+			settlementId = ifnull(settlementLookup.get("id"),"").toString();
+		}
+		if(settlementId != "" && !affectedSettlementIds.contains(settlementId))
+		{
+			affectedSettlementIds.add(settlementId);
+		}
+	}
+	for each  invoiceId in affectedInvoiceIds
+	{
+		invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+        if(invoice.get("Edit_Status") == "Pending" || !"Received,Partially Paid,Paid".toList(",").contains(ifnull(invoice.get("Status"),""))) { throw "The invoice status changed while saving. Review before resuming."; }
+        paidAmount = 0.0;
+        read = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Invoice",invoiceId).toMap();
+        if(read.get("success") != true) { throw read.get("message"); }
+        for each invoiceAllocation in read.get("records")
+        {
+            if(invoiceAllocation.get("Supplier_Payment") == null) { throw "An allocation has no payment."; }
+            p = zoho.crm.getRecordById("Supplier_Payments",invoiceAllocation.get("Supplier_Payment").get("id").toLong());
+            if(p.get("id") == null) { throw "A related payment could not be read."; }
+            if(p.get("Status") == "Paid" || p.get("Status") == "Reconciled") { paidAmount = paidAmount + ifnull(invoiceAllocation.get("Allocated_Amount"),0).toDecimal(); }
+        }
+        paidAmount = paidAmount.round(2);
+        totalAmount = ifnull(invoice.get("Total_Payable_Amount"),ifnull(invoice.get("Invoice_Total"),0)).toDecimal();
+        if(paidAmount > totalAmount) { throw "Concurrent allocations exceed the payable. Review this invoice."; }
+		invoiceUpdate = Map();
+		invoiceUpdate.put("Amount_Paid",paidAmount);
+		// Unpaid_Invoiced_Amount is a CRM formula, never a writable balance.
+		if(paidAmount >= totalAmount && totalAmount > 0)
+		{
+			invoiceUpdate.put("Status","Paid");
+		}
+		else if(paidAmount > 0)
+		{
+			invoiceUpdate.put("Status","Partially Paid");
+		}
+		else
+		{
+			invoiceUpdate.put("Status","Received");
+		}
+		updateResult = {"error":false};
+        if(invoice.get("Amount_Paid") != paidAmount || invoice.get("Status") != invoiceUpdate.get("Status"))
+        {
+            updateResult = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),invoiceUpdate).toMap();
+        }
+        if(updateResult.get("error") == false) { updateResult.put("id",invoiceId); }
+		logMessage = "manageSupplierPaymentAllocations invoice update response | invoice=" + invoiceId + " | response=" + ifnull(updateResult,Map()).toString();
+		info logMessage;
+		if(updateResult == null || !updateResult.containKey("id"))
+		{
+			invoiceUpdateMessage = if(updateResult == null,"",ifnull(updateResult.get("message"),updateResult.toString()).toString());
+			res.put("error",true);
+			res.put("message","Could not recalculate an invoice." + if(invoiceUpdateMessage == "",""," " + invoiceUpdateMessage));
+			return res;
+		}
+        for each invoiceAllocation in read.get("records")
+        {
+            linkedPayment = zoho.crm.getRecordById("Supplier_Payments",invoiceAllocation.get("Supplier_Payment").get("id").toLong());
+            if(linkedPayment.get("id") == null) { throw "A related payment could not be read while refreshing allocation details."; }
+            if(invoiceAllocation.get("Invoice_Status") != invoiceUpdate.get("Status") || invoiceAllocation.get("Payment_Status") != linkedPayment.get("Status"))
+            {
+                refreshed = standalone.supplierInvoiceEdit_write("Supplier_Pay_Allocations",invoiceAllocation.get("id").toString(),invoiceAllocation.get("Modified_Time"),{"Invoice_Status":invoiceUpdate.get("Status"),"Payment_Status":linkedPayment.get("Status")}).toMap();
+                if(refreshed.get("error") != false) { throw "Allocation status refresh remains pending. Resume the same payment."; }
+            }
+        }
+		logMessage = "manageSupplierPaymentAllocations invoice recalculated | invoice=" + invoiceId + " | paid=" + paidAmount + " | status=" + ifnull(invoiceUpdate.get("Status"),ifnull(invoice.get("Status"),"")).toString();
+		info logMessage;
+	}
+	settlementIdsString = "";
+	for each  settlementId in affectedSettlementIds
+	{
+		if(settlementIdsString == "")
+		{
+			settlementIdsString = settlementId;
+		}
+		else
+		{
+			settlementIdsString = settlementIdsString + "|||" + settlementId;
+		}
+	}
+	if(!batchMode && settlementIdsString != "")
+	{
+		logMessage = "manageSupplierPaymentAllocations rebuilding settlements | ids=" + settlementIdsString;
+		info logMessage;
+		settlementResult = standalone.rebuildSupplierSettlementTotals(settlementIdsString).toMap();
+		logMessage = "manageSupplierPaymentAllocations settlement rebuild response | response=" + ifnull(settlementResult,Map()).toString();
+		info logMessage;
+		// Fully removing this payment cannot increase settlement payments. Other
+		// payments may still exceed net invoices after a credit note; retain that
+		// warning without preventing recovery. All other warnings remain blocking.
+		undoOverpaymentWarningsOnly = false;
+		settlementWarningCount = ifnull(settlementResult.get("warning_count"),0);
+		if(desiredTotal == 0 && allocationCount == 0 && ifnull(payment.get("Movement_Type"),"Outbound Payment") == "Outbound Payment" && settlementResult.get("error") == false && settlementWarningCount > 0)
+		{
+			settlementDetails = ifnull(settlementResult.get("details"),List());
+			overpaidDetailCount = 0;
+			undoDetailsValid = !settlementDetails.isEmpty() && settlementDetails.size() == ifnull(settlementResult.get("processed_count"),0);
+			for each settlementDetail in settlementDetails
+			{
+				if(settlementDetail.get("has_payment_mismatch") != false || (settlementDetail.get("is_overpaid") != true && settlementDetail.get("is_overpaid") != false))
+				{
+					undoDetailsValid = false;
+				}
+				if(settlementDetail.get("is_overpaid") == true)
+				{
+					overpaidDetailCount = overpaidDetailCount + 1;
+				}
+			}
+			undoOverpaymentWarningsOnly = undoDetailsValid && overpaidDetailCount == settlementWarningCount && ifnull(settlementResult.get("warnings"),List()).size() == settlementWarningCount;
+		}
+		if(settlementResult.get("error") != false || (settlementWarningCount > 0 && !undoOverpaymentWarningsOnly))
+		{
+			res.put("error",true);
+			settlementFailureMessage = ifnull(settlementResult.get("message"),"Could not recalculate settlements.");
+			settlementWarnings = ifnull(settlementResult.get("warnings"),List());
+			if(!settlementWarnings.isEmpty())
+			{
+				settlementFailureMessage = settlementFailureMessage + " Blocking settlement warnings: " + settlementWarnings.toString();
+			}
+			res.put("settlement_rebuild",settlementResult);
+			res.put("message",settlementFailureMessage);
+			return res;
+		}
+		if(undoOverpaymentWarningsOnly)
+		{
+			res.put("settlement_rebuild",settlementResult);
+			res.put("warnings",settlementResult.get("warnings"));
+		}
+	}
+	if(!batchMode && (paymentAmount != desiredTotal || ifnull(payment.get("Movement_Type"),"Outbound Payment") != movement || payment.get("Allocation_Count") != allocationCount || payment.get("Supplier_Count") != supplierIds.size() || payment.get("Booking_Count") != bookingIds.size() || payment.get("Settlement_Count") != activeSettlementIds.size()))
+	{
+		paymentUpdate = Map();
+		paymentUpdate.put("Payment_Amount",desiredTotal);
+        paymentUpdate.put("Movement_Type",movement);
+        paymentUpdate.put("Allocation_Count",allocationCount);
+        paymentUpdate.put("Supplier_Count",supplierIds.size());
+        paymentUpdate.put("Booking_Count",bookingIds.size());
+        paymentUpdate.put("Settlement_Count",activeSettlementIds.size());
+        paymentUpdate.put("Context_Mode",if(supplierIds.size() <= 1 && bookingIds.size() <= 1 && activeSettlementIds.size() <= 1,"Single","Mixed"));
+        paymentUpdate.put("Context_Summary",supplierIds.size() + " suppliers / " + bookingIds.size() + " bookings / " + activeSettlementIds.size() + " settlements");
+		paymentUpdateResult = standalone.supplierInvoiceEdit_write("Supplier_Payments",supplierPaymentId,payment.get("Modified_Time"),paymentUpdate).toMap();
+        if(paymentUpdateResult.get("error") == false) { paymentUpdateResult.put("id",supplierPaymentId); }
+		logMessage = "manageSupplierPaymentAllocations payment amount update response | payment=" + supplierPaymentId + " | amount=" + desiredTotal + " | response=" + ifnull(paymentUpdateResult,Map()).toString();
+		info logMessage;
+		if(paymentUpdateResult == null || !paymentUpdateResult.containKey("id"))
+		{
+			paymentUpdateMessage = if(paymentUpdateResult == null,"",ifnull(paymentUpdateResult.get("message"),paymentUpdateResult.toString()).toString());
+			res.put("error",true);
+			res.put("message","Could not recalculate the payment total." + if(paymentUpdateMessage == "",""," " + paymentUpdateMessage));
+			return res;
+		}
+	}
+	logMessage = "manageSupplierPaymentAllocations completed | payment=" + supplierPaymentId + " | created=" + createdAllocationIds.size() + " | updated=" + updatedAllocationIds.size() + " | deleted=" + deletedAllocationIds.size();
+	info logMessage;
+	res.put("payment_id",supplierPaymentId);
+	res.put("payment_amount",if(batchMode,paymentAmount,desiredTotal));
+    res.put("reconcile_batch",batchMode);
+    res.put("settlement_rebuild_required",batchMode);
+	res.put("affected_invoice_ids",affectedInvoiceIds);
+	res.put("affected_settlement_ids",affectedSettlementIds);
+	res.put("created_allocation_ids",createdAllocationIds);
+	res.put("updated_allocation_ids",updatedAllocationIds);
+	res.put("deleted_allocation_ids",deletedAllocationIds);
+	res.put("unapplied_amount",0.0);
+	res.put("success",true);
+    res.put("retryable",false);
+    res.put("message","Payment total, allocations and related balances were recalculated.");
+}
+catch (e)
+{
+	logMessage = "manageSupplierPaymentAllocations failed | payment=" + supplierPaymentId + " | error=" + e.toString();
+	info logMessage;
+	res.put("error",true);
+	res.put("message",e.toString());
+}
+return res;
+}

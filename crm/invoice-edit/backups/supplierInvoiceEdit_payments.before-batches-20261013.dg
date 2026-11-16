@@ -1,0 +1,442 @@
+string standalone.supplierInvoiceEdit_payments(String invoiceId, String action, String dataJson, String operationKey)
+{
+result = {"success":false};
+try 
+{
+	data = dataJson.toMap();
+	if(!invoiceId.matches("[0-9]+"))
+	{
+		throw "Invalid invoice.";
+	}
+	if(action == "prepare" || action == "preview")
+	{
+		invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+		read = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Invoice",invoiceId).toMap();
+		if(read.get("success") != true)
+		{
+			throw read.get("message");
+		}
+		plans = List();
+		options = List();
+		paymentIds = List();
+		paid = 0.0;
+		reserved = 0.0;
+		for each  link in read.get("records")
+		{
+			if(link.get("Supplier_Payment") == null)
+			{
+				throw "A payment allocation has no payment.";
+			}
+			pid = link.get("Supplier_Payment").get("id").toString();
+			if(paymentIds.contains(pid))
+			{
+				throw "Duplicate payment allocations require review before editing.";
+			}
+			paymentIds.add(pid);
+			payment = zoho.crm.getRecordById("Supplier_Payments",pid.toLong());
+			if(payment.get("id") == null)
+			{
+				throw "Could not read a related payment.";
+			}
+			if(action == "prepare" && (payment.get("Locked__s") == true || link.get("Locked__s") == true))
+			{
+				throw "A related payment is locked.";
+			}
+			if(payment.get("Status") == "Cancelled")
+			{
+				continue;
+			}
+			allocationAmount = ifnull(link.get("Allocated_Amount"),0).toDecimal().round(2);
+			reserved = reserved + allocationAmount;
+			if(payment.get("Status") == "Paid" || payment.get("Status") == "Reconciled")
+			{
+				paid = paid + allocationAmount;
+			}
+			reason = "";
+			if(payment.get("Status") != "Paid")
+			{
+				reason = "Only a paid, unreconciled payment can be corrected.";
+			}
+			if(payment.get("Locked__s") == true || link.get("Locked__s") == true || ifnull(payment.get("Zoho_Books_Payment_ID"),"") != "" || !"Pending,Error,Ready to Review,Reviewed,".toList(",").contains(ifnull(payment.get("Accounting_Status"),"")))
+			{
+				reason = "This payment is locked or has entered accounting processing.";
+			}
+			if(ifnull(payment.get("Movement_Type"),"Outbound Payment") != "Outbound Payment" || ifnull(link.get("Movement_Type"),"Outbound Payment") != "Outbound Payment")
+			{
+				reason = "Refunds require a separate correction.";
+			}
+			if(ifnull(payment.get("Currency"),ifnull(invoice.get("Currency"),"EUR")) != ifnull(invoice.get("Currency"),"EUR"))
+			{
+				reason = "The payment currency differs from the invoice.";
+			}
+			canCorrect = reason == "";
+			options.add({"id":pid,"name":ifnull(payment.get("Name"),pid),"allocated":allocationAmount,"amount":payment.get("Payment_Amount"),"can_correct":canCorrect,"reason":reason});
+			if(action == "preview")
+			{
+				continue;
+			}
+			allocationRead = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Payment",pid).toMap();
+			if(allocationRead.get("success") != true)
+			{
+				throw allocationRead.get("message");
+			}
+			snapshots = List();
+			paymentTotal = 0.0;
+			for each  row in allocationRead.get("records")
+			{
+				if(row.get("Supplier_Invoice") == null)
+				{
+					throw "A payment allocation has no invoice.";
+				}
+				relatedId = row.get("Supplier_Invoice").get("id").toString();
+				related = zoho.crm.getRecordById("Supplier_Invoices",relatedId.toLong());
+				if(related.get("id") == null || relatedId != invoiceId && related.get("Edit_Status") == "Pending")
+				{
+					throw "Another invoice in this payment is unavailable or has a pending correction.";
+				}
+				paymentTotal = paymentTotal + ifnull(row.get("Allocated_Amount"),0).toDecimal();
+				snapshots.add({"id":row.get("id").toString(),"invoice_id":relatedId,"invoice_version":related.get("Modified_Time"),"before":row.get("Allocated_Amount"),"after":row.get("Allocated_Amount"),"currency":row.get("Currency"),"movement":row.get("Movement_Type"),"invoice_status":row.get("Invoice_Status"),"invoice_date":row.get("Invoice_Date"),"payment_status":row.get("Payment_Status")});
+			}
+			accountId = "";
+			if(payment.get("Payment_Account") != null)
+			{
+				accountId = payment.get("Payment_Account").get("id").toString();
+			}
+			plans.add({"id":pid,"name":payment.get("Name"),"status":payment.get("Status"),"accounting_status":payment.get("Accounting_Status"),"books_id":payment.get("Zoho_Books_Payment_ID"),"date":payment.get("Payment_Date"),"account":accountId,"currency":payment.get("Currency"),"movement":payment.get("Movement_Type"),"before":payment.get("Payment_Amount"),"after":payment.get("Payment_Amount"),"allocation_id":link.get("id").toString(),"allocation_after":allocationAmount,"allocations":snapshots,"allocation_total":paymentTotal.round(2),"blocked":reason,"accounting":Map()});
+		}
+		result.put("options",options);
+		if(action == "preview")
+		{
+			result.put("success",true);
+			return result.toString();
+		}
+		header = data.get("header");
+		payable = header.get("Total_Payable_Amount");
+		mode = ifnull(data.get("mode"),"keep");
+		selectedId = ifnull(data.get("payment_id"),"");
+		if(!"keep,correct,additional,record_additional".toList(",").contains(mode))
+		{
+			throw "Choose how to handle the existing payment.";
+		}
+		if(mode == "record_additional")
+		{
+			additionalInput = {"details":data.get("payment_details"),"available":(payable - reserved).round(2)};
+			added = standalone.supplierInvoiceEdit_addPayment(invoiceId,"prepare",additionalInput.toString(),operationKey).toMap();
+			if(added.get("success") != true)
+			{
+				throw added.get("message");
+			}
+			result.put("additional",added.get("plan"));
+		}
+		delta = 0.0;
+		if(mode == "correct")
+		{
+			if(data.get("confirm_actual_payment") != true)
+			{
+				throw "Confirm that the amount actually paid changed.";
+			}
+			delta = (payable - paid).round(2);
+			if(delta == 0)
+			{
+				throw "The invoice already has this paid amount.";
+			}
+		}
+		if(mode == "additional" && payable <= reserved)
+		{
+			throw "There is no unallocated balance for an additional payment.";
+		}
+		if(payable < reserved + delta)
+		{
+			throw "The new payable is below existing payment allocations.";
+		}
+		found = mode != "correct";
+		for each  plan in plans
+		{
+			pid = plan.get("id");
+			if(mode == "correct" && pid == selectedId)
+			{
+				found = true;
+				if(plan.get("blocked") != "")
+				{
+					throw plan.get("blocked");
+				}
+				if(plan.get("before") == null || plan.get("before").toDecimal().round(2) != plan.get("allocation_total"))
+				{
+					throw "The payment total does not match its allocations. Reconcile it first.";
+				}
+				after = (plan.get("allocation_after") + delta).round(2);
+				if(after <= 0 || plan.get("before") + delta <= 0)
+				{
+					throw "The correction would remove or reverse a payment. Use the cancellation or refund workflow.";
+				}
+				plan.put("after",(plan.get("before") + delta).round(2));
+				plan.put("allocation_after",after);
+				for each  snapshot in plan.get("allocations")
+				{
+					if(snapshot.get("id") == plan.get("allocation_id"))
+					{
+						snapshot.put("after",after);
+					}
+				}
+			}
+			entryRead = standalone.supplierInvoiceEdit_read("Accounting_Entries","Payment_Source",pid).toMap();
+			if(entryRead.get("success") != true)
+			{
+				throw entryRead.get("message");
+			}
+			if(entryRead.get("records").size() > 1)
+			{
+				throw "Multiple accounting entries exist for a payment. Review them before editing.";
+			}
+			if(plan.get("status") == "Reconciled" || ifnull(plan.get("books_id"),"") != "" || "Posted,Sent to Books,Exported,Reconciled".toList(",").contains(ifnull(plan.get("accounting_status"),"")))
+			{
+				throw "A related payment is reconciled or exported. Review it before changing this invoice.";
+			}
+			if(entryRead.get("records").isEmpty() && "Ready to Review,Reviewed".toList(",").contains(ifnull(plan.get("accounting_status"),"")))
+			{
+				throw "A payment indicates accounting preparation but its entry could not be identified. Review the entry relationship before editing.";
+			}
+			if(!entryRead.get("records").isEmpty())
+			{
+				entry = entryRead.get("records").get(0);
+				if(entry.get("Locked__s") == true || entry.get("Posted_At") != null || ifnull(entry.get("Zoho_Books_Document_Id"),"") != "" || "Posted to Books,Cancelled".toList(",").contains(ifnull(entry.get("Accounting_Status"),"")) || "Posted,Reconciled,Sent to Books,Exported,Cancelled".toList(",").contains(ifnull(entry.get("Books_Post_Status"),"")))
+				{
+					throw "A related payment accounting entry is posted, exported or locked. Reverse it before correcting this invoice.";
+				}
+				accountingInput = {"invoice_id":invoiceId,"header":header,"allocation_id":plan.get("allocation_id"),"allocation_after":plan.get("allocation_after")};
+				accounting = standalone.supplierInvoiceEdit_paymentAccountingPlan(pid,accountingInput.toString()).toMap();
+				if(accounting.get("error") == true || accounting.get("entry") == null)
+				{
+					throw "Payment accounting: " + ifnull(accounting.get("message"),"Could not calculate the corrected entry.");
+				}
+				accounting.put("payment_id",pid);
+				accounting.put("entry_id",entry.get("id").toString());
+				beforeEntry = Map();
+				plannedEntry = accounting.get("entry");
+				for each  field in plannedEntry.keys()
+				{
+					beforeEntry.put(field,entry.get(field));
+				}
+				accounting.put("before_entry",beforeEntry);
+				linesRead = standalone.supplierInvoiceEdit_read("Accounting_Entry_Lines","Accounting_Entry",entry.get("id").toString()).toMap();
+				if(linesRead.get("success") != true)
+				{
+					throw linesRead.get("message");
+				}
+				beforeLines = Map();
+				for each  line in linesRead.get("records")
+				{
+					if(line.get("Locked__s") == true)
+					{
+						throw "A payment accounting line is locked.";
+					}
+					beforeLines.put(line.get("id").toString(),{"Debit":line.get("Debit"),"Credit":line.get("Credit"),"Account":line.get("Account"),"Modified_Time":line.get("Modified_Time")});
+				}
+				accounting.put("before_lines",beforeLines);
+				plan.put("accounting",accounting);
+			}
+		}
+		if(!found)
+		{
+			throw "Select a payment belonging to this invoice.";
+		}
+		if(mode == "record_additional")
+		{
+			delta = result.get("additional").get("amount");
+		}
+		updatedInvoiceStatus = ifnull(invoice.get("Status"),"Received");
+		if(paid + delta > 0)
+		{
+			updatedInvoiceStatus = if(paid + delta >= payable,"Paid","Partially Paid");
+		}
+		else if(updatedInvoiceStatus == "Paid" || updatedInvoiceStatus == "Partially Paid")
+		{
+			updatedInvoiceStatus = "Received";
+		}
+		result.put("invoice_status",updatedInvoiceStatus);
+		result.put("invoice_date",header.get("Invoice_Date"));
+		result.put("plans",plans);
+		result.put("paid_before",paid);
+		result.put("paid_after",(paid + delta).round(2));
+		result.put("reserved_after",(reserved + delta).round(2));
+	}
+	else
+	{
+		// Validate the complete payment graph before any write and on every resume.
+		plans = data.get("plans");
+		liveVersions = Map();
+		liveLinks = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Invoice",invoiceId).toMap();
+		if(liveLinks.get("success") != true)
+		{
+			throw liveLinks.get("message");
+		}
+		activeCount = 0;
+		additionalId = "";
+		if(data.get("additional") != null)
+		{
+			additionalCheck = standalone.supplierInvoiceEdit_addPayment(invoiceId,"validate",data.get("additional").toString(),operationKey).toMap();
+			if(additionalCheck.get("success") != true)
+			{
+				throw additionalCheck.get("message");
+			}
+			additionalId = ifnull(additionalCheck.get("allocation_id"),"").toString();
+		}
+		for each  link in liveLinks.get("records")
+		{
+			if(link.get("Supplier_Payment") == null)
+			{
+				throw "A payment allocation changed.";
+			}
+			p = zoho.crm.getRecordById("Supplier_Payments",link.get("Supplier_Payment").get("id").toLong());
+			if(p.get("Status") != "Cancelled" && link.get("id").toString() != additionalId)
+			{
+				activeCount = activeCount + 1;
+			}
+		}
+		if(activeCount != plans.size())
+		{
+			throw "The invoice payment allocations changed outside this correction.";
+		}
+		for each  plan in plans
+		{
+			pid = plan.get("id");
+			payment = zoho.crm.getRecordById("Supplier_Payments",pid.toLong());
+			accountId = "";
+			if(payment.get("Payment_Account") != null)
+			{
+				accountId = payment.get("Payment_Account").get("id").toString();
+			}
+			if(payment.get("id") == null || payment.get("Locked__s") == true || payment.get("Status") != plan.get("status") || payment.get("Accounting_Status") != plan.get("accounting_status") || payment.get("Zoho_Books_Payment_ID") != plan.get("books_id") || payment.get("Payment_Date") != plan.get("date") || accountId != plan.get("account") || payment.get("Currency") != plan.get("currency") || payment.get("Movement_Type") != plan.get("movement") || payment.get("Payment_Amount") != plan.get("before") && payment.get("Payment_Amount") != plan.get("after"))
+			{
+				throw "A related payment changed outside this correction.";
+			}
+			liveVersions.put(pid,payment.get("Modified_Time"));
+			allocations = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Payment",pid).toMap();
+			if(allocations.get("success") != true || allocations.get("records").size() != plan.get("allocations").size())
+			{
+				throw "The payment allocation list changed.";
+			}
+			for each  snapshot in plan.get("allocations")
+			{
+				row = zoho.crm.getRecordById("Supplier_Pay_Allocations",snapshot.get("id").toLong());
+				if(row.get("id") == null || row.get("Locked__s") == true || row.get("Supplier_Payment") == null || row.get("Supplier_Payment").get("id").toString() != pid || row.get("Supplier_Invoice") == null || row.get("Supplier_Invoice").get("id").toString() != snapshot.get("invoice_id") || row.get("Currency") != snapshot.get("currency") || row.get("Movement_Type") != snapshot.get("movement") || row.get("Allocated_Amount") != snapshot.get("before") && row.get("Allocated_Amount") != snapshot.get("after"))
+				{
+					throw "A payment allocation changed outside this correction.";
+				}
+				related = zoho.crm.getRecordById("Supplier_Invoices",snapshot.get("invoice_id").toLong());
+				if(snapshot.get("invoice_id") != invoiceId && (related.get("Edit_Status") == "Pending" || related.get("Modified_Time") != snapshot.get("invoice_version")))
+				{
+					throw "Another invoice in this payment changed or has a pending correction.";
+				}
+				liveVersions.put(snapshot.get("id"),row.get("Modified_Time"));
+				if(snapshot.get("invoice_id") == invoiceId && data.get("invoice_status") != null)
+				{
+					if(row.get("Invoice_Status") != snapshot.get("invoice_status") && row.get("Invoice_Status") != data.get("invoice_status") || row.get("Invoice_Date") != snapshot.get("invoice_date") && row.get("Invoice_Date") != data.get("invoice_date") || row.get("Payment_Status") != snapshot.get("payment_status") && row.get("Payment_Status") != plan.get("status"))
+					{
+						throw "The payment allocation details changed outside this correction.";
+					}
+					if(action == "verify" && (row.get("Invoice_Status") != data.get("invoice_status") || row.get("Invoice_Date") != data.get("invoice_date") || row.get("Payment_Status") != plan.get("status")))
+					{
+						throw "The payment allocation status or invoice date was not confirmed.";
+					}
+				}
+				if(action == "verify" && row.get("Allocated_Amount") != snapshot.get("after"))
+				{
+					throw "The corrected payment allocation was not confirmed.";
+				}
+			}
+			if(action == "verify" && payment.get("Payment_Amount") != plan.get("after"))
+			{
+				throw "The corrected payment total was not confirmed.";
+			}
+			entryRead = standalone.supplierInvoiceEdit_read("Accounting_Entries","Payment_Source",pid).toMap();
+			if(entryRead.get("success") != true)
+			{
+				throw entryRead.get("message");
+			}
+			accounting = plan.get("accounting");
+			expected = 0;
+			if(accounting.get("entry") != null)
+			{
+				expected = 1;
+			}
+			if(entryRead.get("records").size() != expected)
+			{
+				throw "The payment accounting entries changed outside this correction.";
+			}
+			if(expected == 1 && entryRead.get("records").get(0).get("id").toString() != accounting.get("entry_id"))
+			{
+				throw "The payment accounting entry changed.";
+			}
+		}
+		if(action == "apply")
+		{
+			for each  plan in plans
+			{
+				pid = plan.get("id");
+				for each  snapshot in plan.get("allocations")
+				{
+					if(snapshot.get("invoice_id") == invoiceId && data.get("invoice_status") != null)
+					{
+						row = zoho.crm.getRecordById("Supplier_Pay_Allocations",snapshot.get("id").toLong());
+						values = {"Invoice_Status":data.get("invoice_status"),"Invoice_Date":data.get("invoice_date"),"Payment_Status":plan.get("status"),"Allocated_Amount":snapshot.get("after")};
+						if(row.get("Invoice_Status") != values.get("Invoice_Status") || row.get("Invoice_Date") != values.get("Invoice_Date") || row.get("Payment_Status") != values.get("Payment_Status") || row.get("Allocated_Amount") != values.get("Allocated_Amount"))
+						{
+							updated = standalone.supplierInvoiceEdit_write("Supplier_Pay_Allocations",snapshot.get("id"),liveVersions.get(snapshot.get("id")),values).toMap();
+							if(updated.get("error") == true)
+							{
+								throw "A payment allocation changed while saving.";
+							}
+						}
+					}
+				}
+				if(plan.get("before") != plan.get("after"))
+				{
+					row = zoho.crm.getRecordById("Supplier_Pay_Allocations",plan.get("allocation_id").toLong());
+					if(row.get("Allocated_Amount") != plan.get("allocation_after"))
+					{
+						updated = standalone.supplierInvoiceEdit_write("Supplier_Pay_Allocations",row.get("id").toString(),liveVersions.get(row.get("id").toString()),{"Allocated_Amount":plan.get("allocation_after")}).toMap();
+						if(updated.get("error") == true)
+						{
+							throw "The payment allocation changed while saving. Resume the correction.";
+						}
+					}
+					payment = zoho.crm.getRecordById("Supplier_Payments",pid.toLong());
+					if(payment.get("Payment_Amount") != plan.get("after"))
+					{
+						updated = standalone.supplierInvoiceEdit_write("Supplier_Payments",pid,liveVersions.get(pid),{"Payment_Amount":plan.get("after")}).toMap();
+						if(updated.get("error") == true)
+						{
+							throw "The payment changed while saving. Resume the correction.";
+						}
+					}
+				}
+				accounting = plan.get("accounting");
+				if(accounting.get("entry") != null)
+				{
+					updated = standalone.supplierInvoiceEdit_applyAccounting(accounting.get("entry_id"),invoiceId,operationKey + "-p" + pid,accounting.toString()).toMap();
+					if(updated.get("success") != true)
+					{
+						throw updated.get("message");
+					}
+				}
+			}
+		}
+		if(data.get("additional") != null && (action == "apply" || action == "verify"))
+		{
+			additionalResult = standalone.supplierInvoiceEdit_addPayment(invoiceId,action,data.get("additional").toString(),operationKey).toMap();
+			if(additionalResult.get("success") != true)
+			{
+				throw additionalResult.get("message");
+			}
+			result.put("payment_id",additionalResult.get("payment_id"));
+		}
+	}
+	result.put("success",true);
+}
+catch (e)
+{
+	result.put("message",e.toString());
+}
+return result.toString();
+}

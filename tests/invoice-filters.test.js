@@ -42,44 +42,19 @@ function setup() {
   };
   return { state, invoices: ns.createInvoicesModule(deps), remote: ns.createRemoteDataModule(deps) };
 }
-test('destination combinations and self-employed filters intersect', () => {
+test('view preserves server result order and selection without filtering loaded rows', () => {
   const { state, invoices } = setup();
-  const filters = state.views.invoices.appliedFilters;
-  filters.destinationValues = ['Empty', 'Portugal'];
-  assert.equal(invoices.buildView().filteredRecords.map(r => r.id).sort().join(','), '2,4');
-  filters.selfEmployed = 'true';
-  assert.equal(invoices.buildView().filteredRecords.length, 0);
-  filters.destinationValues = ['Spain'];
-  assert.equal(invoices.buildView().filteredRecords.length, 2);
-  filters.selfEmployed = 'false';
-  assert.equal(invoices.buildView().filteredRecords.length, 0);
-  filters.destinationValues = [];
-  assert.equal(invoices.buildView().filteredRecords.length, 0);
-});
-test('grouping keeps suppliers distinct, sorts inside groups and preserves selection', () => {
-  const { state, invoices } = setup();
-  assert.equal(state.views.invoices.groupBy, 'none');
-  assert.equal(invoices.buildView().visibleRecords.map(r => r.id).join(','), '4,3,2,1');
-  assert.equal(invoices.buildView().getGroup(state.records.invoices[0]), null);
-  state.views.invoices.groupBy = 'supplier';
+  state.views.invoices.appliedFilters.invoiceNumber = 'server owns this filter';
   invoices.toggleSelection('1', true);
-  let view = invoices.buildView();
-  assert.equal(view.visibleRecords.map(r => r.id).join(','), '3,1,4,2');
-  assert.notEqual(view.getGroup(state.records.invoices[0]).key, view.getGroup(state.records.invoices[3]).key);
-  state.views.invoices.groupBy = 'destination';
-  view = invoices.buildView();
-  assert.equal(view.visibleRecords.map(r => r.id).join(','), '2,4,3,1');
-  assert.equal(view.getGroup(state.records.invoices[1]).label, 'Empty');
-  state.views.invoices.groupBy = 'mfsp';
-  view = invoices.buildView();
-  assert.equal(view.visibleRecords.map(r => r.id).join(','), '3,2,1,4');
+  const view = invoices.buildView();
+  assert.equal(view.visibleRecords.map(r => r.id).join(','), '1,2,3,4');
   assert.equal(view.selectedVisibleCount, 1);
   assert.equal(view.filteredTotalAmount, 40);
-  state.views.invoices.groupBy = 'none';
-  view = invoices.buildView();
-  assert.equal(view.visibleRecords.map(r => r.id).join(','), '4,3,2,1');
-  assert.equal(view.selectedVisibleCount, 1);
+  state.views.invoices.groupBy = 'supplier';
+  assert.notEqual(invoices.buildView().getGroup(state.records.invoices[0]).key,
+    invoices.buildView().getGroup(state.records.invoices[3]).key);
 });
+
 test('remote filters use supplier fields, null destination and boolean criteria', async () => {
   const { remote } = setup();
   const query = await remote.buildInvoiceRemoteWhereClause({ invoiceView: 'all', destinationValues: ['Empty', 'Spain'], selfEmployed: 'false' });
@@ -88,6 +63,6 @@ test('remote filters use supplier fields, null destination and boolean criteria'
   assert.match(query, /Supplier\.Is_Self_Employed = false/);
   assert.match(query, / or /);
   assert.match(query, / and /);
-  assert.match(await remote.buildInvoiceRemoteWhereClause({ invoiceView: 'all', destinationValues: [] }), /__none__/);
+  assert.match(await remote.buildInvoiceRemoteWhereClause({ invoiceView: 'all', destinationValues: [] }), /id = '0'/);
   assert.equal(await remote.buildInvoiceRemoteWhereClause({ invoiceView: 'all', destinationValues: ['Empty', 'Spain', 'Portugal'], selfEmployed: '' }), '');
 });

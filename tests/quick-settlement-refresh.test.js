@@ -61,42 +61,15 @@ test('all allocation pages are included before rebuilding', async () => {
   assert.equal(f.calls[0].args.settlementIdsString, 's1|||s2');
 });
 
-test('Card Purchase recalculates after creation and before linking the payment to the purchase', async () => {
-  const source = fs.readFileSync('app/scripts/operations.js', 'utf8');
-  const calls = [];
-  const purchase = { id: 'c1', Supplier: { id: 'supplier' }, Settlement: { id: 'settlement' }, Card_Payment_Account: { id: 'card' }, Transaction_Type: 'Purchase' };
-  const context = {
-    activePurchase: purchase, MODULES: { invoices: 'Supplier_Invoices', invoiceSettlements: 'Inv_Set_Allocations' }, CREATE_PAYMENT_FUNCTION: 'createPayment',
-    lookupId: value => value && value.id || '', lookupName: () => '',
-    workflowReference: { value: 'INV1' }, workflowDate: { value: '2026-09-16' }, workflowAmount: { value: '1320' }, workflowVat: { value: '0' }, workflowInvoiceType: { value: 'Tickets' }, workflowNotes: { value: '' },
-    workflowPaymentAccount: { value: 'own-bank' }, workflowPaymentReference: { value: 'PAY1' }, workflowPaymentDate: { value: '2026-09-16' },
-    workflowSettlement: { value: 'settlement', disabled: false }, settlementLoading: false,
-    api: () => ({ getRecord: async () => ({ data: [{ id: 'own-bank', Owner_Type: 'Own', Status: 'Active' }] }) }),
-    responseRecords: response => response.data,
-    create: async (module, data) => { calls.push(module); return { details: { id: module === 'Supplier_Invoices' ? 'i1' : 'allocation' } }; },
-    updatePurchase: async data => { calls.push('updatePurchase'); Object.assign(purchase, data); },
-    global: { ZOHO: { CRM: { FUNCTIONS: { execute: async (name, args) => {
-      const payload = JSON.parse(JSON.parse(args.arguments).paymentDataString);
-      assert.equal(payload.Payment_Account, 'own-bank');
-      assert.deepEqual(payload.Payment_Accounts_By_Supplier, {});
-      return { details: { output: { payment_id: 'pay1', error: false } } };
-    } } } }, AccountingManagerApp: {
-      isOwnQuickPaymentAccount: window.AccountingManagerApp.isOwnQuickPaymentAccount,
-      cardPurchaseSettlements: { validate: async () => ({ id: 'settlement', Name: 'Settlement' }) },
-      refreshQuickInvoiceSettlements: async (zoho, invoiceId) => { assert.equal(invoiceId, 'i1'); assert.equal(purchase.Vendor_Invoice.id, 'i1'); calls.push('rebuild'); return ''; }
-    } }
-  };
-  vm.createContext(context);
-  vm.runInContext(source.slice(source.indexOf('  async function createInvoice()'), source.indexOf('  async function submit(event)')), context);
-  await context.createInvoice();
-  assert.equal(calls.at(-1), 'rebuild');
-  assert.equal(purchase.Accounting_Status, 'Pending payment record');
-  await context.createPayment();
-  assert.ok(calls.lastIndexOf('rebuild') < calls.lastIndexOf('updatePurchase'));
-  assert.equal(calls.filter(c => c === 'rebuild').length, 2);
-  assert.equal(purchase.Accounting_Status, 'Purchase recorded');
-  assert.equal(purchase.Vendor_Payment.id, 'pay1');
-  context.updatePurchase = async () => { throw Error('Purchase link failed'); };
-  await assert.rejects(context.createPayment(), /Purchase link failed/);
-  assert.equal(calls.filter(c => c === 'rebuild').length, 3);
+test('Card Purchase UI delegates payment recovery and confirms an existing payment explicitly', async () => {
+  const source=fs.readFileSync('app/scripts/operations.js','utf8');
+  const purchase={id:'c1'},calls=[];
+  const context={activePurchase:purchase,userEmail:async()=>'',workflowPaymentAccount:{value:'own'},workflowPaymentReference:{value:'PAY1'},workflowPaymentDate:{value:'2026-10-20'},workflowNotes:{value:'Checked'}};
+  context.global={ZOHO:{},localStorage:{},crypto:{randomUUID:()=> 'key'},confirm:message=>{calls.push(message);return true;},AccountingManagerApp:{saveCardPayment:async(deps,id,input)=>{
+    assert.equal(id,'c1');assert.equal(input.Payment_Account,'own');assert.equal(input.Name,'PAY1');
+    assert.equal(await deps.confirmExisting({id:'p1',Name:'Saved payment',Payment_Amount:100,Currency:'EUR'},purchase),true);
+    return{changes:{Vendor_Payment:{id:'p1'},Accounting_Status:'Purchase recorded'}};
+  }}};
+  vm.runInNewContext(source.slice(source.indexOf('  async function createPayment()'),source.indexOf('  function reviewedCardStatus')),context);
+  await context.createPayment();assert.equal(purchase.Vendor_Payment.id,'p1');assert.equal(purchase.Accounting_Status,'Purchase recorded');assert.match(calls[0],/Saved payment/);
 });

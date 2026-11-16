@@ -32,7 +32,7 @@ function setup(options = {}) {
   return { mod, state, calls, popups, downloads };
 }
 
-test('individual letter and downloaded PDF subtract refund lines without reversing existing negatives', () => {
+test('individual letter and downloaded PDF subtract refund lines without reversing existing negatives', async () => {
   const ctx = setup();
   ctx.state.records.payAllocations = [
     ['invoice', 100, 'Outbound Payment'],
@@ -46,7 +46,7 @@ test('individual letter and downloaded PDF subtract refund lines without reversi
   }));
   assert.equal(ctx.mod.getPaymentLetterSuppliers(ctx.state.records.payments[0])[0].totalAllocated, 55);
   const button = { getAttribute: name => name === 'data-payment-letter-download-pdf' ? 's1' : null };
-  ctx.mod.onSelectedPaymentLetterEmailEditClick({ target: { closest: () => button }, preventDefault() {}, stopPropagation() {} });
+  await ctx.mod.onSelectedPaymentLetterEmailEditClick({ target: { closest: () => button }, preventDefault() {}, stopPropagation() {} });
   assert.equal(ctx.downloads.length, 1);
   const pdf = ctx.downloads[0].text;
   assert.match(pdf, /Allocated amount: [^\n]*55/);

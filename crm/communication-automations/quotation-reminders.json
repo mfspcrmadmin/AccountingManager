@@ -1,0 +1,52 @@
+{
+  "checked_on": "2026-11-11",
+  "state": "published_not_runtime_tested",
+  "functions": {
+    "single": {
+      "api": "comm_quotationarrivalreminder",
+      "id": "616617000178194047"
+    },
+    "batch": {
+      "api": "comm_runquotationarrivalreminders",
+      "id": "616617000178194050"
+    },
+    "schedule": {
+      "api": "schedule_quotationarrivalreminders",
+      "id": "616617000178166029"
+    }
+  },
+  "schedule": {
+    "id": "616617000178161037",
+    "status": "deactive",
+    "frequency": "weekly",
+    "configured_start": "2026-11-16T09:00:00+01:00"
+  },
+  "policy": {
+    "stage": "Quotation",
+    "arrival": "strictly before today in Europe/Madrid",
+    "recipient": "Booking.Owner.email; active user verified",
+    "sender": "crmadmin@madeforspainandportugal.com",
+    "cooldown": "Seven calendar days per booking; unfinished/unknown requests require review.",
+    "booking_stage_updates": false,
+    "storage": "__email_drafts; outgoing requested HTML verified before sending, real recipients saved on Communication."
+  },
+  "candidate_preview": [
+    {
+      "reference": "MFSP2606191",
+      "recipient": "p.gonzalo@madeforspainandportugal.com"
+    },
+    {
+      "reference": "MFSP2606254",
+      "recipient": "daniel@madeforspainandportugal.com"
+    }
+  ],
+  "emails_sent": 0,
+  "communications_created": 0,
+  "runtime_next": {
+    "function": "comm_runQuotationArrivalReminders",
+    "mode": "preview",
+    "afterId": "0"
+  },
+  "validation": "All three published functions reread. Metadata, candidates, owner email join and static send/preview/archive guards checked; runtime execution pending because connector has no function execution action.",
+  "docs": "https://www.zoho.com/crm/developer/docs/api/v8/send-mail.html"
+}

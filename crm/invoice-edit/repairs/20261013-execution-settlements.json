@@ -1,0 +1,5395 @@
+[
+  {
+    "at": "2026-10-13T14:19:04.185Z",
+    "module": "Supplier_Settlements",
+    "requested": [
+      {
+        "id": "616617000160879816",
+        "Gross_Invoice_Amount": 166,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 166,
+        "Total_Paid": 166,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000160898098",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000160898100",
+        "Gross_Invoice_Amount": 354.92,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 354.92,
+        "Total_Paid": 354.92,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000160911428",
+        "Gross_Invoice_Amount": 881.75,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 881.75,
+        "Total_Paid": 881.75,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161071054",
+        "Gross_Invoice_Amount": 429.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 429.7,
+        "Total_Paid": 429.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161242105",
+        "Gross_Invoice_Amount": 2193,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 2193,
+        "Total_Paid": 2193,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161265249",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161265251",
+        "Gross_Invoice_Amount": 337.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 337.52,
+        "Total_Paid": 337.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161433056",
+        "Gross_Invoice_Amount": 837.64,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 837.64,
+        "Total_Paid": 837.64,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161523263",
+        "Gross_Invoice_Amount": 264.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 264.6,
+        "Total_Paid": 264.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161717075",
+        "Gross_Invoice_Amount": 629.5,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 629.5,
+        "Total_Paid": 629.5,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161800223",
+        "Gross_Invoice_Amount": 250.72,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 250.72,
+        "Total_Paid": 250.72,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161812256",
+        "Gross_Invoice_Amount": 852.31,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 852.31,
+        "Total_Paid": 852.31,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161812269",
+        "Gross_Invoice_Amount": 433.16,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 433.16,
+        "Total_Paid": 433.16,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161816620",
+        "Gross_Invoice_Amount": 319.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 319.9,
+        "Total_Paid": 319.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161816621",
+        "Gross_Invoice_Amount": 1221.82,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1221.82,
+        "Total_Paid": 1221.82,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161826056",
+        "Gross_Invoice_Amount": 1467.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1467.4,
+        "Total_Paid": 1467.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161862526",
+        "Gross_Invoice_Amount": 420,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 420,
+        "Total_Paid": 420,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161872826",
+        "Gross_Invoice_Amount": 622.8,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 622.8,
+        "Total_Paid": 622.8,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162186155",
+        "Gross_Invoice_Amount": 509.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 509.6,
+        "Total_Paid": 509.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162204243",
+        "Gross_Invoice_Amount": 385.05,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 385.05,
+        "Total_Paid": 385.05,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162231035",
+        "Gross_Invoice_Amount": 309.35,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 309.35,
+        "Total_Paid": 309.35,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162338177",
+        "Gross_Invoice_Amount": 620.54,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 620.54,
+        "Total_Paid": 620.54,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162363160",
+        "Gross_Invoice_Amount": 375.06,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 375.06,
+        "Total_Paid": 375.06,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162463003",
+        "Gross_Invoice_Amount": 1211.12,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1211.12,
+        "Total_Paid": 1211.12,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162554101",
+        "Gross_Invoice_Amount": 4680,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 4680,
+        "Total_Paid": 4680,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162616093",
+        "Gross_Invoice_Amount": 610.51,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 610.51,
+        "Total_Paid": 610.51,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162820420",
+        "Gross_Invoice_Amount": 410.69,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 410.69,
+        "Total_Paid": 410.69,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162973027",
+        "Gross_Invoice_Amount": 380.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 380.7,
+        "Total_Paid": 380.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163181069",
+        "Gross_Invoice_Amount": 490,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 490,
+        "Total_Paid": 490,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163218096",
+        "Gross_Invoice_Amount": 400.69,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 400.69,
+        "Total_Paid": 400.69,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163218097",
+        "Gross_Invoice_Amount": 460.34,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 460.34,
+        "Total_Paid": 460.34,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163255042",
+        "Gross_Invoice_Amount": 429.34,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 429.34,
+        "Total_Paid": 429.34,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163502189",
+        "Gross_Invoice_Amount": 761.95,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 761.95,
+        "Total_Paid": 761.95,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163509150",
+        "Gross_Invoice_Amount": 447.38,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 447.38,
+        "Total_Paid": 447.38,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163894019",
+        "Gross_Invoice_Amount": 669.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 669.9,
+        "Total_Paid": 669.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163894026",
+        "Gross_Invoice_Amount": 294.55,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 294.55,
+        "Total_Paid": 294.55,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163894030",
+        "Gross_Invoice_Amount": 251.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 251.9,
+        "Total_Paid": 251.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163922106",
+        "Gross_Invoice_Amount": 4346,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 4346,
+        "Total_Paid": 4346,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000163928051",
+        "Gross_Invoice_Amount": 462.59,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 462.59,
+        "Total_Paid": 462.59,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164035332",
+        "Gross_Invoice_Amount": 740.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 740.2,
+        "Total_Paid": 740.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164049033",
+        "Gross_Invoice_Amount": 160,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 160,
+        "Total_Paid": 160,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164235268",
+        "Gross_Invoice_Amount": 508.95,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 508.95,
+        "Total_Paid": 508.95,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164366036",
+        "Gross_Invoice_Amount": 388.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 388.9,
+        "Total_Paid": 388.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164612267",
+        "Gross_Invoice_Amount": 435.06,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 435.06,
+        "Total_Paid": 435.06,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164619254",
+        "Gross_Invoice_Amount": 241.01,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 241.01,
+        "Total_Paid": 241.01,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164619257",
+        "Gross_Invoice_Amount": 239,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 239,
+        "Total_Paid": 239,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164619261",
+        "Gross_Invoice_Amount": 329.98,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 329.98,
+        "Total_Paid": 329.98,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164619262",
+        "Gross_Invoice_Amount": 633.11,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 633.11,
+        "Total_Paid": 633.11,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164818127",
+        "Gross_Invoice_Amount": 719,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 719,
+        "Total_Paid": 719,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164837302",
+        "Gross_Invoice_Amount": 535.07,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 535.07,
+        "Total_Paid": 535.07,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164982032",
+        "Gross_Invoice_Amount": 547.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 547.6,
+        "Total_Paid": 547.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165117043",
+        "Gross_Invoice_Amount": 534.42,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 534.42,
+        "Total_Paid": 534.42,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165143027",
+        "Gross_Invoice_Amount": 456.3,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 456.3,
+        "Total_Paid": 456.3,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165348042",
+        "Gross_Invoice_Amount": 705.18,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 705.18,
+        "Total_Paid": 705.18,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165392119",
+        "Gross_Invoice_Amount": 602.51,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 602.51,
+        "Total_Paid": 602.51,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165392121",
+        "Gross_Invoice_Amount": 414.5,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 414.5,
+        "Total_Paid": 414.5,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165958068",
+        "Gross_Invoice_Amount": 928.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 928.6,
+        "Total_Paid": 928.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166023049",
+        "Gross_Invoice_Amount": 3075,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 3075,
+        "Total_Paid": 3075,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166431139",
+        "Gross_Invoice_Amount": 346.36,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 346.36,
+        "Total_Paid": 346.36,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166431140",
+        "Gross_Invoice_Amount": 473.38,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 473.38,
+        "Total_Paid": 473.38,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166480160",
+        "Gross_Invoice_Amount": 495.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 495.52,
+        "Total_Paid": 495.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166557114",
+        "Gross_Invoice_Amount": 586.94,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 586.94,
+        "Total_Paid": 586.94,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166565094",
+        "Gross_Invoice_Amount": 242.21,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 242.21,
+        "Total_Paid": 242.21,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166569184",
+        "Gross_Invoice_Amount": 401.5,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 401.5,
+        "Total_Paid": 401.5,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166573154",
+        "Gross_Invoice_Amount": 304.72,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 304.72,
+        "Total_Paid": 304.72,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166803007",
+        "Gross_Invoice_Amount": 227.04,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 227.04,
+        "Total_Paid": 227.04,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167247082",
+        "Gross_Invoice_Amount": 749.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 749.4,
+        "Total_Paid": 749.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167434021",
+        "Gross_Invoice_Amount": 422.25,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 422.25,
+        "Total_Paid": 422.25,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167646118",
+        "Gross_Invoice_Amount": 337.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 337.52,
+        "Total_Paid": 337.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167648077",
+        "Gross_Invoice_Amount": 665.22,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 665.22,
+        "Total_Paid": 665.22,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167669003",
+        "Gross_Invoice_Amount": 301.22,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 301.22,
+        "Total_Paid": 301.22,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167736086",
+        "Gross_Invoice_Amount": 390.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 390.6,
+        "Total_Paid": 390.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167736089",
+        "Gross_Invoice_Amount": 375.99,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 375.99,
+        "Total_Paid": 375.99,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167818118",
+        "Gross_Invoice_Amount": 259.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 259.9,
+        "Total_Paid": 259.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167818119",
+        "Gross_Invoice_Amount": 600.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 600.7,
+        "Total_Paid": 600.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167864459",
+        "Gross_Invoice_Amount": 790.43,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 790.43,
+        "Total_Paid": 790.43,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167882062",
+        "Gross_Invoice_Amount": 396.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 396.4,
+        "Total_Paid": 396.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168178049",
+        "Gross_Invoice_Amount": 298.75,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 298.75,
+        "Total_Paid": 298.75,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168178051",
+        "Gross_Invoice_Amount": 352.93,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 352.93,
+        "Total_Paid": 352.93,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168178052",
+        "Gross_Invoice_Amount": 547.36,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 547.36,
+        "Total_Paid": 547.36,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168454095",
+        "Gross_Invoice_Amount": 719.32,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 719.32,
+        "Total_Paid": 719.32,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168625008",
+        "Gross_Invoice_Amount": 426.75,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 426.75,
+        "Total_Paid": 426.75,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168856178",
+        "Gross_Invoice_Amount": 661.08,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 661.08,
+        "Total_Paid": 661.08,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168856180",
+        "Gross_Invoice_Amount": 491.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 491.2,
+        "Total_Paid": 491.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168934030",
+        "Gross_Invoice_Amount": 1089,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1089,
+        "Total_Paid": 1089,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000168934037",
+        "Gross_Invoice_Amount": 1666.17,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1666.17,
+        "Total_Paid": 1666.17,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169040253",
+        "Gross_Invoice_Amount": 2886.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 2886.4,
+        "Total_Paid": 2886.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169045438",
+        "Gross_Invoice_Amount": 505.04,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 505.04,
+        "Total_Paid": 505.04,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169741386",
+        "Gross_Invoice_Amount": 307.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 307.9,
+        "Total_Paid": 307.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169741387",
+        "Gross_Invoice_Amount": 241.01,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 241.01,
+        "Total_Paid": 241.01,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169792336",
+        "Gross_Invoice_Amount": 269.1,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 269.1,
+        "Total_Paid": 269.1,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169826240",
+        "Gross_Invoice_Amount": 301.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 301.6,
+        "Total_Paid": 301.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169957006",
+        "Gross_Invoice_Amount": 1720,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1720,
+        "Total_Paid": 1720,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170252452",
+        "Gross_Invoice_Amount": 665.85,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 665.85,
+        "Total_Paid": 665.85,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170263268",
+        "Gross_Invoice_Amount": 337.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 337.52,
+        "Total_Paid": 337.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170275014",
+        "Gross_Invoice_Amount": 363.1,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 363.1,
+        "Total_Paid": 363.1,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170282482",
+        "Gross_Invoice_Amount": 404.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 404.7,
+        "Total_Paid": 404.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170726207",
+        "Gross_Invoice_Amount": 537.32,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 537.32,
+        "Total_Paid": 537.32,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171752075",
+        "Gross_Invoice_Amount": 275.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 275.9,
+        "Total_Paid": 275.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      }
+    ],
+    "response": {
+      "data": [
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-02T16:01:05+02:00",
+            "id": "616617000160879816",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-05-29T16:01:09+02:00",
+            "id": "616617000160898098",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-05-29T16:01:09+02:00",
+            "id": "616617000160898100",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-01T14:01:17+02:00",
+            "id": "616617000160911428",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-03T10:01:23+02:00",
+            "id": "616617000161071054",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-04T10:01:55+02:00",
+            "id": "616617000161242105",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-04T16:01:24+02:00",
+            "id": "616617000161265249",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-04T16:01:24+02:00",
+            "id": "616617000161265251",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-05T14:01:03+02:00",
+            "id": "616617000161433056",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-08T18:01:10+02:00",
+            "id": "616617000161523263",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-09T12:01:05+02:00",
+            "id": "616617000161717075",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-11T12:01:28+02:00",
+            "id": "616617000161800223",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-11T12:01:19+02:00",
+            "id": "616617000161812256",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-11T12:01:19+02:00",
+            "id": "616617000161812269",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-12T16:01:02+02:00",
+            "id": "616617000161816620",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-12T16:01:02+02:00",
+            "id": "616617000161816621",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-10T12:01:35+02:00",
+            "id": "616617000161826056",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-12T16:01:16+02:00",
+            "id": "616617000161862526",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-15T12:03:33+02:00",
+            "id": "616617000161872826",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-16T14:01:04+02:00",
+            "id": "616617000162186155",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-16T18:01:17+02:00",
+            "id": "616617000162204243",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-15T16:01:32+02:00",
+            "id": "616617000162231035",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-17T14:01:28+02:00",
+            "id": "616617000162338177",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-17T14:01:36+02:00",
+            "id": "616617000162363160",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-18T10:01:21+02:00",
+            "id": "616617000162463003",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-18T12:01:38+02:00",
+            "id": "616617000162554101",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-19T10:01:20+02:00",
+            "id": "616617000162616093",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-23T12:58:56+02:00",
+            "id": "616617000162820420",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-24T12:01:34+02:00",
+            "id": "616617000162973027",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-25T12:01:41+02:00",
+            "id": "616617000163181069",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-25T14:01:21+02:00",
+            "id": "616617000163218096",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-25T14:01:21+02:00",
+            "id": "616617000163218097",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-25T12:01:37+02:00",
+            "id": "616617000163255042",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-30T16:01:20+02:00",
+            "id": "616617000163502189",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-30T14:01:18+02:00",
+            "id": "616617000163509150",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-02T10:01:28+02:00",
+            "id": "616617000163894019",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-02T10:01:28+02:00",
+            "id": "616617000163894026",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-02T10:01:28+02:00",
+            "id": "616617000163894030",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-02T20:01:09+02:00",
+            "id": "616617000163922106",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-02T12:01:21+02:00",
+            "id": "616617000163928051",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-06T18:01:03+02:00",
+            "id": "616617000164035332",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-03T12:01:21+02:00",
+            "id": "616617000164049033",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-08T12:01:21+02:00",
+            "id": "616617000164235268",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-08T16:01:27+02:00",
+            "id": "616617000164366036",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T20:01:09+02:00",
+            "id": "616617000164612267",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T12:13:29+02:00",
+            "id": "616617000164619254",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T12:13:29+02:00",
+            "id": "616617000164619257",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T12:13:29+02:00",
+            "id": "616617000164619261",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T12:13:29+02:00",
+            "id": "616617000164619262",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-15T08:01:24+02:00",
+            "id": "616617000164818127",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-15T12:01:20+02:00",
+            "id": "616617000164837302",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-15T18:01:06+02:00",
+            "id": "616617000164982032",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-16T14:01:24+02:00",
+            "id": "616617000165117043",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-16T16:01:29+02:00",
+            "id": "616617000165143027",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-17T12:01:16+02:00",
+            "id": "616617000165348042",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-17T13:45:30+02:00",
+            "id": "616617000165392119",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-17T13:45:30+02:00",
+            "id": "616617000165392121",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-22T18:01:36+02:00",
+            "id": "616617000165958068",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-22T16:01:44+02:00",
+            "id": "616617000166023049",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-26T16:25:49+02:00",
+            "id": "616617000166431139",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-26T16:25:49+02:00",
+            "id": "616617000166431140",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-28T12:01:16+02:00",
+            "id": "616617000166480160",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-28T10:01:31+02:00",
+            "id": "616617000166557114",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-27T20:01:13+02:00",
+            "id": "616617000166565094",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-28T16:01:39+02:00",
+            "id": "616617000166569184",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-28T13:52:41+02:00",
+            "id": "616617000166573154",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-30T09:15:47+02:00",
+            "id": "616617000166803007",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-03T14:13:46+02:00",
+            "id": "616617000167247082",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-04T12:01:33+02:00",
+            "id": "616617000167434021",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T18:01:17+02:00",
+            "id": "616617000167646118",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T16:01:46+02:00",
+            "id": "616617000167648077",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T08:48:10+02:00",
+            "id": "616617000167669003",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T16:58:05+02:00",
+            "id": "616617000167736086",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T16:58:05+02:00",
+            "id": "616617000167736089",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-07T15:07:18+02:00",
+            "id": "616617000167818118",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-07T15:07:18+02:00",
+            "id": "616617000167818119",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-10T18:01:19+02:00",
+            "id": "616617000167864459",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-07T09:57:32+02:00",
+            "id": "616617000167882062",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-12T11:59:08+02:00",
+            "id": "616617000168178049",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-12T11:59:08+02:00",
+            "id": "616617000168178051",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-12T11:59:08+02:00",
+            "id": "616617000168178052",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-14T18:01:38+02:00",
+            "id": "616617000168454095",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-17T09:29:44+02:00",
+            "id": "616617000168625008",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-19T13:11:33+02:00",
+            "id": "616617000168856178",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-19T13:11:33+02:00",
+            "id": "616617000168856180",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-18T16:01:39+02:00",
+            "id": "616617000168934030",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-18T16:01:39+02:00",
+            "id": "616617000168934037",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-21T18:01:20+02:00",
+            "id": "616617000169040253",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-24T10:32:40+02:00",
+            "id": "616617000169045438",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:01:55+02:00",
+            "id": "616617000169741386",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:01:55+02:00",
+            "id": "616617000169741387",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:54:18+02:00",
+            "id": "616617000169792336",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:05:34+02:00",
+            "id": "616617000169826240",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-28T10:01:26+02:00",
+            "id": "616617000169957006",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T10:01:52+02:00",
+            "id": "616617000170252452",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-01T16:01:52+02:00",
+            "id": "616617000170263268",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-31T12:01:55+02:00",
+            "id": "616617000170275014",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T12:01:10+02:00",
+            "id": "616617000170282482",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-07T11:52:57+02:00",
+            "id": "616617000170726207",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:05+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-16T14:02:12+02:00",
+            "id": "616617000171752075",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        }
+      ]
+    }
+  },
+  {
+    "at": "2026-10-13T14:19:09.246Z",
+    "module": "Supplier_Settlements",
+    "requested": [
+      {
+        "id": "616617000161545308",
+        "Gross_Invoice_Amount": 253.95,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 253.95,
+        "Total_Paid": 253.95,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161717073",
+        "Gross_Invoice_Amount": 300.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 300.4,
+        "Total_Paid": 300.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161828097",
+        "Gross_Invoice_Amount": 253,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 253,
+        "Total_Paid": 253,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161828098",
+        "Gross_Invoice_Amount": 244.86,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 244.86,
+        "Total_Paid": 244.86,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000161857333",
+        "Gross_Invoice_Amount": 354.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 354.6,
+        "Total_Paid": 354.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162234109",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000162608082",
+        "Gross_Invoice_Amount": 354.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 354.6,
+        "Total_Paid": 354.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164049034",
+        "Gross_Invoice_Amount": 230.56,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 230.56,
+        "Total_Paid": 230.56,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164511110",
+        "Gross_Invoice_Amount": 339.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 339.52,
+        "Total_Paid": 339.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164615188",
+        "Gross_Invoice_Amount": 1076.8,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1076.8,
+        "Total_Paid": 1076.8,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164649171",
+        "Gross_Invoice_Amount": 347.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 347.9,
+        "Total_Paid": 347.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000164796045",
+        "Gross_Invoice_Amount": 793,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 793,
+        "Total_Paid": 793,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165825025",
+        "Gross_Invoice_Amount": 243.01,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 243.01,
+        "Total_Paid": 243.01,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165825027",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000165825028",
+        "Gross_Invoice_Amount": 334.85,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 334.85,
+        "Total_Paid": 334.85,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166094097",
+        "Gross_Invoice_Amount": 206.8,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 206.8,
+        "Total_Paid": 206.8,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166332033",
+        "Gross_Invoice_Amount": 304.04,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 304.04,
+        "Total_Paid": 304.04,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166438009",
+        "Gross_Invoice_Amount": 284.26,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 284.26,
+        "Total_Paid": 284.26,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000166794080",
+        "Gross_Invoice_Amount": 290.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 290.9,
+        "Total_Paid": 290.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167198080",
+        "Gross_Invoice_Amount": 206.8,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 206.8,
+        "Total_Paid": 206.8,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167506071",
+        "Gross_Invoice_Amount": 303.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 303.9,
+        "Total_Paid": 303.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167679064",
+        "Gross_Invoice_Amount": 602.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 602.52,
+        "Total_Paid": 602.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167679067",
+        "Gross_Invoice_Amount": 248,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 248,
+        "Total_Paid": 248,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167818114",
+        "Gross_Invoice_Amount": 255.42,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 255.42,
+        "Total_Paid": 255.42,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000167818117",
+        "Gross_Invoice_Amount": 454.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 454.7,
+        "Total_Paid": 454.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169027523",
+        "Gross_Invoice_Amount": 262,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 262,
+        "Total_Paid": 262,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169041278",
+        "Gross_Invoice_Amount": 259.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 259.9,
+        "Total_Paid": 259.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169070358",
+        "Gross_Invoice_Amount": 325.21,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 325.21,
+        "Total_Paid": 325.21,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169083264",
+        "Gross_Invoice_Amount": 684.02,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 684.02,
+        "Total_Paid": 684.02,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169089459",
+        "Gross_Invoice_Amount": 738.76,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 738.76,
+        "Total_Paid": 738.76,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169140105",
+        "Gross_Invoice_Amount": 347.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 347.7,
+        "Total_Paid": 347.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169325146",
+        "Gross_Invoice_Amount": 593.95,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 593.95,
+        "Total_Paid": 593.95,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169591118",
+        "Gross_Invoice_Amount": 448.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 448.4,
+        "Total_Paid": 448.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169591125",
+        "Gross_Invoice_Amount": 258.96,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 258.96,
+        "Total_Paid": 258.96,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169591129",
+        "Gross_Invoice_Amount": 516.36,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 516.36,
+        "Total_Paid": 516.36,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169737477",
+        "Gross_Invoice_Amount": 916.34,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 916.34,
+        "Total_Paid": 916.34,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169737478",
+        "Gross_Invoice_Amount": 671.3,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 671.3,
+        "Total_Paid": 671.3,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169737479",
+        "Gross_Invoice_Amount": 1079.35,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1079.35,
+        "Total_Paid": 1079.35,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169741385",
+        "Gross_Invoice_Amount": 467.06,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 467.06,
+        "Total_Paid": 467.06,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169743488",
+        "Gross_Invoice_Amount": 336.13,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 336.13,
+        "Total_Paid": 336.13,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169749293",
+        "Gross_Invoice_Amount": 284.8,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 284.8,
+        "Total_Paid": 284.8,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169749294",
+        "Gross_Invoice_Amount": 474.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 474.6,
+        "Total_Paid": 474.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169749295",
+        "Gross_Invoice_Amount": 392.08,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 392.08,
+        "Total_Paid": 392.08,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169754301",
+        "Gross_Invoice_Amount": 252.35,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 252.35,
+        "Total_Paid": 252.35,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169792093",
+        "Gross_Invoice_Amount": 639.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 639.9,
+        "Total_Paid": 639.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169792094",
+        "Gross_Invoice_Amount": 542.42,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 542.42,
+        "Total_Paid": 542.42,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169796149",
+        "Gross_Invoice_Amount": 242,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 242,
+        "Total_Paid": 242,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169796151",
+        "Gross_Invoice_Amount": 236.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 236.6,
+        "Total_Paid": 236.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169796152",
+        "Gross_Invoice_Amount": 538.5,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 538.5,
+        "Total_Paid": 538.5,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169797378",
+        "Gross_Invoice_Amount": 534.42,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 534.42,
+        "Total_Paid": 534.42,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169798555",
+        "Gross_Invoice_Amount": 440.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 440.6,
+        "Total_Paid": 440.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169798556",
+        "Gross_Invoice_Amount": 524.1,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 524.1,
+        "Total_Paid": 524.1,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169798557",
+        "Gross_Invoice_Amount": 295.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 295.7,
+        "Total_Paid": 295.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169798558",
+        "Gross_Invoice_Amount": 485.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 485.9,
+        "Total_Paid": 485.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169823263",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169826241",
+        "Gross_Invoice_Amount": 508.96,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 508.96,
+        "Total_Paid": 508.96,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169828512",
+        "Gross_Invoice_Amount": 322.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 322.2,
+        "Total_Paid": 322.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169828514",
+        "Gross_Invoice_Amount": 223.86,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 223.86,
+        "Total_Paid": 223.86,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169833412",
+        "Gross_Invoice_Amount": 404.02,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 404.02,
+        "Total_Paid": 404.02,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169833593",
+        "Gross_Invoice_Amount": 375.06,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 375.06,
+        "Total_Paid": 375.06,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000169923063",
+        "Gross_Invoice_Amount": 336.22,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 336.22,
+        "Total_Paid": 336.22,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170093089",
+        "Gross_Invoice_Amount": 927.34,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 927.34,
+        "Total_Paid": 927.34,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170093090",
+        "Gross_Invoice_Amount": 307.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 307.9,
+        "Total_Paid": 307.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170133028",
+        "Gross_Invoice_Amount": 634.57,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 634.57,
+        "Total_Paid": 634.57,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170227038",
+        "Gross_Invoice_Amount": 350.8,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 350.8,
+        "Total_Paid": 350.8,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170251745",
+        "Gross_Invoice_Amount": 493,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 493,
+        "Total_Paid": 493,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170253441",
+        "Gross_Invoice_Amount": 611.76,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 611.76,
+        "Total_Paid": 611.76,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170259739",
+        "Gross_Invoice_Amount": 328.67,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 328.67,
+        "Total_Paid": 328.67,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170282481",
+        "Gross_Invoice_Amount": 845.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 845.6,
+        "Total_Paid": 845.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170282486",
+        "Gross_Invoice_Amount": 428.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 428.7,
+        "Total_Paid": 428.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170295566",
+        "Gross_Invoice_Amount": 257.72,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 257.72,
+        "Total_Paid": 257.72,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170345581",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170345582",
+        "Gross_Invoice_Amount": 218.22,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 218.22,
+        "Total_Paid": 218.22,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170345583",
+        "Gross_Invoice_Amount": 379.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 379.2,
+        "Total_Paid": 379.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170582031",
+        "Gross_Invoice_Amount": 275.67,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 275.67,
+        "Total_Paid": 275.67,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170591007",
+        "Gross_Invoice_Amount": 637.3,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 637.3,
+        "Total_Paid": 637.3,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000170591008",
+        "Gross_Invoice_Amount": 322.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 322.2,
+        "Total_Paid": 322.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171190020",
+        "Gross_Invoice_Amount": 667.95,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 667.95,
+        "Total_Paid": 667.95,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171190021",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171204221",
+        "Gross_Invoice_Amount": 230.7,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 230.7,
+        "Total_Paid": 230.7,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171204222",
+        "Gross_Invoice_Amount": 1264.47,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 1264.47,
+        "Total_Paid": 1264.47,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171375089",
+        "Gross_Invoice_Amount": 284.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 284.4,
+        "Total_Paid": 284.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171436107",
+        "Gross_Invoice_Amount": 276.22,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 276.22,
+        "Total_Paid": 276.22,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171533105",
+        "Gross_Invoice_Amount": 496.6,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 496.6,
+        "Total_Paid": 496.6,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171786077",
+        "Gross_Invoice_Amount": 794.99,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 794.99,
+        "Total_Paid": 794.99,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171891232",
+        "Gross_Invoice_Amount": 337.52,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 337.52,
+        "Total_Paid": 337.52,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171918326",
+        "Gross_Invoice_Amount": 450.89,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 450.89,
+        "Total_Paid": 450.89,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171928583",
+        "Gross_Invoice_Amount": 655.43,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 655.43,
+        "Total_Paid": 655.43,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000171928584",
+        "Gross_Invoice_Amount": 647.4,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 647.4,
+        "Total_Paid": 647.4,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000172759041",
+        "Gross_Invoice_Amount": 243.51,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 243.51,
+        "Total_Paid": 243.51,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000172763334",
+        "Gross_Invoice_Amount": 508.65,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 508.65,
+        "Total_Paid": 508.65,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173373001",
+        "Gross_Invoice_Amount": 441.16,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 441.16,
+        "Total_Paid": 441.16,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173488002",
+        "Gross_Invoice_Amount": 304.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 304.2,
+        "Total_Paid": 304.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173491551",
+        "Gross_Invoice_Amount": 267.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 267.9,
+        "Total_Paid": 267.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173495203",
+        "Gross_Invoice_Amount": 514.34,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 514.34,
+        "Total_Paid": 514.34,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173501004",
+        "Gross_Invoice_Amount": 587.2,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 587.2,
+        "Total_Paid": 587.2,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173507124",
+        "Gross_Invoice_Amount": 225.41,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 225.41,
+        "Total_Paid": 225.41,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173527824",
+        "Gross_Invoice_Amount": 300.9,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 300.9,
+        "Total_Paid": 300.9,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      },
+      {
+        "id": "616617000173545754",
+        "Gross_Invoice_Amount": 295.62,
+        "Credit_Note_Amount": 0,
+        "Total_Invoice": 295.62,
+        "Total_Paid": 295.62,
+        "Admin_Status": "Paid",
+        "Closure_Review_Status": "Pending review"
+      }
+    ],
+    "response": {
+      "data": [
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-08T18:01:14+02:00",
+            "id": "616617000161545308",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-09T12:01:05+02:00",
+            "id": "616617000161717073",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-10T16:01:20+02:00",
+            "id": "616617000161828097",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-10T16:01:20+02:00",
+            "id": "616617000161828098",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-11T22:01:13+02:00",
+            "id": "616617000161857333",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-15T18:01:18+02:00",
+            "id": "616617000162234109",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-06-19T10:01:15+02:00",
+            "id": "616617000162608082",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-03T12:01:21+02:00",
+            "id": "616617000164049034",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-09T12:01:37+02:00",
+            "id": "616617000164511110",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T12:01:14+02:00",
+            "id": "616617000164615188",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-13T08:01:22+02:00",
+            "id": "616617000164649171",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-14T12:01:29+02:00",
+            "id": "616617000164796045",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-21T15:02:55+02:00",
+            "id": "616617000165825025",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-21T15:02:55+02:00",
+            "id": "616617000165825027",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-21T15:02:55+02:00",
+            "id": "616617000165825028",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-23T14:01:05+02:00",
+            "id": "616617000166094097",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-24T14:01:10+02:00",
+            "id": "616617000166332033",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-24T12:01:58+02:00",
+            "id": "616617000166438009",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-07-30T14:01:17+02:00",
+            "id": "616617000166794080",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-03T14:01:43+02:00",
+            "id": "616617000167198080",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-04T16:01:31+02:00",
+            "id": "616617000167506071",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T14:20:27+02:00",
+            "id": "616617000167679064",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-05T14:20:27+02:00",
+            "id": "616617000167679067",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-07T15:07:18+02:00",
+            "id": "616617000167818114",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-07T15:07:18+02:00",
+            "id": "616617000167818117",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-24T13:32:17+02:00",
+            "id": "616617000169027523",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-22T22:01:08+02:00",
+            "id": "616617000169041278",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-24T12:01:18+02:00",
+            "id": "616617000169070358",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-21T16:08:47+02:00",
+            "id": "616617000169083264",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-21T16:01:15+02:00",
+            "id": "616617000169089459",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-20T13:43:49+02:00",
+            "id": "616617000169140105",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-25T12:01:06+02:00",
+            "id": "616617000169325146",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-25T17:39:52+02:00",
+            "id": "616617000169591118",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-25T17:39:52+02:00",
+            "id": "616617000169591125",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-25T17:39:52+02:00",
+            "id": "616617000169591129",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:04:17+02:00",
+            "id": "616617000169737477",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:04:17+02:00",
+            "id": "616617000169737478",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:04:17+02:00",
+            "id": "616617000169737479",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:01:55+02:00",
+            "id": "616617000169741385",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:08:46+02:00",
+            "id": "616617000169743488",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:01:32+02:00",
+            "id": "616617000169749293",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:01:32+02:00",
+            "id": "616617000169749294",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:01:32+02:00",
+            "id": "616617000169749295",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:06:32+02:00",
+            "id": "616617000169754301",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-26T12:01:20+02:00",
+            "id": "616617000169792093",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-26T12:01:20+02:00",
+            "id": "616617000169792094",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:25:14+02:00",
+            "id": "616617000169796149",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:25:14+02:00",
+            "id": "616617000169796151",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:25:14+02:00",
+            "id": "616617000169796152",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:08:59+02:00",
+            "id": "616617000169797378",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:07:39+02:00",
+            "id": "616617000169798555",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:07:39+02:00",
+            "id": "616617000169798556",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:07:39+02:00",
+            "id": "616617000169798557",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:07:39+02:00",
+            "id": "616617000169798558",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:54:40+02:00",
+            "id": "616617000169823263",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:05:34+02:00",
+            "id": "616617000169826241",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:08:36+02:00",
+            "id": "616617000169828512",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:08:36+02:00",
+            "id": "616617000169828514",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T16:54:59+02:00",
+            "id": "616617000169833412",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-27T17:08:40+02:00",
+            "id": "616617000169833593",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-28T12:02:04+02:00",
+            "id": "616617000169923063",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-31T10:01:16+02:00",
+            "id": "616617000170093089",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-31T10:01:16+02:00",
+            "id": "616617000170093090",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-28T14:01:45+02:00",
+            "id": "616617000170133028",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-08-31T14:01:23+02:00",
+            "id": "616617000170227038",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T12:01:48+02:00",
+            "id": "616617000170251745",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-03T12:02:06+02:00",
+            "id": "616617000170253441",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-03T18:01:31+02:00",
+            "id": "616617000170259739",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T12:01:10+02:00",
+            "id": "616617000170282481",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T12:01:31+02:00",
+            "id": "616617000170282486",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-01T18:01:21+02:00",
+            "id": "616617000170295566",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-02T14:01:51+02:00",
+            "id": "616617000170345581",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-02T14:01:51+02:00",
+            "id": "616617000170345582",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-02T14:01:51+02:00",
+            "id": "616617000170345583",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T18:01:24+02:00",
+            "id": "616617000170582031",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T18:01:36+02:00",
+            "id": "616617000170591007",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-04T18:01:36+02:00",
+            "id": "616617000170591008",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-10T02:01:32+02:00",
+            "id": "616617000171190020",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-10T02:01:32+02:00",
+            "id": "616617000171190021",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-10T12:01:31+02:00",
+            "id": "616617000171204221",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-10T12:01:31+02:00",
+            "id": "616617000171204222",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-11T12:01:12+02:00",
+            "id": "616617000171375089",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-11T16:01:35+02:00",
+            "id": "616617000171436107",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-15T10:01:56+02:00",
+            "id": "616617000171533105",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-16T12:02:07+02:00",
+            "id": "616617000171786077",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-18T10:01:33+02:00",
+            "id": "616617000171891232",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-18T22:01:40+02:00",
+            "id": "616617000171918326",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-18T12:01:54+02:00",
+            "id": "616617000171928583",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-18T12:01:54+02:00",
+            "id": "616617000171928584",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-23T00:01:49+02:00",
+            "id": "616617000172759041",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-24T08:37:25+02:00",
+            "id": "616617000172763334",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-29T08:22:08+02:00",
+            "id": "616617000173373001",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-30T13:40:25+02:00",
+            "id": "616617000173488002",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-10-01T18:02:13+02:00",
+            "id": "616617000173491551",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-10-01T11:09:36+02:00",
+            "id": "616617000173495203",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-30T13:40:59+02:00",
+            "id": "616617000173501004",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-09-30T22:01:49+02:00",
+            "id": "616617000173507124",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-10-05T13:07:59+02:00",
+            "id": "616617000173527824",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        },
+        {
+          "code": "SUCCESS",
+          "details": {
+            "Modified_Time": "2026-10-13T16:17:10+02:00",
+            "Modified_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            },
+            "Created_Time": "2026-10-05T09:33:47+02:00",
+            "id": "616617000173545754",
+            "Created_By": {
+              "name": "Made for Spain and Portugal",
+              "id": "616617000000365001"
+            }
+          },
+          "message": "record updated",
+          "status": "success"
+        }
+      ]
+    }
+  }
+]

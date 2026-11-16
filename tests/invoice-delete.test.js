@@ -22,8 +22,8 @@ function setup(extra = {}) {
     [M.payAllocations]: [{ id: 'a1', Supplier_Invoice: lookup('i1'), Supplier_Payment: lookup('p1'), Supplier_Settlement: lookup('s1'), Allocated_Amount: 100 }],
     [M.invoiceLines]: [{ id: 'l1', Supplier_Invoice: lookup('i1') }],
     [M.invoiceSettlementAllocations]: [{ id: 'split1', Vendor_Invoice: lookup('i1'), Vendor_Settlement: lookup('s1'), Allocated_Amount: 100, Status: 'Active' }],
-    [M.accountingEntries]: [{ id: 'e1', Supplier_Invoice: lookup('i1') }, { id: 'e2', Name: 'INV-Invoice-SUP-PAY-p1' }],
-    [M.accountingEntryLines]: [{ id: 'el1', Accounting_Entry: lookup('e1'), Supplier_Invoice: lookup('i1') }, { id: 'el2', Accounting_Entry: lookup('e2'), Supplier_Invoice: lookup('i1') }],
+    [M.accountingEntries]: [],
+    [M.accountingEntryLines]: [],
     Card_Purchases: [{ id: 'card1', Vendor_Invoice: lookup('i1'), Vendor_Payment: lookup('p1'), Invoice_Number: 'INV1', Accounting_Status: 'Purchase recorded', Accounting_Processed_At: '2026-01-01' }],
     ...extra
   };
@@ -32,6 +32,25 @@ function setup(extra = {}) {
   const storage = { getItem: k => saved.get(k) || null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k) };
   let fail;
   const crm = {
+    async executeFunction(name,args) {
+      assert.equal(name,'rebuildsuppliersettlementtotals');
+      const ids=args.settlementIdsString.split('|||').filter(Boolean);
+      if(fail?.(M.settlements,null,'update'))return{details:{output:{error:true,message:'simulated rejection'}}};
+      for(const sid of ids){
+        const settlement=data[M.settlements].find(r=>r.id===sid);let gross=0,credit=0,paid=0;
+        for(const invoice of data[M.invoices].filter(r=>!['Cancelled','Rejected'].includes(r.Status))){
+          const splits=data[M.invoiceSettlementAllocations].filter(a=>a.Vendor_Invoice.id===invoice.id&&!['Void','Cancelled'].includes(a.Status));
+          const total=invoice.Total_Payable_Amount??invoice.Invoice_Total??0;
+          const share=splits.length?splits.filter(a=>a.Vendor_Settlement.id===sid).reduce((sum,a)=>sum+a.Allocated_Amount,0):invoice.Supplier_Settlement?.id===sid?total:0;
+          if(invoice.Invoice_Type==='Credit Note')credit+=share;else gross+=share;
+          const allocated=data[M.payAllocations].filter(a=>a.Supplier_Invoice?.id===invoice.id&&['Paid','Reconciled'].includes(data[M.payments].find(p=>p.id===a.Supplier_Payment?.id)?.Status)).reduce((sum,a)=>sum+a.Allocated_Amount,0);
+          paid+=(invoice.Invoice_Type==='Credit Note'?-1:1)*(total?allocated*share/total:0);
+        }
+        Object.assign(settlement,{Gross_Invoice_Amount:gross,Credit_Note_Amount:credit,Total_Invoice:gross-credit,Total_Paid:paid,Admin_Status:ns.createInvoiceDeletionModule({crm,modules:M,helpers,storage}).statusForSettlement(settlement,gross-credit,paid)});
+        writes.push(['rebuild',M.settlements,sid]);
+      }
+      return{details:{output:{error:false,processed_count:ids.length,warning_count:0}}};
+    },
     async getFields() { return { fields: [{ api_name: "Vendor_Invoice", data_type: "lookup" }, { api_name: "Vendor_Payment", data_type: "lookup" }] }; },
     async getRecord(module, id) { return structuredClone((data[module] || []).find(r => r.id === id)); },
     async getAllRecords(module, page, size) { return structuredClone((data[module] || []).slice((page - 1) * size, page * size)); },
@@ -50,9 +69,7 @@ function setup(extra = {}) {
     async updateRecord(module, id, fields, options) {
       if (fail?.(module, id, 'update')) { return { code: 'ERROR', message: 'simulated rejection' }; }
       assert.equal(options.trigger.length, 0);
-      const schema = JSON.parse(fs.readFileSync('_local/crm/modules/' + module + '_fields')).fields;
-      // Lookup fields are discovered from live metadata; the exported schema predates them.
-      if (module === "Prepayments") schema.push({ api_name: "Vendor_Invoice", data_type: "lookup" }, { api_name: "Vendor_Payment", data_type: "lookup" });
+      const schema = JSON.parse(fs.readFileSync('tests/fixtures/invoice-delete-schema.json'))[module];
       for (const [key, value] of Object.entries(fields)) {
         const field = schema.find(f => f.api_name === key);
         assert.ok(field, `Unknown field ${module}.${key}`);
@@ -86,14 +103,15 @@ test('removes dependent records, resets card purchase and final settlement, dele
   assert.equal(f.saved.size, 0);
 });
 
-test('shared payment survives with remaining amount, counts and pending accounting', async () => {
+test('shared payment survives with remaining amount and preserves manual accounting status', async () => {
   const f = setup();
+  f.data[M.payments][0].Accounting_Status='Reviewed';
   f.data[M.invoices].push({ id: 'i2', Invoice_Total: 80, Amount_Paid: 0, Status: 'Received', Supplier: lookup('v1'), Booking: lookup('b1'), Supplier_Settlement: lookup('s1') });
   f.data[M.payAllocations].push({ id: 'a2', Supplier_Invoice: lookup('i2'), Supplier_Payment: lookup('p1'), Supplier_Settlement: lookup('s1'), Allocated_Amount: 40 });
   await f.service.execute('i1');
   const p = f.data[M.payments][0];
   assert.equal(p.Payment_Amount, 40); assert.equal(p.Allocation_Count, 1); assert.equal(p.Supplier_Count, 1);
-  assert.equal(p.Accounting_Status, 'Pending'); assert.equal(p.Status, 'Paid');
+  assert.equal(p.Accounting_Status, 'Reviewed'); assert.equal(p.Status, 'Paid');
   assert.equal(f.data[M.invoices][0].Amount_Paid, 40); assert.equal(f.data[M.invoices][0].Status, 'Partially Paid');
   assert.equal(f.data[M.settlements][0].Total_Invoice, 80); assert.equal(f.data[M.settlements][0].Total_Paid, 40);
   assert.equal(f.data.Card_Purchases[0].Vendor_Payment, null);
@@ -113,7 +131,8 @@ test('recalculates every settlement including invoice splits without double coun
 test('credit note and refund amounts use negative signs and refund card status resets', async () => {
   const f = setup(); f.data.Card_Purchases[0].Transaction_Type = 'Refund';
   f.data[M.invoices].push({ id: 'credit', Invoice_Total: 20, Invoice_Type: 'Credit Note', Supplier_Settlement: lookup('s1'), Original_Invoice: lookup('i1') });
-  f.data[M.payAllocations].push({ id: 'refund', Supplier_Invoice: lookup('credit'), Supplier_Settlement: lookup('s1'), Allocated_Amount: 20 });
+  f.data[M.payments].push({id:'refund-payment',Status:'Paid',Payment_Amount:20});
+  f.data[M.payAllocations].push({ id: 'refund', Supplier_Invoice: lookup('credit'), Supplier_Payment:lookup('refund-payment'), Supplier_Settlement: lookup('s1'), Allocated_Amount: 20 });
   await f.service.execute('i1');
   assert.equal(f.data[M.invoices][0].Original_Invoice, null);
   assert.equal(f.data[M.settlements][0].Credit_Note_Amount, 20);
@@ -122,12 +141,19 @@ test('credit note and refund amounts use negative signs and refund card status r
   assert.equal(f.data.Card_Purchases[0].Accounting_Status, 'Pending credit note');
 });
 
-for (const [module, field, value] of [[M.invoices, 'Accounting_Status', 'Posted to Books'], [M.payments, 'Accounting_Status', 'Sent to Books'], [M.accountingEntries, 'Books_Post_Status', 'Posted']]) {
+for (const [module, field, value] of [[M.invoices, 'Zoho_Books_Document_Id', 'books-invoice-1'], [M.payments, 'Accounting_Status', 'Sent to Books'], [M.accountingEntries, 'Books_Post_Status', 'Posted']]) {
   test(`preflight blocks ${module}.${field}=${value} before any write`, async () => {
-    const f = setup(); f.data[module][0][field] = value;
+    const f = setup(); if(!f.data[module].length)f.data[module].push({id:'e1',Supplier_Invoice:lookup('i1')}); f.data[module][0][field] = value;
     await assert.rejects(f.service.execute('i1'), /Reverse/); assert.equal(f.writes.length, 0);
   });
 }
+
+test('obsolete invoice accounting fields do not lock deletion', async () => {
+  const f = setup();
+  Object.assign(f.data[M.invoices][0], { Accounting_Status: 'Posted to Books', Accounting_Posted_At: '2026-10-01' });
+  await f.service.execute('i1');
+  assert.equal(f.data[M.invoices].length, 0);
+});
 
 test('failed reads cannot turn into empty relation lists', async () => {
   const f = setup(); f.crm.searchRecordPage = async () => { throw new Error('No permission'); };
@@ -141,7 +167,7 @@ test('rejected settlement update keeps invoice and resumes after recreating the 
   const confirmedDeletes = f.writes.filter(w => w[0] === 'delete').length;
   f.setFail(null); await f.create().execute('i1');
   assert.equal(f.data[M.invoices].length, 0); assert.equal(f.saved.size, 0);
-  assert.equal(f.writes.filter(w => w[0] === 'delete').length, confirmedDeletes + 2); // payment and invoice
+  assert.equal(f.writes.filter(w => w[0] === 'delete').length, confirmedDeletes + 1); // invoice only; payment was already removed
 });
 
 test('loads and deletes more than one page of invoice lines', async () => {
@@ -195,13 +221,13 @@ test('repeated pagination stops before performing mutations', async () => {
 test('a resumed deletion checks accounting locks again', async () => {
   const f = setup(); f.setFail(m => m === M.settlements);
   await assert.rejects(f.service.execute('i1'), /Deletion incomplete/);
-  const count = f.writes.length; f.data[M.invoices][0].Accounting_Status = 'Posted to Books'; f.setFail(null);
+  const count = f.writes.length; f.data[M.invoices][0].Zoho_Books_Document_Id = 'books-invoice-1'; f.setFail(null);
   await assert.rejects(f.create().execute('i1'), /Reverse/); assert.equal(f.writes.length, count);
 });
 
 test('Deluge rebuild uses only valid settlement picklist states and checks update responses', () => {
-  const text = fs.readFileSync('_local/crm/crm_functions/rebuildSupplierSettlementTotals', 'utf8');
-  const schema = JSON.parse(fs.readFileSync('_local/crm/modules/Supplier_Settlements_fields')).fields;
+  const text = fs.readFileSync('crm/rebuildSupplierSettlementTotals.dg', 'utf8');
+  const schema = JSON.parse(fs.readFileSync('tests/fixtures/invoice-delete-schema.json')).Supplier_Settlements;
   const values = schema.find(f => f.api_name === 'Admin_Status').pick_list_values.map(v => v.actual_value);
   for (const match of text.matchAll(/nextStatus = "([^"]+)"/g)) { assert.ok(values.includes(match[1]), match[1]); }
   assert.match(text, /updateResult == null \|\| !updateResult.containKey\("id"\)/);
@@ -245,4 +271,29 @@ test('deleting one invoice removes only its prepayment allocation and reopens th
   assert.equal(f.data.Prepayments[0].Vendor_Payment,null);
   assert.equal(f.data[M.payments].length,1);
   assert.equal(f.data[M.payments][0].Payment_Amount,200);
+});
+
+test('pending invoice corrections block deletion before any dependent write', async () => {
+  const f = setup(); f.data[M.invoices][0].Edit_Status = 'Pending';
+  await assert.rejects(f.service.execute('i1'), /pending invoice registration or correction/);
+  assert.equal(f.writes.length, 0);
+});
+
+test('existing unposted accounting entries and lines block deletion without modifying them',async()=>{
+ for(const module of [M.accountingEntries,M.accountingEntryLines]){
+  const f=setup();f.data[module].push({id:'linked',Supplier_Invoice:lookup('i1')});
+  await assert.rejects(f.service.execute('i1'),/accounting entries or lines/);assert.equal(f.writes.length,0);assert.equal(f.data[module].length,1);
+ }
+});
+test('incomplete registration cannot be deleted',async()=>{
+ for(const status of ['Pending','Ready']){const f=setup();f.data[M.invoices][0].Registration_Status=status;await assert.rejects(f.service.execute('i1'),/pending invoice registration/);assert.equal(f.writes.length,0);}
+});
+test('retry recalculates from current paid allocations and payable totals, not old snapshots or draft payments',async()=>{
+ const f=setup();f.data[M.invoices].push({id:'i2',Invoice_Total:80,Total_Payable_Amount:120,Amount_Paid:0,Status:'Received',Supplier_Settlement:lookup('s1')});
+ f.data[M.payAllocations].push({id:'a2',Supplier_Invoice:lookup('i2'),Supplier_Payment:lookup('p1'),Allocated_Amount:100});
+ f.data[M.payments].push({id:'draft',Status:'Draft'});f.data[M.payAllocations].push({id:'draft-allocation',Supplier_Invoice:lookup('i2'),Supplier_Payment:lookup('draft'),Allocated_Amount:20});
+ f.setFail(m=>m===M.settlements);await assert.rejects(f.service.execute('i1'));
+ assert.equal(f.data[M.invoices].find(i=>i.id==='i2').Amount_Paid,100);assert.equal(f.data[M.invoices].find(i=>i.id==='i2').Status,'Partially Paid');
+ f.data[M.payAllocations].find(a=>a.id==='a2').Allocated_Amount=90;f.setFail(null);await f.create().execute('i1');
+ assert.equal(f.data[M.invoices][0].Amount_Paid,90);assert.equal(f.data[M.payments].find(p=>p.id==='p1').Payment_Amount,90);
 });

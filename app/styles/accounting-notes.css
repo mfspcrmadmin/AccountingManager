@@ -1,3 +1,4 @@
+@layer widget-views {
 .prepayment-context-actions { display: flex; align-items: center; gap: 8px; }
 .prepayment-notes-button { display: grid; place-items: center; width: 34px; height: 34px; padding: 7px; border: 1px solid #f1c5a3; border-radius: 9px; background: #fff5eb; color: #b95c19; cursor: pointer; }
 .prepayment-notes-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -41,3 +42,5 @@
 .accounting-note-context p { margin: 3px 0; font-size: 11px; }
 .accounting-note-context a { color: #ac5f22; font-weight: 600; font-size: 11px; }
 .accounting-note-context a small { display: inline; }
+
+}

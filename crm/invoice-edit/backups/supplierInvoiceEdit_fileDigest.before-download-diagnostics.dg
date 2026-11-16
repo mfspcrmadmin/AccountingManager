@@ -1,0 +1,35 @@
+string standalone.supplierInvoiceEdit_fileDigest(String fileId, String invoiceId, String attachmentId)
+{
+// Compare file bytes, not the temporary upload token with CRM's stored file id.
+if(attachmentId == "")
+{
+	if(!fileId.matches("[A-Za-z0-9_-]+"))
+	{
+		throw "Invalid uploaded invoice document identifier.";
+	}
+	url = "https://www.zohoapis.eu/crm/v8/files?id=" + fileId;
+}
+else
+{
+	if(!invoiceId.matches("[0-9]+") || !attachmentId.matches("[0-9]+"))
+	{
+		throw "Invalid saved invoice document identifier.";
+	}
+	url = "https://www.zohoapis.eu/crm/v8/Supplier_Invoices/" + invoiceId + "/actions/download_fields_attachment?fields_attachment_id=" + attachmentId;
+}
+document = invokeurl
+[
+	url :url
+	type :GET
+	connection:"crm_oauth_connection"
+];
+if(document == null || !document.isFile())
+{
+	throw "The invoice document could not be downloaded for verification. No document was removed; retry verification.";
+}
+if(document.getFileSize() <= 0)
+{
+	throw "The invoice document is empty and cannot be verified.";
+}
+return zoho.encryption.sha256(zoho.encryption.base64Encode(document));
+}

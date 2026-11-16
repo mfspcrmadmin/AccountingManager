@@ -1,0 +1,46 @@
+string standalone.comm_runQuotationArrivalReminders(String mode, String afterId)
+{
+mode = ifnull(mode,"preview").trim().toLowerCase();
+if(mode != "preview" && mode != "send")
+{
+	throw "Use preview or send.";
+}
+afterId = ifnull(afterId,"0").trim();
+if(afterId == "")
+{
+	afterId = "0";
+}
+if(!afterId.matches("[0-9]{1,19}"))
+{
+	throw "Invalid keyset cursor.";
+}
+today = zoho.currenttime.toString("yyyy-MM-dd","Europe/Madrid");
+batch = standalone.jobs_query("select id from Deals where ((Stage = 'Quotation' and Arrival_Date < '" + today + "') and id > '" + afterId + "') order by id asc limit 25").toMap();
+result = {"success":true,"mode":mode,"emails_sent":0,"records_written":0,"errors":0,"items":List(),"next_after_id":afterId,"more_records":batch.get("more_records")};
+items = List();
+for each row in ifnull(batch.get("data"),List())
+{
+	bookingId = row.get("id").toString();
+	try
+	{
+		item = standalone.comm_quotationArrivalReminder(bookingId,mode).toMap();
+		item.put("booking_id",bookingId);
+		items.add(item);
+		result.put("emails_sent",result.get("emails_sent") + ifnull(item.get("emails_sent"),0));
+		result.put("records_written",result.get("records_written") + ifnull(item.get("records_written"),0));
+		if(item.get("success") != true)
+		{
+			result.put("errors",result.get("errors") + 1);
+		}
+	}
+	catch(e)
+	{
+		result.put("errors",result.get("errors") + 1);
+		items.add({"booking_id":bookingId,"success":false,"message":e.toString()});
+	}
+	result.put("next_after_id",bookingId);
+}
+result.put("items",items);
+result.put("success",result.get("errors") == 0);
+return result.toString();
+}

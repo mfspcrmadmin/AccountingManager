@@ -1,6 +1,18 @@
 (function (global) {
 var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
+  ns.invoiceSelectionPaymentTotals = function (records, helpers, fieldCandidates) {
+    var totals = {};
+    records.forEach(function (invoice) {
+      var currency = invoice.Currency || "EUR";
+      var sign = helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType) === "Credit Note" ? -1 : 1;
+      var values = totals[currency] || (totals[currency] = { total: 0, pending: 0 });
+      values.total += Math.round(helpers.getInvoiceTotalAmount(invoice, fieldCandidates) * 100) * sign;
+      values.pending += Math.round(helpers.getInvoicePendingAmount(invoice, fieldCandidates) * 100) * sign;
+    });
+    return totals;
+  };
+
   ns.createInvoicesRenderer = function (deps) {
     var elements = deps.elements;
     var state = deps.state;
@@ -115,7 +127,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var close;
 
       modal.className = "operations-file-preview";
-      modal.innerHTML = '<div class="operations-file-preview-backdrop"></div><section class="operations-file-preview-card" role="dialog" aria-modal="true" aria-label="File preview"><header><strong>' + helpers.escapeHtml(file.name) + '</strong><button type="button" aria-label="Close">&times;</button></header><div class="operations-file-preview-content">Loading preview...</div></section>';
+      modal.innerHTML = '<div class="operations-file-preview-backdrop"></div><section class="operations-file-preview-card" role="dialog" aria-modal="true" aria-label="File preview"><header><strong>' + helpers.escapeHtml(file.name) + '</strong><button type="button" aria-label="Close" class="widget-popup-close" title="Close">&times;</button></header><div class="operations-file-preview-content">Loading preview...</div></section>';
       content = modal.querySelector(".operations-file-preview-content");
       close = function () {
         if (modal._objectUrl) { global.URL.revokeObjectURL(modal._objectUrl); }
@@ -242,12 +254,32 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.selectedInvoiceEmpty.hidden = true;
       elements.selectedInvoiceContent.hidden = false;
       elements.selectedInvoiceTitle.textContent = helpers.getInvoiceDisplayNumber(view.selectedInvoice, fieldCandidates);
+      if (elements.selectedInvoicePaymentSummary) {
+        var invoice = view.selectedInvoice;
+        var total = helpers.getInvoiceTotalAmount(invoice, fieldCandidates);
+        var pending = helpers.getInvoicePendingAmount(invoice, fieldCandidates);
+        var paid = Math.round((total - pending) * 100) / 100;
+        var currency = new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.Currency || "EUR" });
+        var credit = invoice.Invoice_Type === "Credit Note";
+        elements.selectedInvoiceSummaryTotal.textContent = Number.isFinite(total) ? currency.format(total) : "—";
+        elements.selectedInvoiceSummaryPaid.textContent = Number.isFinite(paid) ? currency.format(paid) : "—";
+        elements.selectedInvoiceSummaryPending.textContent = Number.isFinite(pending) ? currency.format(Math.abs(pending)) : "—";
+        elements.selectedInvoiceSummaryPaidLabel.textContent = credit ? "Refunded" : "Paid";
+        elements.selectedInvoiceSummaryPendingLabel.textContent = pending < 0 ? (credit ? "Over-refunded" : "Overpaid") : pending === 0 ? (credit ? "Fully refunded" : "Fully paid") : credit ? "Left to refund" : "Left to pay";
+        elements.selectedInvoicePaymentSummary.classList.toggle("is-settled", pending === 0);
+      }
       if (elements.selectedInvoiceCreatedBy) {
         elements.selectedInvoiceCreatedBy.textContent = "Created by " + helpers.textValue(helpers.getLookupName(
           view.selectedInvoice.Created_By || view.selectedInvoice.CreatedBy || view.selectedInvoice["Created By"]
         ));
       }
-      elements.selectedInvoiceStatus.textContent = helpers.textValue(view.selectedInvoice.Status);
+      elements.selectedInvoiceStatus.textContent = helpers.textValue(view.selectedInvoice.Status) + (view.selectedInvoice.Edit_Status === "Pending" ? " / Edit pending" : "");
+      elements.selectedInvoiceEdit.textContent = view.selectedInvoice.Edit_Status === "Pending" ? "Resume edit" : "Edit";
+      if (elements.selectedInvoiceFinalize) {
+        elements.selectedInvoiceFinalize.hidden = view.selectedInvoice.Invoice_Type !== "Proforma";
+        elements.selectedInvoiceFinalize.disabled = view.selectedInvoice.Edit_Status === "Pending";
+        elements.selectedInvoiceFinalize.title = view.selectedInvoice.Edit_Status === "Pending" ? "Resume the pending edit first" : "Replace the proforma with the final invoice";
+      }
       elements.selectedInvoiceStatus.className = "status-pill " + helpers.getStatusTone(view.selectedInvoice.Status);
       renderSelectedInvoiceAttachments(view.selectedInvoice);
       elements.selectedInvoiceSupplier.textContent = joinDisplayParts(
@@ -319,12 +351,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           fieldCandidates.invoice.invoiceTotal
         );
       }
-      if (elements.selectedInvoiceAccountingStatus) {
-        setTextWithTitle(elements.selectedInvoiceAccountingStatus, helpers.textValue(helpers.getCandidateValue(view.selectedInvoice, fieldCandidates.invoice.accountingStatus)));
-      }
-      if (elements.selectedInvoiceAccountingPostedAt) {
-        setTextWithTitle(elements.selectedInvoiceAccountingPostedAt, helpers.textValue(view.selectedInvoice.Accounting_Posted_At));
-      }
       elements.selectedInvoiceDeletePanel.hidden = !state.invoiceDeletion.isOpen;
       elements.selectedInvoiceDeleteUpdateSettlement.checked = true;
       if (elements.selectedInvoiceTabBasic) {
@@ -378,7 +404,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             "<tr>",
             "  <td>" + helpers.escapeHtml(helpers.formatDate(invoiceLine.Service_Date)) + "</td>",
             '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(invoiceLine.Amount)) + "</td>",
-            "  <td>" + helpers.escapeHtml(helpers.getLookupName(invoiceLine.Booking_Service) || invoiceLine.Name || "-") + "</td>",
+            "  <td>" + helpers.escapeHtml(invoiceLine._serviceProductDescription || "-") + "</td>",
             "</tr>"
           ].join("");
         }).join("");
@@ -415,10 +441,55 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.selectedInvoiceAllocationsTableWrap.hidden = false;
       }
 
+      if (view.lineTable) { ns.renderProgressiveTable(elements.selectedInvoiceLinesTableWrap, elements.selectedInvoiceLinesEmpty, view.lineTable, view.lineTable.onLoadMore); }
+      if (view.allocationTable) { ns.renderProgressiveTable(elements.selectedInvoiceAllocationsTableWrap, elements.selectedInvoiceAllocationsEmpty, view.allocationTable, view.allocationTable.onLoadMore); }
+
+    }
+
+    function renderInvoiceLoadState(view) {
+      var wrap = elements.invoicesTableWrap;
+      var footer = document.getElementById("invoices-load-status");
+      if (!footer) {
+        footer = document.createElement("div");
+        footer.id = "invoices-load-status";
+        footer.className = "invoice-load-status";
+        footer.setAttribute("role", "status");
+        footer.setAttribute("aria-live", "polite");
+      }
+      // Keep initial errors visible even when the empty table is hidden.
+      if (view.visibleRecords.length) { wrap.appendChild(footer); }
+      else { elements.invoicesEmpty.insertAdjacentElement("afterend", footer); }
+      wrap.setAttribute("aria-busy", view.loadingMore || view.loadingInitial ? "true" : "false");
+      footer.hidden = false;
+      if (view.loadingInitial || view.loadingMore) {
+        footer.innerHTML = '<span class="invoice-load-spinner" aria-hidden="true"></span><span>' +
+          (view.loadingInitial ? "Loading invoices..." : "Loading more invoices...") + '</span>';
+      } else if (view.loadError) {
+        footer.innerHTML = '<span>' + helpers.escapeHtml(view.loadError) + '</span><button type="button" class="button secondary compact-action-button">Retry</button>';
+        footer.querySelector("button").onclick = view.onRetry;
+      } else if (view.hasMore) {
+        footer.innerHTML = '<button type="button" class="button secondary compact-action-button">Load more invoices</button>';
+        footer.querySelector("button").onclick = view.onLoadMore;
+      } else {
+        footer.textContent = view.visibleRecords.length ? "All matching invoices loaded." : "";
+        footer.hidden = !view.visibleRecords.length;
+      }
+      var checkScroll = function () {
+        if (!wrap.hidden && state.currentTab === "invoices" && view.hasMore && !view.loadError &&
+            !view.loadingMore && !view.loadingInitial && wrap.clientHeight > 0 &&
+            wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 180) {
+          view.onLoadMore();
+        }
+      };
+      wrap.onscroll = checkScroll;
+      // Also fill a tall viewport when one batch does not create a scrollbar.
+      if (global.requestAnimationFrame) { global.requestAnimationFrame(checkScroll); }
     }
 
     function renderInvoiceTable(view, listState, callbacks) {
       var currentToggleAllInvoices;
+      var scrollTop = elements.invoicesTableWrap.scrollTop;
+      var scrollLeft = elements.invoicesTableWrap.scrollLeft;
       var invoiceColumns = [
         { key: "supplierCode", label: "Supplier code" }, { key: "mfsp", label: "MFSP" },
         { key: "invoice", label: "Invoice" }, { key: "attachment", label: "Attachment" },
@@ -429,15 +500,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var visibleInvoiceColumns = ns.tableColumns.visibleOrder("invoices").filter(function (key) { return key !== "attachment" || listState.showAttachments; });
 
       if (!view.filteredRecords.length) {
-        elements.invoicesEmpty.textContent = view.emptyMessage;
+        elements.invoicesEmpty.textContent = view.loadError ? "Could not load invoices." : view.emptyMessage;
         elements.invoicesEmpty.hidden = false;
         elements.invoicesTableWrap.hidden = true;
-        elements.invoicesPaginationBar.hidden = true;
         elements.invoicesTableBody.innerHTML = "";
         if (elements.toggleAllInvoices) {
           elements.toggleAllInvoices.checked = false;
           elements.toggleAllInvoices.indeterminate = false;
         }
+        renderInvoiceLoadState(view);
         return;
       }
 
@@ -487,7 +558,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           invoice: '<td><a class="supplier-inline-link invoice-native-link" href="#" data-invoice-open-native="' + helpers.escapeHtml(invoice.id) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</a></td>",
           attachment: '<td class="invoice-attachment-files-cell">' + attachmentMarkup + "</td>", date: "<td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
           total: '<td class="numeric-cell">' + helpers.escapeHtml(formatCandidateCurrency(invoice, fieldCandidates.invoice.totalPayableAmount, fieldCandidates.invoice.invoiceTotal)) + "</td>",
-          status: "<td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml(invoice.Status || "-") + "</span></td>", invoiceType: "<td>" + formatInvoiceTypeBadge(invoice) + "</td>"
+          status: "<td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + "\">" + helpers.escapeHtml((invoice.Status || "-") + (invoice.Edit_Status === "Pending" ? " / Edit pending" : "")) + "</span></td>", invoiceType: "<td>" + formatInvoiceTypeBadge(invoice) + "</td>"
         };
         return groupHeader + '<tr class="is-clickable' + (isActive ? " is-active" : "") + (isChecked ? " is-checked" : "") + '" data-invoice-id="' + helpers.escapeHtml(invoice.id) + '"><td class="checkbox-column"><input class="table-checkbox" type="checkbox" data-invoice-checkbox="' + helpers.escapeHtml(invoice.id) + '"' + (isChecked ? " checked" : "") + ' aria-label="Select invoice"></td>' + visibleInvoiceColumns.map(function (key) { return cells[key]; }).join("") + '<td class="table-columns-gear-cell"></td></tr>';
       }).join("");
@@ -497,10 +568,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       Array.prototype.forEach.call(elements.invoicesTableWrap.querySelectorAll(".invoice-results-table"), function (table) {
         table.classList.toggle("show-attachments-column", listState.showAttachments);
       });
-      elements.invoicesPaginationBar.hidden = true;
-      elements.invoicesPaginationCopy.textContent = view.pageSummary;
-      elements.invoicesPrevPage.disabled = state.isLoading || view.page <= 1;
-      elements.invoicesNextPage.disabled = state.isLoading || !view.hasMore;
       if (currentToggleAllInvoices) {
         currentToggleAllInvoices.checked = view.visibleRecords.length > 0 && view.selectedVisibleCount === view.visibleRecords.length;
         currentToggleAllInvoices.indeterminate = view.selectedVisibleCount > 0 && view.selectedVisibleCount < view.visibleRecords.length;
@@ -573,6 +640,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           callbacks.onToggleAll(currentToggleAllInvoices.checked, view.visibleRecords);
         };
       }
+      elements.invoicesTableWrap.scrollTop = scrollTop;
+      elements.invoicesTableWrap.scrollLeft = scrollLeft;
+      renderInvoiceLoadState(view);
 
     }
 
@@ -593,9 +663,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           "<tr>",
           "  <td>" + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</td>",
           "  <td>" + helpers.escapeHtml(supplierDisplay.code || "-") + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(
+          '  <td class="numeric-cell">' + helpers.escapeHtml(new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.Currency || "EUR" }).format(
             helpers.getInvoiceTotalAmount(invoice, fieldCandidates) *
             (helpers.textValue(helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType)) === "Credit Note" ? -1 : 1)
+          )) + "</td>",
+          '  <td class="numeric-cell">' + helpers.escapeHtml(new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.Currency || "EUR" }).format(
+            helpers.getInvoicePendingAmount(invoice, fieldCandidates) *
+            (helpers.getCandidateValue(invoice, fieldCandidates.invoice.invoiceType) === "Credit Note" ? -1 : 1)
           )) + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
           '  <td class="invoice-selection-remove-cell"><button class="invoice-selection-remove" type="button" data-remove-selected-invoice="' + helpers.escapeHtml(invoice.id) + '" aria-label="Remove invoice from selection" title="Remove from selection">&times;</button></td>',
@@ -669,7 +743,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.invoiceSummaryMatched.textContent = String(view.filteredRecords.length);
       elements.invoiceSummaryFilteredAmount.textContent = helpers.formatCurrency(view.filteredTotalAmount);
       elements.invoiceSummarySelectedCount.textContent = String(view.selectedFilteredRecords.length);
-      elements.invoiceSummarySelectedAmount.textContent = helpers.formatCurrency(view.selectedFilteredAmount);
+      var selectionTotals = ns.invoiceSelectionPaymentTotals(view.selectedFilteredRecords, helpers, fieldCandidates);
+      function selectionMoney(key) {
+        return Object.keys(selectionTotals).sort().map(function (currency) {
+          return new Intl.NumberFormat("en-GB", { style: "currency", currency: currency }).format(selectionTotals[currency][key] / 100);
+        }).join(" · ") || helpers.formatCurrency(0);
+      }
+      elements.invoiceSummarySelectedAmount.textContent = selectionMoney("total");
+      if (elements.invoiceSummarySelectedPending) { elements.invoiceSummarySelectedPending.textContent = selectionMoney("pending"); }
       elements.invoiceCreatePayment.hidden = view.selectedFilteredRecords.length === 0;
 
       if (elements.invoicesShowAttachments) {
@@ -685,6 +766,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     return {
+      formatInvoiceTypeBadge: formatInvoiceTypeBadge,
       renderInvoicesWorkspace: renderInvoicesWorkspace
     };
   };

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Accounting Manager</title>
     <link rel="stylesheet" href="./styles/theme.css">
+    <link rel="stylesheet" href="./styles/setup.css">
     <link rel="stylesheet" href="./styles/layout.css">
     <link rel="stylesheet" href="./styles/components.css">
     <link rel="stylesheet" href="./styles/inline-feedback.css">
@@ -17,25 +18,35 @@
     <link rel="stylesheet" href="./styles/explorer.css">
     <link rel="stylesheet" href="./styles/visual-refresh.css">
     <link rel="stylesheet" href="./styles/suppliers.css">
+    <link rel="stylesheet" href="./styles/supplier-invoice.css">
+    <link rel="stylesheet" href="./styles/prepayment-register.css">
+    <link rel="stylesheet" href="./styles/operation-edit.css">
     <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
     <link rel="stylesheet" href="./styles/accounting-notes.css">
+    <link rel="stylesheet" href="./styles/popup-controls.css">
+    <link rel="stylesheet" href="./styles/pending-operations.css">
+    <link rel="stylesheet" href="./styles/consistency-review.css">
     <script src="./scripts/accounting-notes-save.js"></script>
-  </head>
-  <body>
+    <link rel="stylesheet" href="./styles/progressive-table.css">
+    <link rel="stylesheet" href="./styles/ui-system.css">
+</head>
+  <body class="accounting-widget">
     <main class="shell">
       <header class="page-header">
         <nav class="tab-nav" aria-label="Main sections">
           <button class="tab-button" type="button" data-tab-button="operations">Operations</button>
           <button class="tab-button" type="button" data-tab-button="bookings">Bookings</button>
-          <button class="tab-button" type="button" data-tab-button="suppliers">Suppliers</button>
-          <button class="tab-button is-active" type="button" data-tab-button="invoices">Invoices</button>
+          <button class="tab-button is-active" type="button" data-tab-button="suppliers">Suppliers</button>
+          <button class="tab-button" type="button" data-tab-button="invoices">Invoices</button>
           <button class="tab-button" type="button" data-tab-button="payments">Payments</button>
           <button class="tab-button" type="button" data-tab-button="accounting">Accounting</button>
+          <button class="tab-button" type="button" data-tab-button="setup">Setup</button>
         </nav>
         <div class="quick-access" aria-label="Quick access">
           <button id="booking-actions-toggle" class="button secondary quick-actions-toggle" type="button" aria-label="Quick actions" title="Quick actions" aria-expanded="false" aria-controls="booking-actions-popup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg></button>
         </div>
       </header>
+      <details id="pending-operations" class="pending-operations" hidden></details>
 
       <section id="booking-actions-shortcut" class="quick-actions-aside" hidden role="dialog" aria-modal="true" aria-labelledby="booking-actions-title">
         <div id="booking-actions-backdrop" class="quick-actions-aside-backdrop"></div>
@@ -45,7 +56,7 @@
               <p class="panel-eyebrow">Workspace shortcuts</p>
               <h3 id="booking-actions-title">Quick actions</h3>
             </div>
-            <button id="booking-actions-close" class="quick-actions-aside-close" type="button" aria-label="Close quick actions">&times;</button>
+            <button id="booking-actions-close" class="widget-popup-close quick-actions-aside-close" type="button" aria-label="Close quick actions" title="Close">&times;</button>
           </header>
 
           <section class="quick-actions-aside-section">
@@ -81,6 +92,7 @@
       </section>
 
       <section id="booking-closure-popup" class="booking-closure-popup" role="dialog" aria-modal="true" aria-labelledby="booking-closure-title" hidden>
+        <div class="booking-closure-frame">
         <div class="booking-closure-card">
           <div class="panel-header booking-closure-header">
             <div class="booking-closure-heading">
@@ -93,11 +105,24 @@
             </div>
             <div id="booking-closure-controls" hidden></div>
             <div class="inline-actions booking-closure-window-actions">
+              <details class="booking-closure-actions closure-header-menu">
+                <summary aria-label="More trip closure actions" title="More actions">&#8942;</summary>
+                <div class="closure-header-menu-items">
+                  <button class="button secondary" type="button" data-booking-closure-rebuild="all" disabled>Recalculate all settlements</button>
+                  <button id="booking-closure-open-booking" class="button secondary" type="button" title="Open Booking to review payments and make manual corrections" disabled>Open Booking</button>
+                </div>
+              </details>
               <button id="booking-closure-refresh" class="button secondary icon-button refresh-icon-button" type="button" aria-label="Refresh trip closure" title="Refresh trip closure">&#8635;</button>
-              <button id="booking-closure-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
+              <button id="booking-closure-close" class="widget-popup-close close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
             </div>
           </div>
+          <div id="booking-closure-billing" class="booking-closure-billing" hidden>
+            <span id="booking-closure-invoice-status"></span>
+            <button id="booking-closure-invoice-trip" class="button primary" type="button" disabled>Invoice trip</button>
+          </div>
+          <div id="booking-closure-consistency" class="consistency-review" hidden></div>
           <div id="booking-closure-content"></div>
+        </div>
         </div>
       </section>
 
@@ -115,12 +140,19 @@
         </div>
       </section>
 
-      <section id="payment-create-feedback-popup" class="payment-create-feedback-popup" role="dialog" aria-modal="true" aria-labelledby="payment-create-feedback-title" hidden>
+      <section id="payment-create-feedback-popup" class="payment-create-feedback-popup" role="dialog" aria-modal="true" aria-labelledby="payment-create-feedback-title" aria-describedby="payment-create-feedback-message" tabindex="-1" hidden>
         <div class="payment-create-feedback-card">
           <span id="payment-create-feedback-spinner" class="payment-create-feedback-spinner" aria-hidden="true"></span>
           <p id="payment-create-feedback-eyebrow" class="payment-create-feedback-eyebrow">Creating payment</p>
           <h2 id="payment-create-feedback-title">Creating supplier payment...</h2>
-          <p id="payment-create-feedback-message">Preparing payment, allocations and related accounts.</p>
+          <p id="payment-create-feedback-message" role="status" aria-live="polite">Preparing payment, allocations and related accounts.</p>
+          <ol class="payment-progress-steps" aria-label="Payment progress">
+            <li data-payment-step="0" data-payment-next="3">Check invoices and payment</li>
+            <li data-payment-step="3" data-payment-next="5">Confirm invoice allocations</li>
+            <li data-payment-step="5" data-payment-next="7">Update balances and related operations</li>
+            <li data-payment-step="7" data-payment-next="9">Finish and refresh</li>
+          </ol>
+          <p class="payment-progress-note">Keep this window open. Large remittances can take several minutes.</p>
           <button id="payment-create-feedback-close" class="button primary" type="button" hidden>Close</button>
         </div>
       </section>
@@ -132,7 +164,7 @@
               <p class="booking-actions-eyebrow">Settlement detail</p>
               <h2 id="booking-closure-detail-title">Settlement</h2>
             </div>
-            <button id="booking-closure-detail-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
+            <button id="booking-closure-detail-close" class="widget-popup-close close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
           </div>
           <div id="booking-closure-detail-content"></div>
         </div>
@@ -145,7 +177,7 @@
               <p class="booking-actions-eyebrow">Booking action</p>
               <h2 id="agent-commission-title">Pay Agent Commission</h2>
             </div>
-            <button id="agent-commission-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
+            <button id="agent-commission-close" class="widget-popup-close close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
           </div>
           <p id="agent-commission-message" class="agent-commission-message" aria-live="polite"></p>
           <div class="inline-actions agent-commission-actions">
@@ -155,6 +187,35 @@
       </section>
 
       <section class="tab-panels">
+        <section id="tab-setup" class="tab-panel" data-tab-panel="setup" hidden>
+          <div class="setup-workspace">
+            <header class="setup-header"><h2>Setup</h2><span class="setup-badge"><span data-setup-icon="lock"></span>Read only</span></header>
+            <div class="setup-tabs" role="tablist" aria-label="Setup sections">
+              <button type="button" id="setup-tab-automation" role="tab" data-setup-tab="automation" aria-controls="setup-panel-automation" aria-selected="true" tabindex="0">Automations</button>
+              <button type="button" id="setup-tab-templates" role="tab" data-setup-tab="templates" aria-controls="setup-panel-templates" aria-selected="false" tabindex="-1">Email templates</button>
+              <button type="button" id="setup-tab-access" role="tab" data-setup-tab="access" aria-controls="setup-panel-access" aria-selected="false" tabindex="-1">Permissions</button>
+            </div>
+            <section id="setup-panel-automation" class="setup-card" role="tabpanel" aria-labelledby="setup-tab-automation" tabindex="0">
+              <div class="setup-notice"><span data-setup-icon="info"></span><div><strong>Automatic reminders disabled</strong><span>Missing invoice and Proforma to final invoice emails are disabled.</span></div><small>Last verified 23 Oct 2026 &middot; Not a live status</small></div>
+              <div class="setup-rule-grid">
+                <article class="setup-rule"><header><h3>Missing invoice</h3><span class="setup-badge">Disabled</span></header><dl class="setup-rule-fields"><div><dt>Status</dt><dd>Automatic sending disabled on <strong>23 Oct 2026</strong>.</dd></div><div><dt>Preview</dt><dd>The email template remains available for preview.</dd></div></dl></article>
+                <article class="setup-rule"><header><h3>Proforma to final invoice</h3><span class="setup-badge">Disabled</span></header><dl class="setup-rule-fields"><div><dt>Status</dt><dd>Automatic sending disabled on <strong>23 Oct 2026</strong>.</dd></div><div><dt>Preview</dt><dd>The email template remains available for preview.</dd></div></dl></article>
+              </div>
+              <dl class="setup-common"><div><dt>From / Reply-to</dt><dd>proveedores@madeforspainandportugal.com</dd></div><div><dt>Recipient priority</dt><dd><ol><li>AC &mdash; Accounts</li><li>RE &mdash; Reservas</li></ol><small>First valid contact email in CRM ID order. No generic vendor-email fallback.</small></dd></div></dl>
+              <details class="setup-disclosure"><summary><span data-setup-icon="chevron"></span>How requests are tracked</summary><dl class="setup-tracking"><div><dt>Delivery history</dt><dd>Each send is registered to prevent duplicates. Unconfirmed outcomes require review before retrying.</dd></div><div><dt>Incomplete data</dt><dd>Missing dates or contacts, incomplete invoice edits or registration, and ambiguous service associations block sending.</dd></div><div><dt>Service exclusions</dt><dd>Deleted, cancelled, NBTM and non-positive purchase cost services are excluded from missing-invoice requests.</dd></div><div><dt>Processing</dt><dd>The CRM schedule is disabled. No automatic requests are sent.</dd></div><div><dt>Creator</dt><dd>Creator remains active for invoices from the previous system. Separate scope confirmed on 16 Oct 2026.</dd></div></dl></details>
+            </section>
+            <section id="setup-panel-templates" class="setup-card" role="tabpanel" aria-labelledby="setup-tab-templates" tabindex="0" hidden>
+              <p class="setup-scope-note">Flows identified in this widget only; not a complete inventory of CRM workflows.</p>
+              <div class="setup-catalog"><aside class="setup-catalog-sidebar"><label class="setup-search-label" for="setup-template-search">Find a template</label><div class="setup-search"><span data-setup-icon="search"></span><input id="setup-template-search" type="search" placeholder="Search by name" autocomplete="off"></div><div id="setup-template-list" aria-label="Email flows"></div><p id="setup-template-empty" class="setup-muted" hidden>No templates match your search.</p></aside><section id="setup-template-detail" aria-label="Selected email flow"></section></div>
+            </section>
+            <section id="setup-panel-access" class="setup-card" role="tabpanel" aria-labelledby="setup-tab-access" tabindex="0" hidden>
+              <div class="setup-heading"><div><h3>CRM profile permissions</h3><p id="setup-user" class="setup-muted" role="status"></p></div><button id="setup-refresh" class="setup-icon-button" type="button" title="Refresh permissions" aria-label="Refresh permissions"><span data-setup-icon="refresh"></span></button></div>
+              <p class="setup-scope-note">CRM field permissions by profile. This is not a complete audit of each person's effective access.</p>
+              <div class="setup-filters"><label class="field"><span>Module</span><select id="setup-module"></select></label><div class="field"><label for="setup-profile">Profile</label><select id="setup-profile"><option value="">All profiles</option></select><details id="setup-profile-picker" class="setup-picker" hidden><summary aria-label="Select profile"><span id="setup-profile-caption">All profiles</span><span data-setup-icon="chevron"></span></summary><div class="setup-picker-menu"><label class="setup-search-label" for="setup-profile-search">Find a profile</label><input type="search" id="setup-profile-search" placeholder="Search profiles" autocomplete="off"><div id="setup-profile-options"></div></div></details></div><label class="field"><span>Field</span><input id="setup-field-search" type="search" placeholder="Search fields" autocomplete="off"></label></div>
+              <div id="setup-access-status" class="setup-access-status" role="status" aria-live="polite"></div><div id="setup-permission-table" class="setup-table-wrap" tabindex="0" role="region" aria-label="CRM field permissions" hidden><table><thead><tr><th scope="col">Field</th><th scope="col">Profile</th><th scope="col">Field access</th></tr></thead><tbody id="setup-access-rows"></tbody></table></div>
+            </section>
+          </div>
+        </section>
         <section id="tab-operations" class="tab-panel" data-tab-panel="operations" hidden>
           <section class="panel wide-panel operations-panel">
             <div class="panel-header operations-header">
@@ -188,6 +249,8 @@
                 <div class="prepayments-general-filters">
                   <label class="field"><span>MFSP reference</span><input type="search" data-prepayments-mfsp placeholder="MFSP reference"></label>
                   <label class="field"><span>Supplier code</span><input type="search" data-prepayments-supplier-code placeholder="Supplier code"></label>
+                  <label class="field"><span>Invoice number</span><input type="search" data-prepayments-invoice-number placeholder="Full or partial invoice number"></label>
+                  <label class="field"><span>Payment reference</span><input type="search" data-prepayments-payment-reference placeholder="e.g. PREPAY-616617000175980019"></label>
                   <label class="field"><span>Accounting status</span><select data-prepayments-accounting-status><option value="">All statuses</option><option value="Pending invoice">Pending invoice</option><option value="Pending payment record">Pending payment record</option><option value="Prepayment recorded">Prepayment recorded</option><option value="Cancelled">Cancelled</option><option value="Discard - Credit">Discard - Credit</option><option value="Discard - Already Paid">Discard - Already Paid</option><option value="No status">No status</option></select></label>
                   <label class="field"><span>Bank payment requested</span><select data-prepayments-bank-requested><option value="">All</option><option value="yes">Requested</option><option value="no">Not requested</option></select></label>
                   <label class="field"><span>Bank receipt needed</span><select data-prepayments-bank-receipt><option value="">All</option><option value="yes">Needed</option><option value="no">Not needed</option></select></label>
@@ -215,11 +278,27 @@
                   </div>
                 </div>
               </form>
+              <p data-prepayments-bank-result role="status" hidden></p>
+              <dialog class="prepayment-bank-preparation" data-prepayments-bank-preparation aria-labelledby="prepayment-bank-preparation-title" aria-describedby="prepayment-bank-preparation-message">
+                <span class="prepayment-bank-spinner" data-prepayments-bank-preparation-spinner aria-hidden="true"></span>
+                <span class="prepayment-bank-error-icon" data-prepayments-bank-preparation-error aria-hidden="true" hidden>!</span>
+                <h3 id="prepayment-bank-preparation-title" data-prepayments-bank-preparation-title>Preparing payment request…</h3>
+                <p id="prepayment-bank-preparation-message" data-prepayments-bank-preparation-message role="status" aria-live="polite"></p>
+                <details data-prepayments-bank-technical hidden><summary>Technical details</summary><pre data-prepayments-bank-technical-detail></pre></details>
+                <div class="prepayment-bank-preparation-actions">
+                  <button type="button" class="button tertiary" data-prepayments-bank-record hidden>Open payment account</button>
+                  <button type="button" class="button secondary" data-prepayments-bank-preparation-close>Close</button>
+                  <button type="button" class="button primary" data-prepayments-bank-retry hidden>Retry</button>
+                </div>
+              </dialog>
               <dialog class="prepayment-bank-dialog" data-prepayments-bank-dialog aria-labelledby="prepayment-bank-title">
                 <form data-prepayments-bank-form>
                   <header class="prepayment-bank-dialog-header">
                     <h3 id="prepayment-bank-title">Send bank payment request</h3>
+                    <button type="button" class="button tertiary prepayment-bank-close" data-prepayments-bank-close aria-label="Close payment request" title="Close">×</button>
+                    <p data-prepayments-bank-context></p>
                   </header>
+                  <div class="prepayment-bank-body">
                   <section class="prepayment-bank-details" aria-labelledby="prepayment-bank-details-title">
                     <h4 id="prepayment-bank-details-title">Email details</h4>
                     <div class="prepayment-bank-addresses">
@@ -232,9 +311,10 @@
                     <div class="prepayment-bank-preview-heading"><h4 id="prepayment-bank-preview-title">Email preview</h4><span class="prepayment-bank-editable-badge" id="prepayment-bank-editor-hint">Editable</span></div>
                     <div class="prepayment-bank-editor" role="textbox" aria-label="Email content" aria-multiline="true" aria-describedby="prepayment-bank-editor-hint" contenteditable="false" data-prepayments-bank-preview></div>
                   </section>
+                  </div>
                   <footer class="prepayment-bank-dialog-footer">
                     <p data-prepayments-bank-message role="status" aria-live="polite"></p>
-                    <div class="prepayment-bank-dialog-actions"><button type="button" class="button secondary" data-prepayments-bank-cancel>Close</button><button type="submit" class="button primary" data-prepayments-bank-send disabled>Send request</button></div>
+                    <div class="prepayment-bank-dialog-actions"><button type="button" class="button secondary" data-prepayments-bank-cancel>Close</button><button type="submit" class="button primary" data-prepayments-bank-send disabled><span class="prepayment-bank-spinner" data-prepayments-bank-send-spinner aria-hidden="true" hidden></span><span data-prepayments-bank-send-label>Send request</span></button></div>
                   </footer>
                 </form>
               </dialog>
@@ -273,7 +353,7 @@
                   <p id="prepayment-delete-description">This will delete the prepayment. If it is the last one, its request and service associations will also be removed, and service statuses will be recalculated.</p>
                   <p>Prepayments with associated invoices or payments cannot be deleted.</p>
                   <p class="operations-file-preview-error" data-prepayments-delete-error role="alert"></p>
-                  <div class="inline-actions"><button class="button secondary" type="button" data-prepayments-delete-cancel autofocus>Cancel</button><button class="button primary prepayment-delete-confirm" type="submit" data-prepayments-delete-submit>Delete prepayment</button></div>
+                  <div class="inline-actions"><button class="button secondary" type="button" data-prepayments-delete-cancel>Cancel</button><button class="button primary prepayment-delete-confirm" type="submit" data-prepayments-delete-submit>Delete prepayment</button></div>
                 </form>
               </dialog>
               <dialog class="prepayment-discard-dialog" data-prepayments-discard-dialog aria-labelledby="prepayment-discard-title">
@@ -288,35 +368,36 @@
               <div class="card-purchase-workflow-modal" data-prepayment-workflow hidden>
                 <div class="card-purchase-workflow-backdrop" data-prepayment-workflow-close></div>
                 <aside class="card-purchase-workflow-card prepayment-workflow-card" role="dialog" aria-modal="true" aria-labelledby="prepayment-workflow-title">
-                  <header><div><p class="panel-eyebrow">Supplier prepayment</p><h3 id="prepayment-workflow-title" data-prepayment-workflow-title>Register supplier invoice</h3></div><div class="prepayment-context-actions"><button class="prepayment-notes-button" type="button" data-prepayment-workflow-notes aria-label="Open Accounting Notes for this prepayment" title="Accounting Notes is currently unavailable." aria-disabled="true" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></svg></button><button class="card-purchase-workflow-close" type="button" data-prepayment-workflow-close aria-label="Close">&times;</button></div></header>
+                  <header><div><p class="panel-eyebrow">Supplier prepayment</p><h3 id="prepayment-workflow-title" data-prepayment-workflow-title>Register supplier invoice</h3></div><div class="prepayment-context-actions"><button class="prepayment-notes-button" type="button" data-prepayment-workflow-notes aria-label="Open Accounting Notes for this prepayment" title="Accounting Notes is currently unavailable." aria-disabled="true" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z"/><path d="M7 9h10M7 13h7"/></svg></button><button class="widget-popup-close card-purchase-workflow-close" type="button" data-prepayment-workflow-close aria-label="Close" title="Close">&times;</button></div></header>
                   <div class="prepayment-workflow-layout">
                   <section class="prepayment-workflow-summary" aria-label="Prepayment summary" tabindex="0">
                   <p class="panel-eyebrow">Prepayment overview</p>
                   <div class="card-purchase-workflow-context" data-prepayment-workflow-context></div>
                   <div class="prepayment-documents card-purchase-workflow-context" data-prepayment-workflow-documents></div>
-                  <details class="prepayment-services" open><summary><span>Associated services</span><button type="button" class="prepayment-services-edit" data-prepayment-workflow-services-edit data-service-edit aria-label="Edit associated services" title="Edit associated services" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary><p class="card-purchase-workflow-message" data-prepayment-workflow-services-message role="status" aria-live="polite" hidden></p><div data-prepayment-workflow-services aria-live="polite"></div></details>
                   <section class="prepayment-settlement invoice-create-summary-card" aria-label="Associated settlement">
-                    <div class="invoice-create-summary-card-heading"><h3>Settlement Financial Summary</h3></div>
+                    <div class="invoice-create-summary-card-heading"><h3>Settlement totals</h3></div>
                     <div data-prepayment-workflow-settlement-summary aria-live="polite"></div>
                   </section>
+                  <details class="prepayment-services" open><summary><span>Associated services</span><span data-prepayment-workflow-service-count class="prepayment-service-count"></span><span data-prepayment-workflow-service-total class="associated-services-total"></span><button type="button" class="prepayment-services-edit" data-prepayment-workflow-services-edit data-service-edit aria-label="Edit associated services" title="Edit associated services" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary><p class="card-purchase-workflow-message" data-prepayment-workflow-services-message role="status" aria-live="polite" hidden></p><div data-prepayment-workflow-services aria-live="polite"></div></details>
                       <section data-prepayment-workflow-allocations aria-label="Associated invoices"></section>
                   </section>
-                  <form class="prepayment-workflow-form" data-prepayment-workflow-form>
+                  <form id="prepayment-register-form" class="prepayment-workflow-form" data-prepayment-workflow-form>
                     <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-fields>
                       <fieldset class="prepayment-workflow-fieldset" data-prepayment-workflow-invoice-fields>
-                        <label class="field"><span>Amount of this prepayment applied to the invoice</span><input type="number" min="0.01" step="0.01" data-prepayment-workflow-allocated required></label>
+                        <h4 class="prepayment-form-heading">Invoice</h4>
                         <label class="field"><span>Invoice</span><select data-prepayment-workflow-existing></select></label>
                         <fieldset class="prepayment-workflow-fieldset card-purchase-workflow-fields" data-prepayment-workflow-new-invoice>
                           <label class="field"><span>Settlement</span><select data-prepayment-workflow-settlement required></select></label>
                           <label class="field"><span>Invoice type</span><select data-prepayment-workflow-invoice-type required><option value="Proforma" selected>Proforma</option><option value="Final Invoice">Final Invoice</option><option value="Tickets">Tickets</option><option value="Commission">Commission</option></select></label>
                           <label class="field"><span>Invoice number</span><input data-prepayment-workflow-reference required></label>
                           <label class="field"><span>Invoice date</span><input type="date" data-prepayment-workflow-date required></label>
-                          <label class="field"><span>Invoice total incl. VAT</span><input type="number" min="0.01" step="0.01" data-prepayment-workflow-amount required></label>
+                          <h4 class="prepayment-form-heading">Amounts &amp; taxes</h4><label class="field"><span>Invoice total incl. VAT</span><div class="prepayment-money-control"><input type="number" min="0.01" step="0.01" data-prepayment-workflow-amount required><span data-prepayment-money-unit aria-hidden="true"></span></div></label>
                           <label class="field"><span>VAT %</span><input type="number" min="0" step="0.01" data-prepayment-workflow-vat value="0" required></label>
                           <label class="field"><span>IRPF %</span><input type="number" min="0" step="0.01" data-prepayment-workflow-irpf value="0" required></label>
-                          <label class="field"><span>IRPF amount</span><input type="number" step="0.01" data-prepayment-workflow-irpf-amount readonly></label>
-                          <label class="field"><span>Total payable after IRPF</span><input type="number" step="0.01" data-prepayment-workflow-total-payable readonly></label>
+                          <label class="field"><span>IRPF amount</span><div class="prepayment-money-control"><input type="number" step="0.01" data-prepayment-workflow-irpf-amount readonly tabindex="-1" class="prepayment-calculated" hidden aria-hidden="true"><output data-prepayment-summary="irpf-amount" class="prepayment-calculated-summary"></output><span data-prepayment-money-unit aria-hidden="true"></span></div></label>
+                          <label class="field"><span>Total payable after IRPF</span><div class="prepayment-money-control"><input type="number" step="0.01" data-prepayment-workflow-total-payable readonly tabindex="-1" class="prepayment-calculated" hidden aria-hidden="true"><output data-prepayment-summary="total-payable" class="prepayment-calculated-summary"></output><span data-prepayment-money-unit aria-hidden="true"></span></div></label>
                         </fieldset>
+<section class="prepayment-allocation-group"><h4>Prepayment allocation</h4><label class="field"><span title="Amount of this prepayment applied to the invoice">Amount applied</span><div class="prepayment-money-control"><input type="number" min="0.01" step="0.01" data-prepayment-workflow-allocated required><span data-prepayment-money-unit aria-hidden="true"></span></div></label><p data-prepayment-workflow-available class="prepayment-secondary"></p></section>
                       </fieldset>
                       <fieldset class="prepayment-workflow-fieldset card-purchase-workflow-fields" data-prepayment-workflow-payment-fields hidden disabled>
                         <label class="field"><span>Payment reference <span aria-hidden="true">*</span></span><input data-prepayment-workflow-payment-reference readonly aria-required="true"></label>
@@ -338,13 +419,14 @@
                         <button class="button secondary" type="button" data-prepayment-workflow-self-employed-no>No, reset IRPF</button>
                       </div>
                     </section>
-                    <div class="inline-actions card-purchase-workflow-actions">
-                      <p class="card-purchase-workflow-message" data-prepayment-workflow-message aria-live="polite"></p>
-                      <span class="card-purchase-workflow-spinner" data-prepayment-workflow-spinner role="status" aria-label="Saving" hidden></span>
-                      <button class="button primary" type="submit" data-prepayment-workflow-submit>Create invoice</button>
-                    </div>
+
                   </form>
                   </div>
+<footer class="prepayment-fixed-footer"><button type="button" class="button secondary" data-prepayment-workflow-close>Cancel</button>
+                      <p class="card-purchase-workflow-message" data-prepayment-workflow-message aria-live="polite"></p>
+                      <span class="card-purchase-workflow-spinner" data-prepayment-workflow-spinner role="status" aria-label="Saving" hidden></span>
+                      <button class="button primary" type="submit" form="prepayment-register-form" data-prepayment-workflow-submit>Create invoice</button>
+                    </footer>
                 </aside>
               </div>
               <div class="pagination-bar" data-prepayments-pager hidden><button type="button" class="button secondary" data-prepayments-previous>Previous</button><span data-prepayments-page-copy></span><button type="button" class="button secondary" data-prepayments-next>Next</button></div>
@@ -353,12 +435,12 @@
             <div id="operations-filters" class="table-filter-bar operations-filters-grid" hidden>
               <label id="operations-filter-status-field" class="field">
                 <span>Search</span>
-                <input id="operations-filter-search" type="search" placeholder="Reference, supplier or booking">
+                <input id="operations-filter-search" type="search" placeholder="MFSP, booking or ticket locator">
               </label>
               <details class="table-filters-popover">
                 <summary>Filters</summary>
                 <div class="table-filters-panel filters-grid">
-                  <label id="operations-filter-from-field" class="field">
+                  <label id="operations-filter-from-field" class="field" hidden>
                     <span>Status</span>
                     <select id="operations-filter-status">
                       <option value="">All statuses</option>
@@ -368,11 +450,11 @@
                     </select>
                   </label>
                   <label id="operations-filter-to-field" class="field">
-                    <span>From</span>
+                    <span>Requested from</span>
                     <input id="operations-filter-from" type="date">
                   </label>
                   <label class="field">
-                    <span>To</span>
+                    <span>Requested to</span>
                     <input id="operations-filter-to" type="date">
                   </label>
                 </div>
@@ -447,9 +529,14 @@
 
             <section id="ministry-traveller-register" class="ministry-traveller-register" hidden>
               <div class="ministry-traveller-register-toolbar">
-                <label class="field"><span>Date range</span><select id="ministry-date-preset"><option value="last-7-days">Last 7 days</option><option value="last-month">Last month</option><option value="last-30-days">Last 30 days</option><option value="next-7-days">Next 7 days</option><option value="next-month">Next month</option><option value="next-30-days">Next 30 days</option><option value="specific" selected>Specific range</option></select></label>
-                <label class="field"><span>Check-in from</span><input id="ministry-check-in-from" type="date"></label>
-                <label class="field"><span>Check-out to</span><input id="ministry-check-out-to" type="date"></label>
+                <div class="field ministry-date-filter"><span id="ministry-check-in-label">Check-in</span><div class="ministry-date-controls" role="group" aria-labelledby="ministry-check-in-label">
+                  <select id="ministry-check-in-mode" aria-label="Check-in filter"><option value="single">Single date</option><option value="range">Between</option><option value="last-7-days">Last 7 days</option><option value="last-month">Last month</option><option value="last-30-days">Last 30 days</option><option value="next-7-days">Next 7 days</option><option value="next-month">Next month</option><option value="next-30-days">Next 30 days</option></select>
+                  <input id="ministry-check-in-from" type="date" aria-label="Check-in date or range start"><input id="ministry-check-in-to" type="date" aria-label="Check-in range end" hidden>
+                </div></div>
+                <div class="field ministry-date-filter"><span id="ministry-check-out-label">Check-out</span><div class="ministry-date-controls" role="group" aria-labelledby="ministry-check-out-label">
+                  <select id="ministry-check-out-mode" aria-label="Check-out filter"><option value="any" selected>Any</option><option value="single">Single date</option><option value="range">Between</option><option value="last-7-days">Last 7 days</option><option value="last-month">Last month</option><option value="last-30-days">Last 30 days</option><option value="next-7-days">Next 7 days</option><option value="next-month">Next month</option><option value="next-30-days">Next 30 days</option></select>
+                  <input id="ministry-check-out-from" type="date" aria-label="Check-out date or range start"><input id="ministry-check-out-to" type="date" aria-label="Check-out range end" hidden>
+                </div></div>
                 <label class="field"><span>MFSP</span><input id="ministry-filter-mfsp" type="search" placeholder="MFSP reference"></label>
                 <label class="field"><span>Supplier code</span><input id="ministry-filter-supplier-code" type="search" placeholder="Connection reference"></label>
                 <div class="ministry-traveller-register-actions">
@@ -478,7 +565,7 @@
                     <h2 id="ministry-export-picker-title">Choose travelers for export</h2>
                     <p>Select one traveler for each booking and hotel.</p>
                   </div>
-                  <button class="button secondary ministry-export-picker-close" type="button" data-ministry-export-close aria-label="Close" title="Close">&times;</button>
+                  <button class="widget-popup-close button secondary ministry-export-picker-close" type="button" data-ministry-export-close aria-label="Close" title="Close">&times;</button>
                 </header>
                 <div id="ministry-export-picker-list" class="ministry-export-picker-list"></div>
                 <footer>
@@ -514,17 +601,21 @@
                     <p id="card-purchase-workflow-eyebrow" class="panel-eyebrow">Card purchase</p>
                     <h3 id="card-purchase-workflow-title">Record card purchase</h3>
                   </div>
-                  <button class="card-purchase-workflow-close" type="button" data-card-purchase-close aria-label="Close">&times;</button>
+                  <button class="widget-popup-close card-purchase-workflow-close" type="button" data-card-purchase-close aria-label="Close" title="Close">&times;</button>
                 </header>
                 <div class="prepayment-workflow-layout">
                 <section class="prepayment-workflow-summary" aria-label="Card purchase summary" tabindex="0">
                   <p class="panel-eyebrow">Card purchase overview</p>
                   <div id="card-purchase-workflow-context" class="card-purchase-workflow-context"></div>
+                  <section class="prepayment-settlement invoice-create-summary-card" aria-label="Associated settlement">
+                    <div class="invoice-create-summary-card-heading"><h3>Settlement totals</h3></div>
+                    <div id="card-purchase-settlement-summary" aria-live="polite"></div>
+                  </section>
                   <details class="prepayment-services" id="card-purchase-services" open>
-                    <summary><span>Associated Service</span><button type="button" id="card-purchase-service-edit" class="prepayment-services-edit" aria-label="Edit associated service" title="Edit associated service" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary>
+                    <summary><span>Associated services</span><span id="card-purchase-services-count" class="card-reading-count">(0)</span><span id="card-purchase-services-total" class="associated-services-total"></span><button type="button" id="card-purchase-service-edit" class="prepayment-services-edit" aria-label="Edit associated service" title="Edit associated service" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5M4 15 16 3a2 2 0 0 1 5 5L9 20l-6 1Z"/></svg></button></summary>
                     <p id="card-purchase-service-message" class="card-purchase-workflow-message" role="status" aria-live="polite" hidden></p>
                     <div id="card-purchase-workflow-service" aria-live="polite"></div>
-                  </details>
+                  </details><section id="card-purchase-associated-invoices" class="associated-invoices-block" aria-label="Associated invoices"></section>
                 </section>
                 <form id="card-purchase-workflow-form" class="prepayment-workflow-form card-purchase-workflow-form" novalidate>
                   <div id="card-purchase-workflow-invoice-fields" class="card-purchase-workflow-fields">
@@ -532,7 +623,7 @@
                     <label class="field"><span id="card-purchase-reference-label">Invoice number</span><input id="card-purchase-reference" required></label>
                     <label class="field"><span>Invoice type</span><select id="card-purchase-invoice-type"><option value="Tickets" selected>Tickets</option><option value="Final Invoice">Final Invoice</option><option value="Proforma">Proforma</option><option value="Commission">Commission</option></select></label>
                     <label class="field"><span id="card-purchase-date-label">Invoice date</span><input id="card-purchase-date" type="date" required></label>
-                    <label class="field"><span>Amount incl. VAT</span><input id="card-purchase-amount" type="number" min="0.01" step="0.01" required></label>
+                    <label class="field"><span id="card-purchase-amount-label">Amount incl. VAT</span><input id="card-purchase-amount" type="number" min="0.01" step="0.01" required></label>
                     <label class="field"><span>VAT %</span><input id="card-purchase-vat" type="number" min="0" step="0.01" value="0"></label>
                   </div>
                   <div id="card-purchase-workflow-payment-fields" class="card-purchase-workflow-fields" hidden>
@@ -540,6 +631,7 @@
                     <label class="field"><span>Payment date</span><input id="card-purchase-payment-date" type="date" required></label>
                     <label class="field card-purchase-payment-account-field"><span>Payment account (Own)</span><select id="card-purchase-payment-account"></select></label>
                   </div>
+                  <section id="card-alhambra-commission" class="card-alhambra-commission" hidden aria-label="Alhambra and Iacpos breakdown"></section>
                   <div class="card-purchase-workflow-decision-divider" aria-hidden="true"></div>
                   <label class="field"><span>Review notes</span><textarea id="card-purchase-review-notes" rows="3" placeholder="Optional note for accounting or reservations"></textarea></label>
                   <div class="inline-actions card-purchase-workflow-actions">
@@ -607,6 +699,7 @@
                 <span>MFSP Reference</span>
                 <input id="bookings-filter-mfsp" type="search" placeholder="MFSP reference">
               </label>
+              <label class="field"><span>Booking name</span><input id="bookings-filter-name" type="search" placeholder="Booking name"></label>
               <label class="field bookings-date-filter-field">
                 <span>Arrival Date</span>
                 <div class="bookings-date-filter-controls">
@@ -670,12 +763,6 @@
                 <tbody id="bookings-table-body"></tbody>
               </table>
             </div>
-
-            <div id="bookings-pagination-bar" class="pagination-bar" hidden>
-              <button id="bookings-prev-page" class="button secondary" type="button">Previous</button>
-              <span id="bookings-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-              <button id="bookings-next-page" class="button secondary" type="button">Next</button>
-            </div>
           </section>
         </section>
 
@@ -686,32 +773,32 @@
                 <div class="supplier-rail-section-heading">
                   <h1 class="supplier-page-title">Suppliers</h1>
                 </div>
+                <div class="supplier-search-area">
                 <div class="search-bar compact-search-bar supplier-toolbar-search supplier-rail-search">
                   <label class="field search-field supplier-toolbar-field">
                     <input
                       id="supplier-search"
                       type="search"
-                      list="supplier-options"
+                      autocomplete="off"
+                      aria-controls="search-results-card"
+                      aria-expanded="false"
                       aria-label="Search supplier"
-                      placeholder="Supplier name, CIF/NIF, connection reference or Ezus reference"
+                      placeholder="Search suppliers&hellip;" aria-describedby="supplier-search-feedback"
                     >
                     <datalist id="supplier-options"></datalist>
                   </label>
-                  <button id="clear-supplier-search" class="supplier-search-clear" type="button" aria-label="Clear search text" title="Clear search text" hidden>&times;</button>
+                  <div class="supplier-search-actions">
+                  <button id="clear-supplier-search" class="supplier-search-clear" type="button" aria-label="Clear search text" title="Clear search text" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                   <button
                     id="load-supplier"
                     class="button secondary icon-button supplier-load-button"
                     type="button"
                     aria-label="Search supplier"
                     title="Search supplier"
-                  ><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+                  ><span id="supplier-search-spinner" class="inline-feedback-spinner" role="status" aria-label="Searching suppliers" hidden></span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
                 </div>
-              </section>
-              <div id="supplier-info-empty" class="supplier-onboarding">
-                <p>Select a supplier to view accounting details</p>
-                <button id="focus-supplier-search" type="button" hidden>Search suppliers</button>
-              </div>
-
+                </div>
+                <div id="supplier-search-feedback"></div>
               <section id="search-results-card" class="supplier-rail-section search-results-panel" hidden>
                 <div class="panel-header">
                   <h2 class="panel-kicker-title">Matching suppliers</h2>
@@ -735,6 +822,14 @@
                   </table>
                 </div>
               </section>
+                </div>
+                <aside id="supplier-feedback-rail" aria-label="Supplier messages"></aside>
+              </section>
+              <div id="supplier-info-empty" class="supplier-onboarding">
+                <button id="focus-supplier-search" type="button" hidden>Search suppliers</button>
+              </div>
+
+
             </aside>
 
             <section id="supplier-workspace-main" class="supplier-main-stack supplier-main-shell">
@@ -763,7 +858,7 @@
                         <button id="see-supplier-in-ezus" class="button secondary compact-action-button supplier-quick-link" type="button" hidden disabled>Open in Ezus <span aria-hidden="true">↗</span></button>
                       </div>
                     </div>
-                    <button id="close-supplier-workspace" class="close-supplier-control" type="button" aria-label="Clear selected supplier" title="Clear selected supplier" hidden disabled>&times;</button>
+                    <button id="close-supplier-workspace" class="widget-popup-close close-supplier-control" type="button" aria-label="Clear selected supplier" title="Clear selected supplier" hidden disabled>&times;</button>
                   </header>
 
                   <div id="supplier-activity-stats" class="activity-stats-grid supplier-financial-summary" hidden>
@@ -809,6 +904,7 @@
                       <tr>
                         <th data-supplier-invoice-sort="invoice">Invoice</th>
                         <th data-supplier-invoice-sort="status">Status</th>
+                        <th data-supplier-invoice-sort="invoiceType">Invoice Type</th>
                         <th data-supplier-invoice-sort="date">Invoice Date</th>
                         <th>Payment Dates</th>
                         <th data-supplier-invoice-sort="booking">Booking</th>
@@ -829,6 +925,7 @@
                   <table class="results-table">
                     <thead>
                       <tr>
+                        <th aria-label="Payment letter"></th>
                         <th>Payment</th>
                         <th>Status</th>
                         <th>Payment Date</th>
@@ -847,9 +944,12 @@
                   <div class="panel-header">
                     <div>
                       <p id="supplier-activity-detail-eyebrow" class="panel-kicker">Details</p>
-                      <h2 id="supplier-activity-detail-title">Details</h2>
+                      <div class="supplier-activity-title-row">
+                        <h2 id="supplier-activity-detail-title">Details</h2>
+                        <span id="supplier-activity-detail-status" class="supplier-invoice-status" hidden></span>
+                      </div>
                     </div>
-                    <button id="supplier-activity-detail-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
+                    <button id="supplier-activity-detail-close" class="widget-popup-close close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
                   </div>
                   <div id="supplier-activity-detail-content"></div>
                 </div>
@@ -857,128 +957,92 @@
             </section>
           </div>
 
-          <section
-            id="invoice-create-panel"
-            class="panel embedded-invoice-panel widget-popup-panel invoice-create-popup"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="invoice-create-title"
-            hidden
-          >
-            <div class="panel-header">
+          <section id="invoice-create-panel" class="panel embedded-invoice-panel widget-popup-panel invoice-create-popup supplier-invoice-single" role="dialog" aria-modal="true" aria-labelledby="invoice-create-title" hidden=""><div class="panel-header">
               <div>
-                <div class="invoice-create-title-context"><h2 id="invoice-create-title">Create supplier invoice</h2><div id="invoice-create-header-supplier" hidden></div></div>
+                <div class="invoice-create-title-context"><h2 id="invoice-create-title">Create supplier invoice</h2><div id="invoice-create-header-supplier" hidden=""></div></div>
               </div>
               <div class="inline-actions">
-                <span id="invoice-create-mode-badge" class="badge subtle">Supplier context required</span>
-                <button id="invoice-create-close" class="close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
+
+                <button id="invoice-create-close" class="widget-popup-close close-supplier-control" type="button" aria-label="Close" title="Close">&times;</button>
               </div>
-            </div>
-
-            <form id="invoice-create-form" class="invoice-form invoice-create-form-shell" novalidate>
-              <section class="invoice-create-steps-shell">
-                <div class="invoice-create-steps-layout">
-                  <div class="invoice-create-step-main">
-                    <section id="invoice-create-step-settlement" class="invoice-create-step invoice-create-step-panel">
-                      <div class="section-heading invoice-create-step-heading">
-                        <h3><span class="invoice-create-step-kicker">Step 1</span> · Settlement &amp; document</h3>
-                      </div>
-
-                      <div class="invoice-create-inline-section-heading"><span>Select settlement</span></div>
-                      <div id="invoice-create-settlement-selector-panel" class="settlement-selector-panel invoice-create-settlement-browser">
+            </div><form id="invoice-create-form" class="invoice-form invoice-create-form-shell" novalidate=""><div class="supplier-invoice-layout"><aside class="supplier-invoice-context" id="invoice-create-step-settlement"><div class="supplier-invoice-section-heading"><h3>Settlements</h3></div><section id="invoice-create-calculation" class="settlement-calculation" aria-label="Settlement calculation" hidden=""><div class="calculation-line"><button id="invoice-create-calculation-toggle" type="button" class="calculation-toggle" aria-expanded="false" aria-controls="invoice-create-calculation-details"><svg class="calculation-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg><span id="invoice-create-calculation-summary">Calculation status</span><span id="invoice-create-calculation-count" class="calculation-badge">0</span></button><button id="invoice-create-calculation-refresh" class="button secondary icon-button" type="button" title="Check calculation status" aria-label="Check calculation status"><svg class="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg></button></div><div class="calculation-check-line"><span id="invoice-create-calculation-checked" role="status"></span><span class="calculation-help"><button type="button" aria-label="About calculation checks" aria-describedby="invoice-create-calculation-help">i</button><span id="invoice-create-calculation-help" role="tooltip"></span></span></div><div id="invoice-create-calculation-details" hidden><div id="invoice-create-calculation-rows" class="settlement-calculation-rows" tabindex="0" role="region" aria-label="Booking calculation status"></div></div><p id="invoice-create-calculation-warning" role="status" hidden=""></p></section><button id="invoice-create-selection-toggle" class="settlement-list-toggle" type="button" title="Hide settlement list" aria-label="Hide settlement list" aria-expanded="true" aria-controls="invoice-create-settlement-selector-panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg><span>Settlement list</span><span data-settlement-toggle-action>Hide list</span></button><div id="invoice-create-settlement-selector-panel" class="settlement-selector-panel invoice-create-settlement-browser">
                         <div class="table-filter-bar settlement-filter-grid">
                           <label class="field settlement-filter-search-field">
-                            <span>Settlement code</span>
-                            <input
-                              id="invoice-create-settlement-search"
-                              type="search"
-                              placeholder="Search settlement code"
-                              autocomplete="off"
-                              disabled
-                            >
+                            <span>Search settlements</span>
+                            <input id="invoice-create-settlement-search" type="search" placeholder="Settlement, booking or reference" autocomplete="off" disabled="">
                           </label>
 
                           <div id="invoice-create-settlement-status-field" class="field bookings-stage-filter-field settlement-status-filter-field">
                             <span>Status</span>
-                            <button
-                              id="invoice-create-settlement-status-toggle"
-                              class="button secondary bookings-stage-toggle"
-                              type="button"
-                              aria-expanded="false"
-                              aria-controls="invoice-create-settlement-status-menu"
-                              disabled
-                            >Statuses</button>
-                            <div id="invoice-create-settlement-status-menu" class="bookings-stage-menu" hidden></div>
+                            <button id="invoice-create-settlement-status-toggle" class="button secondary bookings-stage-toggle" type="button" aria-expanded="false" aria-controls="invoice-create-settlement-status-menu" disabled="">Statuses</button>
+                            <div id="invoice-create-settlement-status-menu" class="bookings-stage-menu" hidden=""></div>
                           </div>
 
-                          <button
-                            id="invoice-create-settlement-refresh"
-                            class="button secondary icon-button refresh-icon-button settlement-filter-refresh-button"
-                            type="button"
-                            aria-label="Refresh settlements"
-                            title="Refresh settlements"
-                            disabled
-                          >&#8635;</button>
+                          <button id="invoice-create-settlement-refresh" class="button secondary icon-button refresh-icon-button settlement-filter-refresh-button" type="button" aria-label="Refresh settlements" title="Refresh settlements" disabled="">↻</button>
                         </div>
 
-                        <div id="invoice-create-settlement-empty" class="empty-state compact-empty" hidden>
+                        <div id="invoice-create-settlement-empty" class="empty-state compact-empty" hidden="">
                           No Supplier Settlements match the current filters.
                         </div>
 
-                        <div id="invoice-create-settlement-table-wrap" class="table-wrap compact-table-wrap settlement-table-wrap-full" hidden>
-                          <table class="results-table compact-results-table invoice-create-settlement-table">
-                            <thead>
-                              <tr>
-                                <th class="checkbox-cell" aria-label="Select"></th>
-                                <th>Settlement</th>
-                                <th>Status</th>
-                                <th class="numeric-cell">Total service cost</th>
-                                <th class="numeric-cell">Total invoice</th>
-                                <th class="numeric-cell">Unpaid invoice amount</th>
-                              </tr>
-                            </thead>
-                            <tbody id="invoice-create-settlement-table-body"></tbody>
-                          </table>
-                        </div>
+                        <div id="invoice-create-settlement-table-wrap" class="table-wrap compact-table-wrap settlement-table-wrap-full" hidden=""><div id="invoice-create-settlement-table-body" class="supplier-settlement-list" role="group" aria-label="Available settlements"></div></div>
+                      </div><div class="supplier-settlement-selection" id="invoice-create-selected-settlement-panel"><span id="invoice-create-selected-settlement-name"></span><button id="invoice-create-select-other-settlement" class="button secondary icon-button" type="button" title="Edit settlement selection" aria-label="Edit settlement selection">✎</button></div><p class="supplier-context-empty" id="invoice-create-summary-empty">Select one or more settlements to view their totals.</p><section class="invoice-create-summary-card" id="invoice-create-financial-summary">
+                      <div class="invoice-create-summary-card-heading">
+                        <h3 id="invoice-create-summary-title">Settlement totals</h3>
+                        <span id="invoice-create-settlement-status" class="status-pill neutral">-</span>
                       </div>
 
-                      <section id="invoice-create-document-fields" class="invoice-create-document-fields" hidden>
+                      <div class="invoice-create-summary-grid"><div class="invoice-create-summary-item invoice-create-summary-item-highlight">
+                          <span>Pending invoicing</span>
+                          <strong id="invoice-create-settlement-this-invoice">-</strong>
+                        </div>
+                        <div class="invoice-create-summary-item">
+                          <span>Total service cost</span>
+                          <strong id="invoice-create-settlement-total-cost">-</strong>
+                        </div>
+                        <div class="invoice-create-summary-item">
+                          <span>Already invoiced</span>
+                          <strong id="invoice-create-settlement-total-invoice">-</strong>
+                        </div>
+
+                        <div class="invoice-create-summary-item">
+                          <span>Total paid</span>
+                          <strong id="invoice-create-settlement-total-paid">-</strong>
+                        </div>
+                        <div class="invoice-create-summary-item">
+                          <span>Unpaid invoiced amount</span>
+                          <strong id="invoice-create-settlement-unpaid-invoiced">-</strong>
+                        </div>
+                      </div>
+                    </section><details class="invoice-create-services-panel" id="invoice-create-services-panel" hidden=""><summary aria-controls="invoice-create-services-table-wrap invoice-create-services-empty"><span>Related booking services</span> <span id="invoice-create-services-count">0 services</span></summary><label class="field supplier-service-selection"><span>Services for</span><select id="invoice-create-selected-settlement-select"></select></label><div id="invoice-create-services-empty" class="empty-state compact-empty services-empty-state">Select a supplier settlement to load its related booking services.</div><div id="invoice-create-services-table-wrap" tabindex="0" role="region" aria-label="Related booking services list" class="table-wrap compact-table-wrap invoice-create-services-table-wrap" hidden=""><div id="invoice-create-services-table-body" class="supplier-service-list"></div></div></details></aside><div class="supplier-invoice-editor" id="invoice-create-step-amounts"><section id="invoice-create-document-fields" class="invoice-create-document-fields">
                         <div class="invoice-create-inline-section-heading">
                           <span>Invoice details</span>
                         </div>
                         <div class="form-grid invoice-document-grid">
-                          <label class="field">
-                            <span id="invoice-create-date-label">Invoice Date</span>
-                            <input id="invoice-create-date" name="invoiceDate" type="date" required>
-                          </label>
                           <label id="invoice-create-type-field" class="field">
-                            <span>Invoice Type</span>
-                            <select id="invoice-create-type" required disabled>
+                            <span>Invoice Type <span class="invoice-required" aria-hidden="true">*</span></span>
+                            <select id="invoice-create-type" required="" disabled="">
                               <option value="">Loading invoice types...</option>
                             </select>
                           </label>
-                          <label class="field">
+                          <label id="invoice-create-number-field" class="field">
                             <span id="invoice-create-number-label">Invoice Number</span>
-                            <input id="invoice-create-number" name="invoiceNumber" type="text" placeholder="Invoice number">
+                            <input id="invoice-create-number" name="invoiceNumber" type="text" placeholder="Invoice number" required aria-required="true">
                           </label>
-                          <label class="field" hidden>
+                          <label id="invoice-create-date-field" class="field">
+                            <span id="invoice-create-date-label">Invoice Date</span>
+                            <input id="invoice-create-date" name="invoiceDate" type="date" required aria-required="true">
+                          </label>
+                          <label class="field" hidden="">
                             <span>Status</span>
-                            <select id="invoice-create-status" required disabled>
+                            <select id="invoice-create-status" required="" disabled="">
                               <option value="">Loading statuses...</option>
                             </select>
                           </label>
                         </div>
-                      </section>
-                    </section>
-
-                    <section id="invoice-create-step-amounts" class="invoice-create-step invoice-create-step-panel" hidden>
-                      <div class="section-heading invoice-create-step-heading">
-                        <h3><span class="invoice-create-step-kicker">Step 2</span> · Amounts &amp; file</h3>
-                      </div>
-
-                      <section class="form-section invoice-create-amounts-section">
+                      </section><section class="form-section invoice-create-amounts-section">
                         <div class="invoice-create-amounts-shell">
-                          <div class="invoice-create-inline-section-heading"><span>Invoice amounts</span></div>
+                          <div class="invoice-create-inline-section-heading"><span>Amounts &amp; taxes</span></div>
                           <div class="invoice-create-main-amounts-grid">
                             <label class="field invoice-create-main-amount-field">
                               <span id="invoice-create-amount-net-label">Invoice Amount Excl VAT</span>
@@ -987,7 +1051,7 @@
 
                             <label class="field invoice-create-main-amount-field">
                               <span id="invoice-create-amount-gross-label">Invoice Amount Incl VAT</span>
-                              <input id="invoice-create-amount-gross" name="invoiceAmountInclVat" type="number" min="0" step="0.01" placeholder="0.00" required>
+                              <input id="invoice-create-amount-gross" name="invoiceAmountInclVat" type="number" min="0" step="0.01" placeholder="0.00" required="">
                             </label>
 
                             <label class="field invoice-create-main-amount-field">
@@ -996,15 +1060,15 @@
                             </label>
                           </div>
 
-                          <div class="invoice-create-inline-section-heading"><span>Taxes</span></div>
+
                           <div class="invoice-create-tax-grid">
                             <div class="field invoice-create-tax-field">
                               <span>VAT %</span>
                               <div class="invoice-create-tax-input-row">
                                 <input id="invoice-create-vat-percent" name="vatPercentage" type="number" min="0" step="0.01" placeholder="0.00">
-                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-vat-reviewed">
-                                  <input id="invoice-create-vat-reviewed" name="vatReviewed" type="checkbox">
-                                  <span>OK</span>
+                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-vat-reviewed" title="Confirm that this tax is correct, including a zero rate.">
+                                  <input id="invoice-create-vat-reviewed" aria-required="true" name="vatReviewed" type="checkbox">
+                                  <span>Reviewed <span class="invoice-required" aria-hidden="true">*</span></span>
                                 </label>
                               </div>
                             </div>
@@ -1013,9 +1077,9 @@
                               <span>IRPF %</span>
                               <div class="invoice-create-tax-input-row">
                                 <input id="invoice-create-irpf-percent" name="irpfPercentage" type="number" min="0" step="0.01" value="0">
-                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-irpf-reviewed">
-                                  <input id="invoice-create-irpf-reviewed" name="irpfReviewed" type="checkbox">
-                                  <span>OK</span>
+                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-irpf-reviewed" title="Confirm that this tax is correct, including a zero rate.">
+                                  <input id="invoice-create-irpf-reviewed" aria-required="true" name="irpfReviewed" type="checkbox">
+                                  <span>Reviewed <span class="invoice-required" aria-hidden="true">*</span></span>
                                 </label>
                               </div>
                             </div>
@@ -1028,7 +1092,7 @@
                             </label>
                           </div>
 
-                          <div id="invoice-create-additional-vat-fields" class="invoice-create-tax-grid invoice-create-tax-grid-optional" hidden>
+                          <div id="invoice-create-additional-vat-fields" class="invoice-create-tax-grid invoice-create-tax-grid-optional" hidden="">
                             <label class="field invoice-create-tax-field">
                               <span>Additional Amount Excl VAT</span>
                               <input id="invoice-create-additional-amount-excl-vat" name="additionalAmountExclVat" type="number" min="0" step="0.01" placeholder="0.00">
@@ -1036,16 +1100,16 @@
 
                             <label class="field invoice-create-tax-field">
                               <span>Additional Amount Incl VAT</span>
-                              <input id="invoice-create-additional-amount-incl-vat" class="invoice-create-tax-amount-input" name="additionalAmountInclVat" type="number" min="0" step="0.01" placeholder="0.00" readonly>
+                              <input id="invoice-create-additional-amount-incl-vat" class="invoice-create-tax-amount-input" name="additionalAmountInclVat" type="number" min="0" step="0.01" placeholder="0.00" readonly="">
                             </label>
 
                             <div class="field invoice-create-tax-field">
                               <span>Additional VAT %</span>
                               <div class="invoice-create-tax-input-row">
                                 <input id="invoice-create-additional-vat-percent" name="additionalVatPercentage" type="number" min="0" step="0.01" placeholder="0.00">
-                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-additional-vat-reviewed">
-                                  <input id="invoice-create-additional-vat-reviewed" name="additionalVatReviewed" type="checkbox">
-                                  <span>OK</span>
+                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-additional-vat-reviewed" title="Confirm that this tax is correct, including a zero rate.">
+                                  <input id="invoice-create-additional-vat-reviewed" aria-required="true" name="additionalVatReviewed" type="checkbox">
+                                  <span>Reviewed <span class="invoice-required" aria-hidden="true">*</span></span>
                                 </label>
                               </div>
                             </div>
@@ -1054,18 +1118,16 @@
                               <span>Additional IRPF %</span>
                               <div class="invoice-create-tax-input-row">
                                 <input id="invoice-create-additional-irpf-percent" class="invoice-create-percent-input" name="additionalIrpfPercentage" type="number" min="0" step="0.01" placeholder="0.00">
-                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-additional-irpf-reviewed">
-                                  <input id="invoice-create-additional-irpf-reviewed" name="additionalIrpfReviewed" type="checkbox">
-                                  <span>OK</span>
+                                <label class="inline-review-toggle inline-review-toggle-compact" for="invoice-create-additional-irpf-reviewed" title="Confirm that this tax is correct, including a zero rate.">
+                                  <input id="invoice-create-additional-irpf-reviewed" aria-required="true" name="additionalIrpfReviewed" type="checkbox">
+                                  <span>Reviewed <span class="invoice-required" aria-hidden="true">*</span></span>
                                 </label>
                               </div>
                             </label>
                           </div>
 
                           <section class="invoice-create-calculated-section">
-                            <div class="section-heading invoice-create-calculated-heading">
-                              <h3>Calculated</h3>
-                            </div>
+
 
                             <div id="invoice-create-calculated-grid" class="invoice-create-calculated-grid">
                               <div class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-tax">
@@ -1078,90 +1140,42 @@
                                 <strong id="invoice-create-irpf-amount">-</strong>
                               </div>
 
-                              <div id="invoice-create-additional-vat-amount-field" class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-tax" hidden>
+                              <div id="invoice-create-additional-vat-amount-field" class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-tax" hidden="">
                                 <span>Additional VAT Amount</span>
                                 <strong id="invoice-create-additional-vat-amount">-</strong>
                               </div>
 
-                              <label id="invoice-create-additional-irpf-amount-field" class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-tax" hidden>
+                              <label id="invoice-create-additional-irpf-amount-field" class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-tax" hidden="">
                                 <span>Additional IRPF Amount</span>
-                                <input id="invoice-create-additional-irpf-amount" class="invoice-create-calculated-amount-input" name="additionalIrpfAmount" type="number" min="0" step="0.01" placeholder="0.00">
+                                <input id="invoice-create-additional-irpf-amount" class="invoice-create-calculated-amount-input" name="additionalIrpfAmount" type="number" min="0" step="0.01" placeholder="0.00" hidden>
+                                <strong id="invoice-create-additional-irpf-display">-</strong>
                               </label>
 
                               <div class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-prominent invoice-create-calculated-field-total">
                                 <span class="field-label-line">
                                   <span id="invoice-create-invoice-total-label">Invoice Total</span>
-                                  <span class="tooltip-dot" title="Total with VAT + IRPF and no reimbursables." aria-label="Total with VAT + IRPF and no reimbursables.">i</span>
+                                  <span class="tooltip-dot" title="Includes VAT and deducts IRPF; excludes reimbursable expenses." aria-label="Includes VAT and deducts IRPF; excludes reimbursable expenses.">i</span>
                                 </span>
                                 <strong id="invoice-create-invoice-total">-</strong>
                               </div>
 
-                              <div class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-prominent invoice-create-calculated-field-total">
+                              <div class="readonly-field readonly-field-block invoice-create-calculated-field invoice-create-calculated-field-prominent invoice-create-calculated-field-total supplier-payable-total">
                                 <span class="field-label-line">
                                   <span>Total Payable Amount</span>
-                                  <span class="tooltip-dot" title="Total with VAT + IRPF + reimbursables." aria-label="Total with VAT + IRPF + reimbursables.">i</span>
+                                  <span class="tooltip-dot" title="Invoice total plus reimbursable expenses." aria-label="Invoice total plus reimbursable expenses.">i</span>
                                 </span>
                                 <strong id="invoice-create-total-payable-amount">-</strong>
                               </div>
                             </div>
                           </section>
 
-                          <section class="invoice-create-file-strip" aria-label="Invoice file">
-                            <div class="invoice-create-file-strip-label">
-                              <span>Invoice file</span>
-                              <small>Required for final invoices</small>
-                            </div>
-                            <label class="invoice-create-file-picker">
-                              <input id="invoice-create-file-input" type="file">
-                              <span class="invoice-create-file-picker-button">Choose file</span>
-                            </label>
-                            <span id="invoice-create-file-name" class="invoice-create-file-name">No file selected</span>
-                            <button id="invoice-create-file-remove" class="invoice-create-file-remove" type="button" hidden aria-label="Remove invoice file">&times;</button>
-                          </section>
-                        </div>
-                      </section>
-                    </section>
 
-                  </div>
-
-                  <aside class="invoice-create-step-side">
-                    <section class="invoice-create-summary-card">
-                      <div class="invoice-create-summary-card-heading">
-                        <h3>Settlement Financial Summary</h3>
-                        <span id="invoice-create-settlement-status" class="status-pill neutral">-</span>
-                      </div>
-                      <label class="field">
-                        <span>Selected settlement</span>
-                        <select id="invoice-create-selected-settlement-select"></select>
-                      </label>
-                      <div class="invoice-create-summary-grid">
-                        <div class="invoice-create-summary-item">
-                          <span>Total service cost</span>
-                          <strong id="invoice-create-settlement-total-cost">-</strong>
                         </div>
-                        <div class="invoice-create-summary-item">
-                          <span>Already invoiced</span>
-                          <strong id="invoice-create-settlement-total-invoice">-</strong>
-                        </div>
-                        <div class="invoice-create-summary-item invoice-create-summary-item-highlight">
-                          <span>Pending invoicing</span>
-                          <strong id="invoice-create-settlement-this-invoice">-</strong>
-                        </div>
-                        <div class="invoice-create-summary-item">
-                          <span>Total paid</span>
-                          <strong id="invoice-create-settlement-total-paid">-</strong>
-                        </div>
-                        <div class="invoice-create-summary-item">
-                          <span>Unpaid invoiced amount</span>
-                          <strong id="invoice-create-settlement-unpaid-invoiced">-</strong>
-                        </div>
-                      </div>
-                    </section>
-                    <section id="invoice-create-allocation-card" class="invoice-create-summary-card invoice-create-allocation-card">
+                      </section><section id="invoice-create-allocation-card" class="invoice-create-summary-card invoice-create-allocation-card">
                       <div class="invoice-create-summary-card-heading">
                         <h3>Settlement allocations</h3>
                       </div>
-                      <p class="helper-text">Enter the amount of this invoice assigned to each selected settlement.</p>
+
                       <div class="table-wrap compact-table-wrap">
                         <table class="results-table compact-results-table">
                           <thead><tr><th>Settlement</th><th class="numeric-cell">Allocation amount</th></tr></thead>
@@ -1172,34 +1186,28 @@
                         <span>Allocated: <strong id="invoice-create-settlement-allocation-total">€0.00</strong></span>
                         <span>Remaining: <strong id="invoice-create-settlement-allocation-remaining">€0.00</strong></span>
                       </div>
-                    </section>
-                    <section id="invoice-create-services-panel" class="invoice-create-services-panel" hidden>
-                      <div class="panel-header compact-panel-header invoice-create-services-header">
-                        <h3>Related booking services</h3>
-                        <span id="invoice-create-services-count" class="badge subtle">0 services</span>
-                      </div>
-                      <div id="invoice-create-services-empty" class="empty-state compact-empty services-empty-state">Select a supplier settlement to load its related booking services.</div>
-                      <div id="invoice-create-services-table-wrap" class="table-wrap compact-table-wrap invoice-create-services-table-wrap" hidden>
-                        <table class="results-table compact-results-table"><thead><tr><th>Service Date</th><th>Name</th><th class="numeric-cell">Total Purchase Price</th><th class="numeric-cell">Final Purchase Cost</th></tr></thead><tbody id="invoice-create-services-table-body"></tbody></table>
-                      </div>
-                    </section>
-                  </aside>
-                </div>
-
-                <div class="actions invoice-create-actions">
+                    </section><section id="invoice-create-file-drop-zone" class="invoice-create-file-strip" aria-label="Invoice file" aria-describedby="invoice-create-file-drop-hint">
+                            <div class="invoice-create-file-strip-label">
+                              <span id="invoice-create-file-label">Invoice file <span id="invoice-create-file-required" class="invoice-required" aria-hidden="true">*</span></span>
+                            </div>
+                            <div class="invoice-create-file-picker">
+                              <input id="invoice-create-file-input" type="file" aria-labelledby="invoice-create-file-label" aria-required="true" hidden>
+                              <button id="invoice-create-file-choose" class="invoice-create-file-picker-button" type="button">Choose file</button>
+                            </div>
+                            <span id="invoice-create-file-drop-hint" class="invoice-create-file-drop-hint">or drag a file here</span>
+                            <span id="invoice-create-file-name" class="invoice-create-file-name" role="status" aria-live="polite">No file selected</span>
+                            <button id="invoice-create-file-remove" class="invoice-create-file-remove" type="button" hidden="" aria-label="Remove invoice file">×</button>
+                          </section></div></div><div class="supplier-invoice-feedback" id="invoice-create-feedback"></div><div class="actions invoice-create-actions">
                   <button id="invoice-create-cancel" type="button" class="button secondary">Cancel</button>
                   <div class="invoice-create-actions-main">
-                    <button id="invoice-create-prev" type="button" class="button secondary" hidden>Previous</button>
-                    <button id="invoice-create-next" type="button" class="button primary" disabled>Next</button>
-                    <button id="invoice-create-submit" type="submit" class="button primary" disabled hidden>Finish</button>
+
+
+                    <button id="invoice-create-submit" type="submit" class="button primary" disabled="">Create invoice</button>
                   </div>
-                </div>
-              </section>
-            </form>
-          </section>
+                </div></form></section>
         </section>
 
-        <section id="tab-invoices" class="tab-panel" data-tab-panel="invoices" hidden>
+<section id="tab-invoices" class="tab-panel" data-tab-panel="invoices" hidden>
           <div id="invoices-workspace" class="workspace-grid invoices-workspace">
             <section class="panel wide-panel">
               <div class="panel-header">
@@ -1230,10 +1238,16 @@
                 </div>
                 <p id="irpf-message" role="status" aria-live="polite">Generate a preview for the selected period.</p>
                 <div id="irpf-results" hidden>
+                  <section id="irpf-proformas" class="irpf-proforma-warning" aria-labelledby="irpf-proforma-title" hidden>
+                    <h4 id="irpf-proforma-title">Proforma invoices found</h4>
+                    <p id="irpf-proforma-message" role="status"></p>
+                    <label class="field"><span>Include Proforma invoices in the report?</span><select id="irpf-proforma-choice"><option value="">Choose an option</option><option value="exclude">No, exclude Proformas</option><option value="include">Yes, include eligible Proformas</option></select></label>
+                    <div class="table-wrap"><table id="irpf-proforma-list" class="results-table"></table></div>
+                  </section>
                   <p>Amounts include additional VAT bases and IRPF. Credit notes subtract. Totals are separate per currency. Each preview shows up to 100 rows; Excel includes all rows.</p>
                   <details open><summary>Supplier summary</summary><div class="table-wrap"><table id="irpf-summary" class="results-table"></table></div></details>
                   <details><summary>Invoice detail</summary><div class="table-wrap"><table id="irpf-detail" class="results-table"></table></div></details>
-                  <details><summary>Records to review · excluded from totals</summary><p>Includes incomplete supplier data, proformas, unknown invoice types, cancelled or rejected records. Correct the source data and generate again where appropriate.</p><div class="table-wrap"><table id="irpf-review" class="results-table"></table></div></details>
+                  <details><summary>Records to review · excluded from totals</summary><p>Includes incomplete supplier data, excluded proformas, unknown invoice types, cancelled or rejected records. Correct the source data and generate again where appropriate.</p><div class="table-wrap"><table id="irpf-review" class="results-table"></table></div></details>
                 </div>
               </section>
 
@@ -1351,12 +1365,6 @@
                   <tbody id="invoices-table-body"></tbody>
                 </table>
               </div>
-
-              <div id="invoices-pagination-bar" class="pagination-bar" hidden>
-                <button id="invoices-prev-page" class="button secondary" type="button">Previous</button>
-                <span id="invoices-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-                <button id="invoices-next-page" class="button secondary" type="button">Next</button>
-              </div>
             </section>
 
             <aside id="invoice-summary-sidebar" class="sidebar-stack invoice-summary-sidebar">
@@ -1367,17 +1375,17 @@
                   </div>
                   <div class="inline-actions invoice-summary-header-actions">
                     <button id="invoice-create-payment" class="button primary compact-action-button" type="button" hidden>Create payment</button>
-                    <button id="invoice-summary-close" class="invoice-summary-close" type="button" aria-label="Close summary" title="Close summary">&times;</button>
+                    <button id="invoice-summary-close" class="widget-popup-close invoice-summary-close" type="button" aria-label="Close summary" title="Close summary">&times;</button>
                   </div>
                 </div>
 
                 <div class="selection-summary-list">
                   <div class="selection-summary-row">
-                    <span>Matched invoices</span>
+                    <span>Loaded invoices</span>
                     <strong id="invoice-summary-matched">0</strong>
                   </div>
                   <div class="selection-summary-row">
-                    <span>Total invoice amount</span>
+                    <span>Loaded invoice amount</span>
                     <strong id="invoice-summary-filtered-amount">EUR 0.00</strong>
                   </div>
                   <div class="selection-summary-row">
@@ -1385,10 +1393,15 @@
                     <strong id="invoice-summary-selected-count">0</strong>
                   </div>
                   <div class="selection-summary-row">
-                    <span>Selected amount</span>
+                    <span>Selected invoice total</span>
                     <strong id="invoice-summary-selected-amount">EUR 0.00</strong>
                   </div>
+                  <div class="selection-summary-row invoice-selection-pending">
+                    <span>Selected balance to pay</span>
+                    <strong id="invoice-summary-selected-pending">EUR 0.00</strong>
+                  </div>
                 </div>
+                <p class="invoice-selection-payment-note">Remaining balance after payments. Credit notes reduce the balance; a negative amount means a refund is due.</p>
 
                 <div id="invoice-selection-empty" class="empty-state compact-empty">
                   Mark invoices with the checkbox to include them here.
@@ -1400,6 +1413,7 @@
                         <th>Invoice</th>
                         <th>Supplier code</th>
                         <th class="numeric-cell">Total</th>
+                        <th class="numeric-cell">Pending</th>
                         <th>Date</th>
                         <th aria-label="Actions"></th>
                       </tr>
@@ -1427,8 +1441,15 @@
                       <span id="selected-invoice-created-by" class="selected-invoice-created-by">Created by -</span>
                     </div>
 
+                    <div id="selected-invoice-payment-summary" class="invoice-payment-summary" aria-label="Payment summary">
+                      <div><span>Total payable</span><strong id="selected-invoice-summary-total">-</strong></div>
+                      <div><span id="selected-invoice-summary-paid-label">Paid</span><strong id="selected-invoice-summary-paid">-</strong></div>
+                      <div class="invoice-payment-balance"><span id="selected-invoice-summary-pending-label">Left to pay</span><strong id="selected-invoice-summary-pending">-</strong></div>
+                    </div>
+
                     <div class="inline-actions selected-invoice-actions">
                       <button id="selected-invoice-edit" class="button secondary compact-action-button" type="button">Edit</button>
+                      <button id="selected-invoice-finalize" class="button secondary compact-action-button" type="button" hidden>Convert to final invoice</button>
                       <button id="selected-invoice-delete" class="button button-danger compact-action-button" type="button">Delete</button>
                     </div>
 
@@ -1472,7 +1493,7 @@
                           <strong id="selected-invoice-date">-</strong>
                         </div>
                         <div class="detail-row">
-                          <span>Invoice Type</span>
+                          <span>Invoice Type <span class="invoice-required" aria-hidden="true">*</span></span>
                           <strong id="selected-invoice-type">-</strong>
                         </div>
                         <div class="detail-row">
@@ -1575,17 +1596,6 @@
                         <h3>Accounting</h3>
                       </div>
 
-                      <div class="detail-list compact-detail-list">
-                        <div class="detail-row">
-                          <span>Accounting Status</span>
-                          <strong id="selected-invoice-accounting-status">-</strong>
-                        </div>
-                        <div class="detail-row">
-                          <span>Accounting Posted At</span>
-                          <strong id="selected-invoice-accounting-posted-at">-</strong>
-                        </div>
-                      </div>
-
                       <div class="inline-actions selected-invoice-actions selected-invoice-accounting-actions" id="selected-invoice-accounting-actions" hidden>
                         <button id="selected-invoice-sync-accounting" class="button primary compact-action-button" type="button">Sync entry</button>
                         <button id="selected-invoice-rebuild-accounting-totals" class="button secondary compact-action-button" type="button">Rebuild totals</button>
@@ -1623,7 +1633,7 @@
               </div>
               <div class="inline-actions">
                 <span id="invoice-payment-mode-badge" class="badge subtle">Selection required</span>
-                <button id="invoice-payment-close" class="button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
+                <button id="invoice-payment-close" class="widget-popup-close button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
               </div>
             </div>
 
@@ -1757,7 +1767,7 @@
           </section>
 
           <div id="payments-browser-workspace" class="payments-subsection">
-            <div class="workspace-grid payments-workspace">
+            <div id="payments-list-layout" class="workspace-grid payments-workspace">
             <section class="panel wide-panel">
               <div class="panel-header">
                 <div>
@@ -1847,16 +1857,12 @@
                   <tbody id="payments-table-body"></tbody>
                 </table>
               </div>
-
-              <div id="payments-pagination-bar" class="pagination-bar" hidden>
-                <button id="payments-prev-page" class="button secondary" type="button">Previous</button>
-                <span id="payments-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-                <button id="payments-next-page" class="button secondary" type="button">Next</button>
-              </div>
             </section>
 
-            <aside class="sidebar-stack">
-              <section class="panel">
+            <aside id="payment-detail-sidebar" class="sidebar-stack" aria-hidden="true" inert>
+              <section class="panel payment-detail-panel">
+                <button id="payment-detail-close" class="widget-popup-close payment-detail-close" type="button" title="Close" aria-label="Close">&times;</button>
+                <div id="payment-detail-feedback" class="payment-detail-feedback" role="status" aria-live="polite" hidden></div>
                 <div id="selected-payment-empty" class="empty-state">
                   No payment selected
                 </div>
@@ -1957,6 +1963,10 @@
                         <tbody id="selected-payment-allocations-list"></tbody>
                       </table>
                     </div>
+                    <div class="inline-actions selected-payment-actions selected-payment-secondary-actions allocation-export-actions">
+                      <button type="button" id="selected-payment-allocations-export" class="button secondary compact-action-button">Export Excel</button>
+                      <span id="selected-payment-allocations-export-status" class="allocation-export-status" role="status"></span>
+                    </div>
                   </section>
 
                   <section id="selected-payment-accounting-view" class="detail-subsection" hidden>
@@ -2023,14 +2033,14 @@
             </div>
           </section>
           <section id="payment-allocation-manager" class="panel widget-popup-panel payment-allocation-manager" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-manager-title" hidden>
-            <div class="section-heading compact-section-heading"><div class="payment-allocation-manager-heading-content"><h2 id="payment-allocation-manager-title">Manage payment allocations</h2><button id="payment-allocation-manager-add" class="button secondary compact-action-button" type="button">Add invoice</button></div><button id="payment-allocation-manager-close" class="button secondary compact-action-button payment-allocation-manager-close" type="button" aria-label="Close" title="Close">&times;</button></div>
+            <div class="section-heading compact-section-heading"><div class="payment-allocation-manager-heading-content"><h2 id="payment-allocation-manager-title">Manage payment allocations</h2><button id="payment-allocation-manager-add" class="button secondary compact-action-button" type="button">Add invoice</button></div><button id="payment-allocation-manager-close" class="widget-popup-close button secondary compact-action-button payment-allocation-manager-close" type="button" aria-label="Close" title="Close">&times;</button></div>
             <div id="payment-allocation-manager-error" class="form-error" hidden></div>
             <div class="payment-allocation-manager-toolbar"><label class="field"><span>Search allocated invoices</span><input id="payment-allocation-manager-filter" type="search" placeholder="Invoice number or name"></label></div>
             <div class="table-wrap compact-table-wrap payment-allocation-manager-table"><table class="results-table mini-results-table"><thead><tr><th>Invoice</th><th class="numeric-cell">Allocate</th><th></th></tr></thead><tbody id="payment-allocation-manager-list"></tbody></table></div>
             <div class="actions payment-allocation-manager-footer"><div class="payment-allocation-manager-totals"><span id="payment-allocation-manager-total" class="payment-allocation-total applied">Applied: EUR 0.00</span><span id="payment-allocation-manager-remaining" class="payment-allocation-total unapplied">Unapplied: EUR 0.00</span><span id="payment-allocation-manager-added-count" class="payment-allocation-total new-invoices">Invoices to add: 0</span></div><button id="payment-allocation-manager-save" class="button primary compact-action-button" type="button">Save allocations</button></div>
           </section>
           <section id="payment-allocation-invoice-picker" class="payment-allocation-invoice-picker" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-invoice-picker-title" hidden>
-            <div class="payment-allocation-invoice-picker-card"><div class="section-heading compact-section-heading"><div><h2 id="payment-allocation-invoice-picker-title">Add invoice</h2><p class="panel-copy">Search by invoice number or name.</p></div><button id="payment-allocation-invoice-picker-close" class="button secondary compact-action-button payment-allocation-invoice-picker-close" type="button" aria-label="Close" title="Close">&times;</button></div><div id="payment-allocation-invoice-picker-error" class="form-error" hidden></div><label class="field"><span>Invoice</span><input id="payment-allocation-manager-search" type="search" placeholder="Start typing to search" autocomplete="off"></label><div id="payment-allocation-manager-results" class="payment-allocation-manager-results"></div></div>
+            <div class="payment-allocation-invoice-picker-card"><div class="section-heading compact-section-heading"><div><h2 id="payment-allocation-invoice-picker-title">Add invoice</h2><p class="panel-copy">Search by invoice number or name.</p></div><button id="payment-allocation-invoice-picker-close" class="widget-popup-close button secondary compact-action-button payment-allocation-invoice-picker-close" type="button" aria-label="Close" title="Close">&times;</button></div><div id="payment-allocation-invoice-picker-error" class="form-error" hidden></div><label class="field"><span>Invoice</span><input id="payment-allocation-manager-search" type="search" placeholder="Start typing to search" autocomplete="off"></label><div id="payment-allocation-manager-results" class="payment-allocation-manager-results"></div></div>
           </section>
           <section id="payment-allocation-feedback-popup" class="payment-allocation-feedback-popup" role="dialog" aria-modal="true" aria-labelledby="payment-allocation-feedback-title" hidden>
             <div class="payment-allocation-feedback-card"><span id="payment-allocation-feedback-spinner" class="payment-allocation-feedback-spinner" aria-hidden="true"></span><p id="payment-allocation-feedback-eyebrow" class="payment-allocation-feedback-eyebrow">Saving allocations</p><h2 id="payment-allocation-feedback-title">Saving changes...</h2><p id="payment-allocation-feedback-message">Updating allocations and recalculating related records.</p><button id="payment-allocation-feedback-close" class="button primary" type="button" hidden>Close</button></div>
@@ -2041,25 +2051,24 @@
             <div class="workspace-grid payments-workspace">
               <section class="panel wide-panel">
                 <div class="panel-header"><div><h2>Payment allocations</h2><p class="panel-copy">Browse payment allocations and their related payment, invoice and settlement.</p></div><span id="payment-allocations-count" class="badge subtle">0 allocations</span></div>
-                <div class="table-filter-bar payments-filters-grid">
+                <div id="payment-allocations-toolbar" class="table-filter-bar payments-filters-grid">
                   <label class="field"><span>Allocation Reference</span><input id="payment-allocation-filter-reference" type="search" placeholder="Allocation reference"></label>
                   <details class="table-filters-popover">
                     <summary>Filters</summary>
                     <div class="table-filters-panel filters-grid filters-grid-inline">
-                      <label class="field"><span>Movement Type</span><select id="payment-allocation-filter-movement-type"><option value="">All movement types</option></select></label>
+                      <label class="field"><span>Movement Type</span><input id="payment-allocation-filter-movement-type" type="search" placeholder="Movement type"></label>
                       <label class="field"><span>Payment Reference</span><input id="payment-allocation-filter-payment" type="search" placeholder="Payment reference"></label>
                       <label class="field"><span>Invoice Number</span><input id="payment-allocation-filter-invoice" type="search" placeholder="Invoice number"></label>
                       <label class="field"><span>MFSP / Supplier Code</span><input id="payment-allocation-filter-supplier-code" type="search" placeholder="Settlement name"></label>
                     </div>
                   </details>
+                  <div class="payments-toolbar-actions" id="payment-allocations-toolbar-actions">
+                    <button type="button" id="payment-allocations-export" class="button secondary compact-action-button">Export Excel</button>
+                  </div>
                 </div>
+                <span id="payment-allocations-export-status" class="allocation-export-status" role="status"></span>
                 <div id="payment-allocations-empty" class="empty-state">No payment allocations match the current filters.</div>
                 <div id="payment-allocations-table-wrap" class="table-wrap payments-table-wrap" hidden><table class="results-table payments-results-table"><thead><tr><th>Allocation Reference</th><th>Movement Type</th><th>Payment</th><th>Invoice</th><th>MFSP</th><th>Supplier</th><th>Settlement Code</th><th class="numeric-cell">Allocated</th></tr></thead><tbody id="payment-allocations-table-body"></tbody></table></div>
-                <div id="payment-allocations-pagination-bar" class="pagination-bar" hidden>
-                  <button id="payment-allocations-prev-page" class="button secondary" type="button">Previous</button>
-                  <span id="payment-allocations-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-                  <button id="payment-allocations-next-page" class="button secondary" type="button">Next</button>
-                </div>
               </section>
               <aside class="sidebar-stack">
                 <section class="panel">
@@ -2137,7 +2146,7 @@
                   </div>
                   <div class="inline-actions">
                     <span id="payment-account-create-mode-badge" class="badge subtle">Ready to create</span>
-                    <button id="payment-account-create-close" class="button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
+                    <button id="payment-account-create-close" class="widget-popup-close button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
                   </div>
                 </div>
 
@@ -2285,7 +2294,7 @@
                     <div class="table-filters-panel filters-grid filters-grid-inline">
                       <label class="field">
                         <span>Supplier</span>
-                        <select id="payment-account-filter-supplier"></select>
+                        <input id="payment-account-filter-supplier" type="search" placeholder="Supplier name">
                       </label>
                       <label class="field">
                         <span>MFSP</span>
@@ -2293,7 +2302,7 @@
                       </label>
                       <label class="field">
                         <span>Status</span>
-                        <select id="payment-account-filter-mapping-status"></select>
+                        <input id="payment-account-filter-mapping-status" type="search" placeholder="Status">
                       </label>
                     </div>
                   </details>
@@ -2315,12 +2324,6 @@
                     </thead>
                     <tbody id="payment-accounts-table-body"></tbody>
                   </table>
-                </div>
-
-                <div id="payment-accounts-pagination-bar" class="pagination-bar" hidden>
-                  <button id="payment-accounts-prev-page" class="button secondary" type="button">Previous</button>
-                  <span id="payment-accounts-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-                  <button id="payment-accounts-next-page" class="button secondary" type="button">Next</button>
                 </div>
               </div>
             </section>
@@ -2461,12 +2464,6 @@
                   <tbody id="accounting-entries-table-body"></tbody>
                 </table>
               </div>
-
-              <div id="accounting-entries-pagination-bar" class="pagination-bar" hidden>
-                <button id="accounting-entries-prev-page" class="button secondary" type="button">Previous</button>
-                <span id="accounting-entries-pagination-copy" class="pagination-copy">Page 1</span>
-                <button id="accounting-entries-next-page" class="button secondary" type="button">Next</button>
-              </div>
             </section>
           </div>
 
@@ -2525,12 +2522,6 @@
                   </thead>
                   <tbody id="accounting-entry-lines-table-body"></tbody>
                 </table>
-              </div>
-
-              <div id="accounting-entry-lines-pagination-bar" class="pagination-bar" hidden>
-                <button id="accounting-entry-lines-prev-page" class="button secondary" type="button">Previous</button>
-                <span id="accounting-entry-lines-pagination-copy" class="pagination-copy">Page 1</span>
-                <button id="accounting-entry-lines-next-page" class="button secondary" type="button">Next</button>
               </div>
             </section>
           </div>
@@ -2620,7 +2611,7 @@
                     <h2 id="accounting-account-create-title">Create accounting account</h2>
                   </div>
                   <div class="inline-actions">
-                    <button id="accounting-account-create-close" class="button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
+                    <button id="accounting-account-create-close" class="widget-popup-close button secondary close-icon-button" type="button" aria-label="Close" title="Close">&times;</button>
                   </div>
                 </div>
 
@@ -2687,12 +2678,6 @@
                   </thead>
                   <tbody id="accounting-accounts-table-body"></tbody>
                 </table>
-              </div>
-
-              <div id="accounting-accounts-pagination-bar" class="pagination-bar" hidden>
-                <button id="accounting-accounts-prev-page" class="button secondary" type="button">Previous</button>
-                <span id="accounting-accounts-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-                <button id="accounting-accounts-next-page" class="button secondary" type="button">Next</button>
               </div>
             </section>
           </div>
@@ -2784,18 +2769,13 @@
                   <tbody id="accounting-rules-table-body"></tbody>
                 </table>
               </div>
-
-              <div id="accounting-rules-pagination-bar" class="pagination-bar" hidden>
-                <button id="accounting-rules-prev-page" class="button secondary" type="button">Previous</button>
-                <span id="accounting-rules-pagination-copy" class="pagination-copy">Page 1 of 1</span>
-                <button id="accounting-rules-next-page" class="button secondary" type="button">Next</button>
-              </div>
             </section>
           </div>
         </section>
       </section>
     </main>
 
+    <script src="./scripts/progressive-table.js"></script>
     <script src="./scripts/config.js"></script>
     <script src="./scripts/helpers.js"></script>
     <script src="./scripts/dom.js"></script>
@@ -2813,32 +2793,54 @@
     <script src="./scripts/prepayment-request-sync.js"></script>
     <script src="./scripts/prepayment-allocations.js"></script>
     <script src="./scripts/payment-operation-sync.js"></script>
+    <script src="./scripts/payment-delete.js"></script>
+    <script src="./scripts/payment-save.js"></script>
     <script src="./scripts/payment-create.js"></script>
     <script src="./scripts/accounting.js"></script>
     <script src="./scripts/account-create.js"></script>
     <script src="./scripts/bookings.js"></script>
     <script src="./scripts/invoice-name.js"></script>
+    <script src="./scripts/invoice-registration.js"></script>
+    <script src="./scripts/invoice-edit.js"></script>
+    <script src="./scripts/settlement-calculation.js"></script>
     <script src="./scripts/invoice-create.js"></script>
     <script src="./scripts/supplier-activity.js"></script>
     <script src="./scripts/payment-letter-batch.js"></script>
     <script src="./scripts/invoice-request.js"></script>
+    <script src="./scripts/trip-invoice-pdf.js"></script>
+    <script src="./scripts/trip-invoice.js"></script>
     <script src="./scripts/supplier-workspace.js"></script>
     <script src="./scripts/supplier-view.js"></script>
     <script src="./scripts/quick-settlement-refresh.js"></script>
     <script src="./scripts/prepayment-bank-request.js"></script>
     <script src="./scripts/prepayment-proof.js"></script>
     <script src="./scripts/prepayment-delete.js"></script>
+    <script src="./scripts/operation-edit.js"></script>
     <script src="./scripts/prepayments.js"></script>
     <script src="./scripts/prepayment-notes.js"></script>
+    <script src="./scripts/quick-invoice-records.js"></script>
     <script src="./scripts/prepayment-workflow.js"></script>
     <script src="./scripts/card-purchase-settlements.js"></script>
     <script src="./scripts/card-purchase-services.js"></script>
+    <script src="./scripts/card-invoice-save.js"></script>
+    <script src="./scripts/alhambra-card.js"></script>
+    <script src="./scripts/card-payment-save.js"></script>
     <script src="./scripts/operations.js"></script>
     <script src="./scripts/ministry-traveller-register.js"></script>
     <script src="./scripts/invoice-delete.js"></script>
     <script src="./scripts/excel-workbook.js"></script>
     <script src="./scripts/booking-won-report.js"></script>
     <script src="./scripts/irpf-report.js"></script>
+    <script src="./scripts/invoice-reminder-previews.js"></script>
+    <script src="./scripts/email-template-previews.js"></script>
+    <script src="./scripts/setup.js"></script>
+    <script src="./scripts/pending-operations.js"></script>
+    <script src="./scripts/consistency-review.js"></script>
+    <script src="./scripts/consistency-review-ui.js"></script>
+    <script src="./scripts/closure-review-dialog.js"></script>
+    <script src="./scripts/ui-system.js"></script>
+    <script src="./scripts/payment-diagnostics.js"></script>
+    <script src="./scripts/payment-allocation-export.js"></script>
     <script src="./scripts/main.js"></script>
   </body>
 </html>

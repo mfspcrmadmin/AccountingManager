@@ -10,7 +10,8 @@ Open **Invoices → IRPF report**, choose quarter/year or an inclusive invoice-d
 - The invoice number is `Name`, labelled Invoice Number in module metadata and used by the widget.
 - Amounts excluding/including VAT add their respective `Additional_Amount_*` fields. They exclude reimbursable expenses and do not substitute the amount payable after withholding.
 - Credit notes use negative absolute amounts, consistent with the widget's credit-note convention and tolerant of already-negative stored values.
-- Final Invoice, Credit Note, Tickets and Commission are eligible. Proformas and unknown types, Cancelled/Rejected/Draft statuses, missing country, unmarked self-employed suppliers, missing CIF/NIF, currency, invoice number or primary amounts appear in Review, outside totals. Suppliers with a populated non-Spanish country are excluded.
+- Final Invoice, Credit Note, Tickets and Commission are eligible. When Proformas are found among the report candidates, the preview lists all of them and requires an explicit include/exclude decision before download. They are initially excluded; the choice recalculates the preview and Excel from the same loaded data. Including Proformas does not bypass other eligibility checks. Changing dates or generating again resets the decision. The Excel Criteria sheet records the choice.
+- Excluded Proformas and unknown types, Cancelled/Rejected/Draft statuses, missing country, unmarked self-employed suppliers, missing CIF/NIF, currency, invoice number or primary amounts appear in Review, outside totals. Suppliers with a populated non-Spanish country are excluded.
 - Summary groups by supplier CRM ID and currency, preserving separate suppliers with the same display name. Values are accumulated in integer cents; no exchange-rate conversion occurs.
 - Supplier name, CIF/NIF, country and self-employed flag use current supplier data, not historical snapshots.
 

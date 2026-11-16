@@ -1,0 +1,36 @@
+﻿{
+    "date":  "2026-10-14",
+    "supplier":  "616617000003265605",
+    "observed":  {
+                     "affected_bookings":  [
+                                               "616617000160523270",
+                                               "616617000160310120",
+                                               "616617000161589162",
+                                               "616617000164611224",
+                                               "616617000161387022",
+                                               "616617000171604155",
+                                               "616617000164615245",
+                                               "616617000162349040",
+                                               "616617000162184238"
+                                           ],
+                     "active_or_error_jobs":  17,
+                     "issue":  "Execution timestamps are about nine hours behind CRM-managed Created_Time/Modified_Time. Expired lease outcomes are unconfirmed, not assumed successful."
+                 },
+    "backend_fix":  {
+                        "published_and_read_back":  [
+                                                        "jobs_enqueueadminprocessjob",
+                                                        "jobs_processadminprocessjob",
+                                                        "jobs_processpendingadminprocessjobs",
+                                                        "settlements_recalculatecore",
+                                                        "recalculatesuppliersettlementsforbooking"
+                                                    ],
+                        "change":  "Explicit UTC parsing of ISO wall clock plus numeric offset adjustment; UTC serialization uses literal +00:00 instead of XXX, which retained the application offset in the live runtime. All five functions published and read back.",
+                        "history":  "Historical records not rewritten; conditional recovery guards retained."
+                    },
+    "widget_fix":  "Per-booking recovery feedback retained across polling; a successful call with remaining queue entries does not claim the queue is clear.",
+    "tests":  42,
+    "production_recovery_verified":  false,
+    "execution_limitation":  "CRM connector exposes source updates and record reads, not function execution; no connected browser session. User requested to trigger one recovery for verification.",
+    "zip_generated":  false,
+    "followup":  "User diagnostic confirmed 08:03:22+02:00 was parsed/formatted as 15:03:22+02:00, while UTC runtime formatting retained +02:00. Replaced both unsafe paths. Awaiting live recovery after this correction."
+}

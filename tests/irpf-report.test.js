@@ -42,6 +42,48 @@ test('summary groups by supplier ID and currency and uses integer cents', () => 
   const report = build([ { ...invoice, IRPF_Amount: 0.1 }, { ...invoice, id: '2', IRPF_Amount: 0.2 }, { ...invoice, id: '3', Currency: 'USD' } ]);
   assert.equal(report.summary.length, 2); assert.equal(report.summary[0][5], 0.3); assert.equal(report.supplierCount, 1);
 });
+test('Proforma inclusion updates totals and export criteria without bypassing other review rules', () => {
+  const rows = [invoice, { ...invoice, id: '2', Invoice_Type: 'Proforma' }, { ...invoice, id: '3', Invoice_Type: 'Proforma', Status: 'Cancelled' }];
+  const excluded = build(rows);
+  assert.equal(excluded.proformas.length, 2);
+  assert.equal(excluded.summary[0][5], 15);
+  const included = ns.buildIrpfReport(rows, { '10': supplier }, { ...options, includeProformas: true });
+  assert.equal(included.detail.length, 2);
+  assert.equal(included.summary[0][5], 30);
+  assert.equal(included.review.length, 1);
+  assert.match(included.review[0][14], /Excluded status/);
+  assert.equal(ns.irpfReportSheets(included)[0].rows[1][9], 'Proforma');
+  assert.match(ns.irpfReportSheets(included)[3].rows.find(r => r[0] === 'Proformas')[1], /Included/);
+  assert.equal(ns.buildIrpfReport(rows, { '10': { ...supplier, CIF_NIF: '' } }, { ...options, includeProformas: true }).detail.length, 0);
+});
+
+test('preview requires a Proforma decision, updates from cached data, and resets on date changes', async () => {
+  const elements = new Map();
+  function element() { return { value: '', children: [], listeners: {}, hidden: false, disabled: false, textContent: '', addEventListener(name, fn) { this.listeners[name] = fn; }, setAttribute() {}, appendChild(child) { this.children.push(child); }, replaceChildren() { this.children = []; } }; }
+  const document = { getElementById(id) { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); }, createElement: element };
+  const el = id => document.getElementById('irpf-' + id);
+  el('panel').querySelectorAll = () => ['year', 'quarter', 'from', 'to', 'generate', 'export', 'proforma-choice'].map(el);
+  const uiWindow = {};
+  vm.runInNewContext(fs.readFileSync('app/scripts/irpf-report.js', 'utf8'), { window: uiWindow, document });
+  let reads = 0;
+  uiWindow.AccountingManagerApp.initIrpfReport({ coql: async () => { reads++; return [{ ...invoice, Invoice_Type: 'Proforma' }]; }, getRecord: async () => supplier });
+  el('from').value = options.from; el('to').value = options.to;
+  await el('generate').listeners.click();
+  assert.equal(el('proformas').hidden, false);
+  assert.equal(el('proforma-list').children[1].children.length, 1);
+  assert.equal(el('export').disabled, true);
+  el('proforma-choice').value = 'include'; el('proforma-choice').listeners.change();
+  assert.equal(el('export').disabled, false);
+  assert.match(el('message').textContent, /IRPF: 15.00 EUR/);
+  el('proforma-choice').value = 'exclude'; el('proforma-choice').listeners.change();
+  assert.equal(el('export').disabled, false);
+  assert.match(el('message').textContent, /0 invoices/);
+  assert.equal(reads, 1);
+  el('from').listeners.input();
+  assert.equal(el('export').disabled, true);
+  assert.equal(el('proforma-choice').value, '');
+  assert.equal(el('results').hidden, true);
+});
 test('invalid dates and amounts stop report generation', async () => {
   for (const change of [{ from: '2026-02-30' }, { from: '2026-10-01' }, { countryField: 'Destination' }]) {
     await assert.rejects(ns.loadIrpfReport({}, { ...options, ...change }));

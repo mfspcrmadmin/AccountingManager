@@ -184,6 +184,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     async function coql(selectQuery, options) {
       var response;
       var records;
+      var trace = ns.tracePaymentQuery ? ns.tracePaymentQuery(selectQuery) : null;
 
       try {
         debugLog("coql request", {
@@ -197,9 +198,19 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           select_query: selectQuery,
           count: records.length
         });
+        if (ns.finishPaymentQuery) { ns.finishPaymentQuery(trace, records); }
         return records;
       } catch (error) {
-        if (options && options.strict && isNoContent(error)) { return []; }
+        if (options && options.strict && isNoContent(error)) { if (ns.finishPaymentQuery) { ns.finishPaymentQuery(trace, []); } return []; }
+        if (ns.finishPaymentQuery) {
+          ns.finishPaymentQuery(trace, [], {
+            message: error && error.message || response && response.message,
+            code: error && error.code || response && response.code,
+            status: error && error.status || response && response.status,
+            details: error && error.details || response && response.details,
+            responseText: error && error.responseText
+          });
+        }
         debugError("coql failed", error, {
           select_query: selectQuery
         });
@@ -207,11 +218,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
     }
 
-    async function insertRecord(entity, data) {
+    async function insertRecord(entity, data, options) {
       var request = {
         Entity: entity,
         APIData: [data],
-        Trigger: ["workflow"]
+        Trigger: options && Array.isArray(options.trigger) ? options.trigger : ["workflow"]
       };
       var response;
 

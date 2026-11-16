@@ -1,0 +1,1533 @@
+{
+  "_source": "Zoho CRM live field metadata, 2026-10-09",
+  "Card_Purchases": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Email",
+      "data_type": "email"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Card_Payment_Account",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Booking",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Boking_Service",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Supporting_Documents",
+      "data_type": "fileupload"
+    },
+    {
+      "api_name": "Original_Card_Purchase",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Transaction_Notes",
+      "data_type": "textarea"
+    },
+    {
+      "api_name": "Transaction_Type",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Purchase"
+        },
+        {
+          "actual_value": "Refund"
+        }
+      ]
+    },
+    {
+      "api_name": "Accounting_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending invoice"
+        },
+        {
+          "actual_value": "Pending payment record"
+        },
+        {
+          "actual_value": "Purchase recorded"
+        },
+        {
+          "actual_value": "Pending credit note"
+        },
+        {
+          "actual_value": "Refund pending"
+        },
+        {
+          "actual_value": "Pending refund record"
+        },
+        {
+          "actual_value": "Refund recorded"
+        },
+        {
+          "actual_value": "Needs review"
+        },
+        {
+          "actual_value": "Cancelled"
+        }
+      ]
+    },
+    {
+      "api_name": "Transaction_Date",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Supplier",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Review_Notes",
+      "data_type": "textarea"
+    },
+    {
+      "api_name": "Accounting_Processed_By",
+      "data_type": "email"
+    },
+    {
+      "api_name": "Vendor_Payment",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Vendor_Invoice",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Settlement",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Invoice_Number",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Accounting_Processed_At",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "MFSP_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Supplier_Code",
+      "data_type": "text"
+    }
+  ],
+  "Prepayments": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Percent",
+      "data_type": "percent"
+    },
+    {
+      "api_name": "Prepayment_Request",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "When_To_Be_Paid",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Specific Date"
+        },
+        {
+          "actual_value": "Within 1 day"
+        },
+        {
+          "actual_value": "Within 2 days"
+        },
+        {
+          "actual_value": "Within 3 days"
+        },
+        {
+          "actual_value": "10 days prior to service date"
+        },
+        {
+          "actual_value": "15 days prior to service date"
+        },
+        {
+          "actual_value": "20 days prior to service date"
+        },
+        {
+          "actual_value": "30 days prior to service date"
+        }
+      ]
+    },
+    {
+      "api_name": "Due_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Payment_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Payment_Proof",
+      "data_type": "fileupload"
+    },
+    {
+      "api_name": "Accounting_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending invoice"
+        },
+        {
+          "actual_value": "Pending payment record"
+        },
+        {
+          "actual_value": "Prepayment recorded"
+        },
+        {
+          "actual_value": "Cancelled"
+        },
+        {
+          "actual_value": "Discard - Credit"
+        },
+        {
+          "actual_value": "Discard - Already Paid"
+        }
+      ]
+    },
+    {
+      "api_name": "Vendor_Payment",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Vendor_Invoice",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Bank_Payment_Requested",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "Bank_Receipt_Needed",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "Creator_Original_Status",
+      "data_type": "text"
+    }
+  ],
+  "Supplier_Invoices": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Invoice_Amount_Excl_VAT",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Invoice_File",
+      "data_type": "fileupload"
+    },
+    {
+      "api_name": "Invoice_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Booking",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Due_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Supplier",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Received"
+        },
+        {
+          "actual_value": "Partially Paid"
+        },
+        {
+          "actual_value": "Paid"
+        },
+        {
+          "actual_value": "Cancelled"
+        },
+        {
+          "actual_value": "Rejected"
+        }
+      ]
+    },
+    {
+      "api_name": "Invoice_Type",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Proforma"
+        },
+        {
+          "actual_value": "Final Invoice"
+        },
+        {
+          "actual_value": "Credit Note"
+        },
+        {
+          "actual_value": "Tickets"
+        },
+        {
+          "actual_value": "Commission"
+        }
+      ]
+    },
+    {
+      "api_name": "Supplier_Settlement",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Amount_Paid",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Unpaid_Invoiced_Amount",
+      "data_type": "formula"
+    },
+    {
+      "api_name": "Supplier_Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Ezus_Supplier_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "IRPF_percentage",
+      "data_type": "percent"
+    },
+    {
+      "api_name": "VAT_percentage",
+      "data_type": "percent"
+    },
+    {
+      "api_name": "Total_Payable_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Invoice_Total",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Invoice_Amount_Incl_VAT",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Reimbursable_Expense",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "MFSP_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Original_Invoice",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Accounting_Posted_At",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Accounting_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending"
+        },
+        {
+          "actual_value": "Ready to Review"
+        },
+        {
+          "actual_value": "Reviewed"
+        },
+        {
+          "actual_value": "Posted to Books"
+        },
+        {
+          "actual_value": "Sync Error"
+        },
+        {
+          "actual_value": "Cancelled"
+        }
+      ]
+    },
+    {
+      "api_name": "VAT_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "IRPF_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Supplier_Code",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Additional_VAT_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Additional_VAT_percentage",
+      "data_type": "percent"
+    },
+    {
+      "api_name": "Additional_Amount_Incl_VAT",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Additional_Amount_Excl_VAT",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Additional_IRPF_percentage",
+      "data_type": "percent"
+    },
+    {
+      "api_name": "Additional_IRPF_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Registration_Key",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Registration_Request",
+      "data_type": "textarea"
+    },
+    {
+      "api_name": "Registration_Status",
+      "data_type": "text"
+    }
+  ],
+  "Supplier_Invoice_Lines": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Service_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Supplier_Invoice",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Service_Category",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Booking_Service",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Line_Type",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Normal"
+        },
+        {
+          "actual_value": "Credit"
+        },
+        {
+          "actual_value": "Adjustment"
+        }
+      ]
+    },
+    {
+      "api_name": "Original_Invoice_Line",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Registration_Key",
+      "data_type": "text"
+    }
+  ],
+  "Supplier_Payments": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Payment_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Payment_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Proof_of_Payment",
+      "data_type": "fileupload"
+    },
+    {
+      "api_name": "Zoho_Books_Payment_ID",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending Payment"
+        },
+        {
+          "actual_value": "Cancelled"
+        },
+        {
+          "actual_value": "Paid"
+        },
+        {
+          "actual_value": "Approved"
+        },
+        {
+          "actual_value": "Planned"
+        },
+        {
+          "actual_value": "Reconciled"
+        }
+      ]
+    },
+    {
+      "api_name": "Payment_Account",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Accounting_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending"
+        },
+        {
+          "actual_value": "Sent to Books"
+        },
+        {
+          "actual_value": "Posted"
+        },
+        {
+          "actual_value": "Error"
+        }
+      ]
+    },
+    {
+      "api_name": "Supplier_Count",
+      "data_type": "integer"
+    },
+    {
+      "api_name": "Booking_Count",
+      "data_type": "integer"
+    },
+    {
+      "api_name": "Settlement_Count",
+      "data_type": "integer"
+    },
+    {
+      "api_name": "Context_Summary",
+      "data_type": "textarea"
+    },
+    {
+      "api_name": "Allocation_Count",
+      "data_type": "integer"
+    },
+    {
+      "api_name": "Context_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Single"
+        },
+        {
+          "actual_value": "Mixed"
+        }
+      ]
+    },
+    {
+      "api_name": "Movement_Type",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Outbound Payment"
+        },
+        {
+          "actual_value": "Supplier Refund"
+        }
+      ]
+    }
+  ],
+  "Supplier_Pay_Allocations": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Supplier_Payment",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Allocated_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Supplier_Invoice",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Allocation_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Supplier",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Supplier_Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Ezus_Supplier_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Supplier_Settlement",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Booking",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "MFSP_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Payment_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Payment_Account",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Payment_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Option 1"
+        },
+        {
+          "actual_value": "Option 2"
+        }
+      ]
+    },
+    {
+      "api_name": "Invoice_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Option 1"
+        },
+        {
+          "actual_value": "Option 2"
+        }
+      ]
+    },
+    {
+      "api_name": "Invoice_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Movement_Type",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Outbound Payment"
+        },
+        {
+          "actual_value": "Supplier Refund"
+        }
+      ]
+    }
+  ],
+  "Supplier_Settlements": [
+    {
+      "api_name": "Record_Status__s",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Available"
+        },
+        {
+          "actual_value": "Draft"
+        },
+        {
+          "actual_value": "Trash"
+        }
+      ]
+    },
+    {
+      "api_name": "Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Owner",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Modified_By",
+      "data_type": "ownerlookup"
+    },
+    {
+      "api_name": "Created_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Modified_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Last_Activity_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Currency",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "EUR"
+        },
+        {
+          "actual_value": "USD"
+        }
+      ]
+    },
+    {
+      "api_name": "Exchange_Rate",
+      "data_type": "double"
+    },
+    {
+      "api_name": "Tag",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unsubscribed_Mode",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "Consent form"
+        },
+        {
+          "actual_value": "Manual"
+        },
+        {
+          "actual_value": "Unsubscribe link"
+        },
+        {
+          "actual_value": "Zoho campaigns"
+        }
+      ]
+    },
+    {
+      "api_name": "Unsubscribed_Time",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Locked__s",
+      "data_type": "boolean"
+    },
+    {
+      "api_name": "id",
+      "data_type": "bigint"
+    },
+    {
+      "api_name": "Ezus_Supplier_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Total_Service_Cost",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Total_Invoice",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Total_Paid",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Booking",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Supplier",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Supplier_Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Unpaid_Invoiced_Amount",
+      "data_type": "formula"
+    },
+    {
+      "api_name": "Admin_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending Invoice"
+        },
+        {
+          "actual_value": "Partially Accounted"
+        },
+        {
+          "actual_value": "Accounted"
+        },
+        {
+          "actual_value": "To Be Paid"
+        },
+        {
+          "actual_value": "Partially Paid"
+        },
+        {
+          "actual_value": "Paid"
+        },
+        {
+          "actual_value": "No Services"
+        },
+        {
+          "actual_value": "Cancelled"
+        },
+        {
+          "actual_value": "Payment Mismatch"
+        },
+        {
+          "actual_value": "Overpaid"
+        }
+      ]
+    },
+    {
+      "api_name": "First_Service_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Last_Service_Date",
+      "data_type": "date"
+    },
+    {
+      "api_name": "Service_Count",
+      "data_type": "integer"
+    },
+    {
+      "api_name": "Technical_Key",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Last_Recalculated_At",
+      "data_type": "datetime"
+    },
+    {
+      "api_name": "Supplier_Key_Source",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "CRM Supplier"
+        },
+        {
+          "actual_value": "Ezus Supplier Ref"
+        },
+        {
+          "actual_value": "No Supplier"
+        }
+      ]
+    },
+    {
+      "api_name": "Booking_Status",
+      "data_type": "text"
+    },
+    {
+      "api_name": "MFSP_Reference",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Gross_Invoice_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Credit_Note_Amount",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Settlement_Type",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Supplier Services"
+        },
+        {
+          "actual_value": "Agent Commission"
+        }
+      ]
+    },
+    {
+      "api_name": "Closure_Review_Status",
+      "data_type": "picklist",
+      "pick_list_values": [
+        {
+          "actual_value": "-None-"
+        },
+        {
+          "actual_value": "Pending review"
+        },
+        {
+          "actual_value": "Invoice Requested"
+        },
+        {
+          "actual_value": "Reviewed"
+        }
+      ]
+    },
+    {
+      "api_name": "Agency_Name",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Agent",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "IATA",
+      "data_type": "text"
+    }
+  ]
+}

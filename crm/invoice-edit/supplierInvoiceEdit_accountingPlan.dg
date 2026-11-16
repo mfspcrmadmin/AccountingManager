@@ -1,0 +1,5 @@
+string standalone.supplierInvoiceEdit_accountingPlan(String supplierInvoiceId, String proposedJson)
+{
+result = {"error":true,"message":"Accounting entry generation has been removed."};
+return result.toString();
+}

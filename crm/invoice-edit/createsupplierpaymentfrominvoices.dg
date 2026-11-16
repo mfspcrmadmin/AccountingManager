@@ -1,0 +1,504 @@
+string standalone.createSupplierPaymentFromInvoices(String supplierInvoiceIds, String paymentDataString)
+{
+if(supplierInvoiceIds == "capabilities")
+{
+    capabilities = {"success":true,"error":false,"consistency_version":2};
+    return capabilities.toString();
+}
+res = Map();
+res.put("error",false);
+res.put("success",false);
+res.put("message","");
+res.put("payment_id","");
+res.put("allocation_ids",List());
+try 
+{
+	supplierInvoiceIds = ifnull(supplierInvoiceIds,"").toString().trim();
+	paymentDataString = ifnull(paymentDataString,"").toString().trim();
+	if(supplierInvoiceIds == "")
+	{
+		res.put("error",true);
+		res.put("message","supplierInvoiceIds is empty.");
+	}
+	else
+	{
+		paymentData = Map();
+		if(paymentDataString != "")
+		{
+			paymentData = paymentDataString.toMap();
+		}
+        operationKey = ifnull(paymentData.get("operation_key"),"").toString();
+        if(!operationKey.matches("[A-Za-z0-9-]+") || operationKey.length() > 80 || paymentData.get("allocations") == null) { throw "Use an operation key and explicit allocations to create a recoverable payment."; }
+        existingRead = standalone.supplierInvoiceEdit_read("Supplier_Payments","Invoice_Edit_Key",operationKey).toMap();
+        if(existingRead.get("success") != true || existingRead.get("records").size() > 1) { throw "Could not uniquely verify the payment operation."; }
+        existingPayment = Map(); paymentId = "";
+        if(existingRead.get("records").size() == 1) { existingPayment = existingRead.get("records").get(0); paymentId = existingPayment.get("id").toString(); res.put("payment_id",paymentId); }
+        seenInvoices = List();
+        if(!"Paid,Pending Payment,Approved,Planned".toList(",").contains(ifnull(paymentData.get("Status"),"Paid"))) { throw "Choose an active payment status before saving."; }
+        ownAccountId = ifnull(paymentData.get("Payment_Account"),"").toString();
+        if(!ownAccountId.matches("[0-9]+")) { throw "Select an Own payment account."; }
+        ownAccount = zoho.crm.getRecordById("Payment_Accounts",ownAccountId.toLong());
+        if(ownAccount.get("id") == null || ownAccount.get("Owner_Type") != "Own" || ownAccount.get("Status") == "Inactive" || ownAccount.get("Locked__s") == true) { throw "Select an available Own payment account."; }
+		invoiceIds = supplierInvoiceIds.toList("|||");
+		hasValidInvoice = false;
+		totalAllocatedAmount = 0.0;
+		invoiceDataList = List();
+		distinctSupplierIds = List();
+		distinctSupplierNames = List();
+		distinctBookingIds = List();
+		distinctBookingNames = List();
+		distinctSettlementIds = List();
+		distinctSettlementNames = List();
+		bookingMfspCache = Map();
+		for each  rawId in invoiceIds
+		{
+			invoiceId = ifnull(rawId,"").toString().trim();
+			if(invoiceId != "")
+			{
+                if(seenInvoices.contains(invoiceId)) { throw "Duplicate invoice selection."; }
+                seenInvoices.add(invoiceId);
+                inv = zoho.crm.getRecordById("Supplier_Invoices",invoiceId);
+                if(inv.get("id") == null || inv.get("Locked__s") == true || !"Received,Partially Paid,Paid".toList(",").contains(ifnull(inv.get("Status"),"")) || ifnull(inv.get("Registration_Key"),"") != "" && inv.get("Registration_Status") != "Complete") { throw "An invoice is unavailable or has an unfinished registration."; }
+                if(ifnull(inv.get("Currency"),"EUR") != ifnull(paymentData.get("Currency"),"EUR")) { throw "Payment and invoice currencies must match."; }
+                if(inv != null && inv.get("Edit_Status") == "Pending") { throw "Finish the pending invoice correction before recording a payment."; }
+				if(inv != null && inv.containKey("id"))
+				{
+					hasValidInvoice = true;
+					allocatedAmount = 0.0;
+                    links = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Supplier_Invoice",invoiceId).toMap();
+                    if(links.get("success") != true) { throw links.get("message"); }
+                    reserved = 0.0;
+                    for each link in links.get("records")
+                    {
+                        if(link.get("Supplier_Payment") == null) { throw "An allocation has no payment."; }
+                        pid = link.get("Supplier_Payment").get("id").toString();
+                        relatedPayment = zoho.crm.getRecordById("Supplier_Payments",pid.toLong());
+                        if(relatedPayment.get("id") == null) { throw "Could not read a related payment."; }
+                        if(ifnull(relatedPayment.get("Currency"),ifnull(inv.get("Currency"),"EUR")) != ifnull(inv.get("Currency"),"EUR")) { throw "An existing payment uses another currency. Review its conversion before saving."; }
+                        if(pid != paymentId && relatedPayment.get("Status") != "Cancelled") { reserved = reserved + ifnull(link.get("Allocated_Amount"),0).toDecimal(); }
+                    }
+                    pendingAmount = ifnull(inv.get("Total_Payable_Amount"),ifnull(inv.get("Invoice_Total"),0)).toDecimal() - reserved;
+                    if(!paymentData.get("allocations").containKey(invoiceId)) { throw "An explicit amount is required for every invoice."; }
+					allocatedAmount = pendingAmount;
+					if(paymentData.containKey("allocations"))
+					{
+						allocMap = paymentData.get("allocations");
+						if(allocMap != null && allocMap.containKey(invoiceId))
+						{
+							allocatedAmount = ifnull(allocMap.get(invoiceId),0).toDecimal();
+						}
+					}
+					if(allocatedAmount < 0 || allocatedAmount != allocatedAmount.round(2))
+					{
+						res.put("error",true);
+						res.put("message","Allocated amount cannot be negative for invoice " + ifnull(inv.get("Name"),invoiceId).toString() + ".");
+						return res;
+					}
+					if(allocatedAmount > pendingAmount)
+					{
+						res.put("error",true);
+						res.put("message","Allocated amount cannot be greater than pending amount for invoice " + ifnull(inv.get("Name"),invoiceId).toString() + ".");
+						return res;
+					}
+					if(allocatedAmount == 0)
+					{
+						continue;
+					}
+					supplierObj = inv.get("Supplier");
+					bookingObj = inv.get("Booking");
+					settlementObj = inv.get("Supplier_Settlement");
+					supplierId = "";
+					supplierName = ifnull(inv.get("Supplier_Name"),"").toString();
+					bookingId = "";
+					bookingName = "";
+					settlementId = "";
+					settlementName = "";
+					ezusReference = ifnull(inv.get("Ezus_Supplier_Reference"),"").toString();
+					mfspReference = "";
+					if(supplierObj != null)
+					{
+						supplierId = ifnull(supplierObj.get("id"),"").toString();
+						if(supplierName == "")
+						{
+							supplierName = ifnull(supplierObj.get("name"),"").toString();
+						}
+					}
+					if(bookingObj != null)
+					{
+						bookingId = ifnull(bookingObj.get("id"),"").toString();
+						bookingName = ifnull(bookingObj.get("name"),"").toString();
+					}
+					if(settlementObj != null)
+					{
+						settlementId = ifnull(settlementObj.get("id"),"").toString();
+						settlementName = ifnull(settlementObj.get("name"),"").toString();
+					}
+					if(bookingId != "")
+					{
+						if(bookingMfspCache.containKey(bookingId))
+						{
+							mfspReference = ifnull(bookingMfspCache.get(bookingId),"").toString();
+						}
+						else
+						{
+							bookingRecord = zoho.crm.getRecordById("Deals",bookingId);
+							if(bookingRecord != null)
+							{
+								mfspReference = ifnull(bookingRecord.get("MFSP_Reference"),"").toString();
+							}
+							bookingMfspCache.put(bookingId,mfspReference);
+						}
+					}
+					if(supplierId != "" && !distinctSupplierIds.contains(supplierId))
+					{
+						distinctSupplierIds.add(supplierId);
+					}
+					if(supplierName != "" && !distinctSupplierNames.contains(supplierName))
+					{
+						distinctSupplierNames.add(supplierName);
+					}
+					if(bookingId != "" && !distinctBookingIds.contains(bookingId))
+					{
+						distinctBookingIds.add(bookingId);
+					}
+					if(bookingName != "" && !distinctBookingNames.contains(bookingName))
+					{
+						distinctBookingNames.add(bookingName);
+					}
+					if(settlementId != "" && !distinctSettlementIds.contains(settlementId))
+					{
+						distinctSettlementIds.add(settlementId);
+					}
+					if(settlementName != "" && !distinctSettlementNames.contains(settlementName))
+					{
+						distinctSettlementNames.add(settlementName);
+					}
+					invInfo = Map();
+					invInfo.put("id",invoiceId);
+					invInfo.put("name",ifnull(inv.get("Name"),"").toString());
+					invInfo.put("allocated_amount",allocatedAmount);
+                    invInfo.put("movement",if(inv.get("Invoice_Type") == "Credit Note","Supplier Refund","Outbound Payment"));
+					invInfo.put("supplier_id",supplierId);
+					invInfo.put("supplier_name",supplierName);
+					invInfo.put("booking_id",bookingId);
+					invInfo.put("booking_name",bookingName);
+					invInfo.put("settlement_id",settlementId);
+					invInfo.put("settlement_name",settlementName);
+					invInfo.put("ezus_reference",ezusReference);
+					invInfo.put("mfsp_reference",mfspReference);
+					invInfo.put("invoice_date",ifnull(inv.get("Invoice_Date"),"").toString());
+					invInfo.put("invoice_status",ifnull(inv.get("Status"),"").toString());
+					invoiceDataList.add(invInfo);
+					totalAllocatedAmount = totalAllocatedAmount + if(inv.get("Invoice_Type") == "Credit Note",0 - allocatedAmount,allocatedAmount);
+				}
+			}
+		}
+		if(hasValidInvoice == false)
+		{
+			res.put("error",true);
+			res.put("message","No valid supplier invoices found.");
+		}
+		else if(invoiceDataList.isEmpty())
+		{
+			res.put("error",true);
+			res.put("message","No positive invoice allocations found to create the payment.");
+		}
+		else
+		{
+			selectedPaymentAccountId = ifnull(paymentData.get("Payment_Account"),"").toString().trim();
+			headerPaymentAccountId = selectedPaymentAccountId;
+			supplierPaymentAccountSelections = Map();
+			resolvedPaymentAccountsBySupplier = Map();
+			autoPaymentAccountResponses = Map();
+			autoAccountingAccountResponses = Map();
+			if(paymentData.containKey("Payment_Accounts_By_Supplier"))
+			{
+				rawSupplierPaymentAccountSelections = paymentData.get("Payment_Accounts_By_Supplier");
+				if(rawSupplierPaymentAccountSelections != null)
+				{
+					supplierPaymentAccountSelections = rawSupplierPaymentAccountSelections;
+				}
+			}
+			for each  supplierIdValue in distinctSupplierIds
+			{
+				supplierIdForAccount = ifnull(supplierIdValue,"").toString().trim();
+				selectedSupplierPaymentAccountId = "";
+				if(supplierIdForAccount == "")
+				{
+					continue;
+				}
+				if(supplierPaymentAccountSelections != null && supplierPaymentAccountSelections.containKey(supplierIdForAccount))
+				{
+					selectedSupplierPaymentAccountId = ifnull(supplierPaymentAccountSelections.get(supplierIdForAccount),"").toString().trim();
+				}
+				if(selectedSupplierPaymentAccountId != "")
+				{
+					resolvedPaymentAccountsBySupplier.put(supplierIdForAccount,selectedSupplierPaymentAccountId);
+					continue;
+				}
+				supplierRecord = zoho.crm.getRecordById("Vendors",supplierIdForAccount);
+				if(supplierRecord != null && supplierRecord.containKey("id"))
+				{
+					defaultSupplierPaymentAccountId = "";
+					defaultSupplierPaymentAccountLookup = supplierRecord.get("Default_Payment_Account");
+					if(defaultSupplierPaymentAccountLookup != null)
+					{
+						defaultSupplierPaymentAccountId = ifnull(defaultSupplierPaymentAccountLookup.get("id"),"").toString().trim();
+					}
+					if(defaultSupplierPaymentAccountId != "")
+					{
+						defaultSupplierPaymentAccount = zoho.crm.getRecordById("Payment_Accounts",defaultSupplierPaymentAccountId);
+						if(defaultSupplierPaymentAccount != null && defaultSupplierPaymentAccount.containKey("id"))
+						{
+							defaultSupplierPaymentAccountStatus = ifnull(defaultSupplierPaymentAccount.get("Status"),"").toString().trim().toLowerCase();
+							defaultSupplierPaymentAccountAllowed = ifnull(defaultSupplierPaymentAccount.get("Allowed_For_Supplier_Payments"),false).toString().trim().toLowerCase();
+							if(defaultSupplierPaymentAccountStatus != "inactive" && defaultSupplierPaymentAccountAllowed == "true")
+							{
+								resolvedPaymentAccountsBySupplier.put(supplierIdForAccount,defaultSupplierPaymentAccountId);
+							}
+						}
+					}
+					if(!resolvedPaymentAccountsBySupplier.containKey(supplierIdForAccount))
+					{
+						autoAccountingAccountId = "";
+						autoPaymentAccountId = "";
+						ensureAccountingResp = standalone.ensureSupplierAccountingAccount(supplierIdForAccount);
+						autoAccountingAccountResponses.put(supplierIdForAccount,ensureAccountingResp);
+						if(ensureAccountingResp != null && ensureAccountingResp.containKey("error") && ensureAccountingResp.get("error") == true)
+						{
+							res.put("error",true);
+							res.put("message","Supplier accounting account could not be prepared for supplier " + supplierIdForAccount + ": " + ifnull(ensureAccountingResp.get("message"),"Unknown error").toString());
+						}
+						else
+						{
+							autoAccountingAccountId = ifnull(ensureAccountingResp.get("accounting_account_id"),"").toString().trim();
+							ensurePaymentAccountResp = standalone.ensureSupplierPaymentAccount(supplierIdForAccount,autoAccountingAccountId);
+							autoPaymentAccountResponses.put(supplierIdForAccount,ensurePaymentAccountResp);
+							if(ensurePaymentAccountResp != null && ensurePaymentAccountResp.containKey("error") && ensurePaymentAccountResp.get("error") == true)
+							{
+								res.put("error",true);
+								res.put("message","Supplier payment account could not be prepared for supplier " + supplierIdForAccount + ": " + ifnull(ensurePaymentAccountResp.get("message"),"Unknown error").toString());
+							}
+							else
+							{
+								autoPaymentAccountId = ifnull(ensurePaymentAccountResp.get("payment_account_id"),"").toString().trim();
+								if(autoPaymentAccountId != "")
+								{
+									resolvedPaymentAccountsBySupplier.put(supplierIdForAccount,autoPaymentAccountId);
+								}
+							}
+						}
+					}
+				}
+			}
+			if(!autoAccountingAccountResponses.isEmpty())
+			{
+				res.put("auto_accounting_account_response",autoAccountingAccountResponses);
+			}
+			if(!autoPaymentAccountResponses.isEmpty())
+			{
+				res.put("auto_payment_account_response",autoPaymentAccountResponses);
+			}
+			if(res.get("error") == true)
+			{
+				return res;
+			}
+			paymentReference = ifnull(paymentData.get("Name"),"").toString().trim();
+			if(paymentReference == "")
+			{
+				paymentReference = "PAY-" + zoho.currentdate.toString("yyyyMMdd") + "-" + zoho.currenttime.toString("HHmmss");
+			}
+			paymentDate = zoho.currentdate.toString("yyyy-MM-dd");
+            if(paymentReference.length() > 120) { throw "Enter a payment reference of at most 120 characters."; }
+            if(existingPayment.get("id") != null) { paymentDate = existingPayment.get("Payment_Date"); }
+			if(paymentData.containKey("Payment_Date"))
+			{
+				paymentDate = ifnull(paymentData.get("Payment_Date"),paymentDate).toString();
+			}
+			paymentStatus = ifnull(paymentData.get("Status"),"Paid").toString();
+            if(!paymentDate.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") || paymentDate.toDate("yyyy-MM-dd").toString("yyyy-MM-dd") != paymentDate) { throw "Enter a valid payment date."; }
+			paymentAccountingStatus = ifnull(paymentData.get("Accounting_Status"),"Pending").toString();
+			paymentMovementType = if(totalAllocatedAmount < 0,"Supplier Refund","Outbound Payment");
+            if(totalAllocatedAmount < 0) { totalAllocatedAmount = 0 - totalAllocatedAmount; }
+			contextMode = "Mixed";
+			if(distinctSupplierIds.size() <= 1 && distinctBookingIds.size() <= 1 && distinctSettlementIds.size() <= 1)
+			{
+				contextMode = "Single";
+			}
+			supplierSummary = "";
+			if(distinctSupplierNames.size() == 1)
+			{
+				supplierSummary = ifnull(distinctSupplierNames.get(0),"").toString();
+			}
+			else
+			{
+				supplierSummary = distinctSupplierNames.size().toString() + " suppliers";
+			}
+			bookingSummary = "";
+			if(distinctBookingNames.size() == 1)
+			{
+				bookingSummary = ifnull(distinctBookingNames.get(0),"").toString();
+			}
+			else
+			{
+				bookingSummary = distinctBookingNames.size().toString() + " bookings";
+			}
+			settlementSummary = "";
+			if(distinctSettlementNames.size() == 1)
+			{
+				settlementSummary = ifnull(distinctSettlementNames.get(0),"").toString();
+			}
+			else
+			{
+				settlementSummary = distinctSettlementNames.size().toString() + " settlements";
+			}
+			contextSummary = "Suppliers: " + supplierSummary + " | Bookings: " + bookingSummary + " | Settlements: " + settlementSummary;
+			paymentMap = Map();
+			paymentMap.put("Name",paymentReference);
+			paymentMap.put("Payment_Amount",totalAllocatedAmount);
+			if(ifnull(paymentData.get("Currency"),"").toString() != "")
+			{
+				paymentMap.put("Currency",paymentData.get("Currency"));
+			}
+			paymentMap.put("Payment_Date",paymentDate);
+			paymentMap.put("Status",paymentStatus);
+			paymentMap.put("Accounting_Status",paymentAccountingStatus);
+            paymentMap.put("Invoice_Edit_Key",operationKey);
+			paymentMap.put("Movement_Type",paymentMovementType);
+			paymentMap.put("Context_Mode",contextMode);
+			paymentMap.put("Supplier_Count",distinctSupplierIds.size());
+			paymentMap.put("Booking_Count",distinctBookingIds.size());
+			paymentMap.put("Settlement_Count",distinctSettlementIds.size());
+			paymentMap.put("Allocation_Count",invoiceDataList.size());
+			paymentMap.put("Context_Summary",contextSummary);
+			if(headerPaymentAccountId != "")
+			{
+				paymentMap.put("Payment_Account",headerPaymentAccountId);
+			}
+			info "createSupplierPaymentFromInvoices | creating payment | payload=" + paymentMap.toString();
+            if(paymentId == "")
+            {
+                createPaymentResp = zoho.crm.createRecord("Supplier_Payments",paymentMap,{"trigger":List()});
+                if(createPaymentResp.get("code") == "DUPLICATE_DATA" && createPaymentResp.get("details") != null) { createPaymentResp = {"id":createPaymentResp.get("details").get("id")}; }
+            }
+            else { createPaymentResp = {"id":paymentId}; }
+            if(createPaymentResp.get("id") != null)
+            {
+                verifiedPayment = zoho.crm.getRecordById("Supplier_Payments",createPaymentResp.get("id").toLong());
+                verificationFields = "Name,Payment_Amount,Payment_Date,Status,Accounting_Status,Movement_Type,Invoice_Edit_Key".toList(",");
+                for each field in verificationFields
+                {
+                    if(verifiedPayment.get(field) != paymentMap.get(field)) { throw "The existing payment differs from this request. Review before resuming."; }
+                }
+                if(verifiedPayment.get("Payment_Account") == null || verifiedPayment.get("Payment_Account").get("id").toString() != ownAccountId || ifnull(verifiedPayment.get("Currency"),"EUR") != ifnull(paymentData.get("Currency"),"EUR")) { throw "The payment account or currency changed. Review before resuming."; }
+            }
+			info "createSupplierPaymentFromInvoices | payment create response=" + ifnull(createPaymentResp,Map()).toString();
+			res.put("payment_response",createPaymentResp);
+			if(createPaymentResp != null && createPaymentResp.containKey("id"))
+			{
+				paymentId = createPaymentResp.get("id").toString();
+				res.put("payment_id",paymentId);
+                allocationIds = List();
+                validationRequest = {"allocations":paymentData.get("allocations"),"validate_only":true};
+                check = standalone.manageSupplierPaymentAllocations(paymentId,validationRequest.toString()).toMap();
+                if(check.get("success") != true || check.get("error") != false) { throw ifnull(check.get("message"),"Payment validation was not confirmed."); }
+				for each  invInfo in invoiceDataList
+				{
+					allocationMap = Map();
+					invoiceId = ifnull(invInfo.get("id"),"").toString();
+					allocatedAmount = ifnull(invInfo.get("allocated_amount"),0).toDecimal();
+					allocationMap.put("Name",paymentReference + " - " + ifnull(invInfo.get("name"),invoiceId).toString());
+                    if(allocationMap.get("Name").length() > 120) { allocationMap.put("Name",allocationMap.get("Name").subString(0,120)); }
+					allocationMap.put("Supplier_Payment",paymentId);
+					allocationMap.put("Supplier_Invoice",invoiceId);
+					allocationMap.put("Allocated_Amount",allocatedAmount);
+                    allocationKey = operationKey + "-" + invoiceId;
+                    allocationMap.put("Invoice_Edit_Key",allocationKey);
+					if(ifnull(paymentData.get("Currency"),"").toString() != "")
+					{
+						allocationMap.put("Currency",paymentData.get("Currency"));
+					}
+					allocationMap.put("Allocation_Date",paymentDate);
+					if(ifnull(invInfo.get("supplier_id"),"").toString() != "")
+					{
+						allocationMap.put("Supplier",invInfo.get("supplier_id"));
+					}
+					if(ifnull(invInfo.get("supplier_name"),"").toString() != "")
+					{
+						allocationMap.put("Supplier_Name",invInfo.get("supplier_name"));
+					}
+					if(ifnull(invInfo.get("booking_id"),"").toString() != "")
+					{
+						allocationMap.put("Booking",invInfo.get("booking_id"));
+					}
+					if(ifnull(invInfo.get("settlement_id"),"").toString() != "")
+					{
+						allocationMap.put("Supplier_Settlement",invInfo.get("settlement_id"));
+					}
+					if(ifnull(invInfo.get("ezus_reference"),"").toString() != "")
+					{
+						allocationMap.put("Ezus_Supplier_Reference",invInfo.get("ezus_reference"));
+					}
+					if(ifnull(invInfo.get("mfsp_reference"),"").toString() != "")
+					{
+						allocationMap.put("MFSP_Reference",invInfo.get("mfsp_reference"));
+					}
+					if(ifnull(invInfo.get("invoice_date"),"").toString() != "")
+					{
+						allocationMap.put("Invoice_Date",invInfo.get("invoice_date"));
+					}
+					if(ifnull(invInfo.get("invoice_status"),"").toString() != "")
+					{
+						allocationMap.put("Invoice_Status",invInfo.get("invoice_status"));
+					}
+					allocationMap.put("Payment_Date",paymentDate);
+					allocationMap.put("Payment_Status",paymentStatus);
+
+					allocationMap.put("Movement_Type",invInfo.get("movement"));
+					allocationPaymentAccountId = "";
+					allocationSupplierId = ifnull(invInfo.get("supplier_id"),"").toString();
+					if(allocationSupplierId != "" && resolvedPaymentAccountsBySupplier.containKey(allocationSupplierId))
+					{
+						allocationPaymentAccountId = ifnull(resolvedPaymentAccountsBySupplier.get(allocationSupplierId),"").toString().trim();
+					}
+					if(allocationPaymentAccountId != "")
+					{
+						allocationMap.put("Payment_Account",allocationPaymentAccountId);
+					}
+                    allocationRead = standalone.supplierInvoiceEdit_read("Supplier_Pay_Allocations","Invoice_Edit_Key",allocationKey).toMap();
+                    if(allocationRead.get("success") != true || allocationRead.get("records").size() > 1) { throw "Could not verify the payment allocation."; }
+                    allocationId = "";
+                    if(allocationRead.get("records").size() == 1) { allocationId = allocationRead.get("records").get(0).get("id").toString(); }
+                    if(allocationId == "")
+                    {
+                        saved = zoho.crm.createRecord("Supplier_Pay_Allocations",allocationMap,{"trigger":List()});
+                        allocationId = ifnull(saved.get("id"),"").toString();
+                        if(allocationId == "" && saved.get("code") == "DUPLICATE_DATA" && saved.get("details") != null) { allocationId = ifnull(saved.get("details").get("id"),"").toString(); }
+                    }
+                    if(allocationId == "") { throw "Allocation creation was not confirmed. Resume the same payment."; }
+                    savedAllocation = zoho.crm.getRecordById("Supplier_Pay_Allocations",allocationId.toLong());
+                    if(savedAllocation.get("Invoice_Edit_Key") != allocationKey || savedAllocation.get("Supplier_Payment") == null || savedAllocation.get("Supplier_Payment").get("id").toString() != paymentId || savedAllocation.get("Supplier_Invoice") == null || savedAllocation.get("Supplier_Invoice").get("id").toString() != invoiceId || savedAllocation.get("Allocated_Amount") != allocatedAmount) { throw "The allocation changed outside this operation."; }
+                    allocationIds.add(allocationId);
+                }
+                reconcileRequest = {"allocations":paymentData.get("allocations"),"reconcile_only":true};
+                checked = standalone.manageSupplierPaymentAllocations(paymentId,reconcileRequest.toString()).toMap();
+                if(checked.get("success") != true || checked.get("error") != false) { throw ifnull(checked.get("message"),"Related balances remain pending."); }
+                res.put("success",true);
+				res.put("allocation_ids",allocationIds);
+				res.put("message","Supplier payment and allocations created successfully.");
+			}
+			else
+			{
+				res.put("error",true);
+				res.put("message","Supplier payment could not be created. CRM response: " + ifnull(createPaymentResp,Map()).toString());
+			}
+		}
+	}
+}
+catch (e)
+{
+	res.put("error",true);
+	res.put("message",e.toString());
+}
+return res;
+}

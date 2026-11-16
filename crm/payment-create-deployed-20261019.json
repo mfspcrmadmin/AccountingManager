@@ -1,0 +1,11 @@
+{
+  "function": "createsupplierpaymentfrominvoices",
+  "function_id": "616617000160860001",
+  "status": "published_and_source_verified",
+  "reason": "Published payment creation was still the legacy implementation without consistency_version 2, blocking prepayment and card payment creation.",
+  "source": "crm/invoice-edit/createsupplierpaymentfrominvoices.dg",
+  "backup": "_local/createsupplierpaymentfrominvoices.before-deploy-20261019.dg",
+  "compiler_fixes": ["Assign capability and reconciliation maps before calling toString", "Assign verification field list before the for each loop"],
+  "verification": {"zoho_compile_and_update": "SUCCESS", "published_source_has_v2_and_recovery": true, "local_tests_passed": 100, "real_payment_executed": false},
+  "financial_records_modified": false
+}

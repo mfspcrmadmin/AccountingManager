@@ -1,0 +1,16 @@
+string standalone.supplierPayment_deleteAllocation(String allocationId)
+{
+	allocationId = ifnull(allocationId,"").trim();
+	if(!allocationId.matches("[0-9]+"))
+	{
+		return {"message":"Invalid payment allocation id."};
+	}
+	allocationDeleteUrl = "https://www.zohoapis.eu/crm/v8/Supplier_Pay_Allocations?ids=" + allocationId + "&wf_trigger=false";
+	allocationDeleteResponse = invokeurl
+	[
+		url :allocationDeleteUrl
+		type :DELETE
+		connection:"crm_oauth_connection"
+	];
+	return ifnull(allocationDeleteResponse,Map());
+}

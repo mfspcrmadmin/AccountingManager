@@ -1,0 +1,43 @@
+string standalone.deleteBookingService(int serviceId)
+{
+service = zoho.crm.getRecordById("Booking_Services",serviceId);
+//
+info "Delete?: " + service.get("Delete");
+info "Status: " + service.get("Status");
+//
+if(service.get("Delete") != true)
+{
+	info "Service not flagged to be deleted";
+	return "";
+}
+//delete record from creator database
+if(service.get("Status") == "OK - Confirmed")
+{
+	appOwner = "madeforspainandportugal";
+	appName = "supplier-availability";
+	reportName = "Supplier_Availability_Report";
+	record = zoho.creator.getRecords(appOwner,appName,reportName,"Booking_Service_Id==\"" + serviceId + "\"",1,1,"creator_oauth_connection");
+	if(record.get("data").size() > 0)
+	{
+		info "Deleting record in creator.";
+		//
+		record = record.get("data").get(0);
+		res = invokeurl
+		[
+			url :"https://creator.zoho.eu/api/v2/" + appOwner + "/" + appName + "/report/" + reportName + "/" + record.get("ID")
+			type :DELETE
+			connection:"creator_oauth_connection"
+		];
+		info res;
+	}
+}
+deleteServiceMap = Map();
+deleteServiceMap.put("module","Booking_Services");
+deleteServiceMap.put("id",serviceId);
+//
+info "Deleting case in crm.";
+//
+res = zoho.crm.invokeConnector("crm.delete",deleteServiceMap);
+info res;
+return "";
+}

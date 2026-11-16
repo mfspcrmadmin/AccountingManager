@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-19",
+  "baseline": "User reports earlier changes published and initial invoice flows working on 2026-10-19; no independent live readback available in this session.",
+  "status": "published_per_user_read_only_live_sample_reviewed",
+  "deployment_order": [
+    "crm/invoice-edit/supplierPayment_deleteAllocation.dg",
+    "crm/invoice-edit/managesupplierpaymentallocations.dg",
+    "Widget including app/scripts/payment-delete.js, main.js, operations.js, prepayment-workflow.js and payment-save.js"
+  ],
+  "changes": [
+    "Payment deletion persists the full invoice/source plan before mutation, reads live paginated relationships, rejects changed relationships and locks, detaches source records with recovery, uses canonical server allocation reconciliation with explicit zeros, and deletes the parent last.",
+    "Manager undo_preview only permits a read-only all-zero preview while source links exist. Actual allocation changes still require source detachment. Existing accounting links remain blocked.",
+    "No manual Approved fallback, no formula Unpaid_Invoiced_Amount writes, no counting unpaid allocations during payment deletion.",
+    "Settlement warnings prevent complete-success responses from allocation reconciliation.",
+    "Card payment source status, payment link and audit fields are written together; pending journal keeps recorded source records resumable after lost update responses.",
+    "Prepayment request/service sync failures retain a persistent retry action and do not report full completion or create another payment.",
+    "Conflicting pending create/edit/delete journals and repeated allocation pages fail closed.",
+    "Final payment read checks the direct Accounting_Entry lookup again before deleting the parent. The no-allocation confirmation now explains source unlinking and state updates."
+  ],
+  "verification": {
+    "tests_passed": 209,
+    "log": "_local/payment-flow-review-20261019.txt",
+    "javascript_syntax_checks": true,
+    "live_crm_compilation": false,
+    "live_end_to_end": false,
+    "production_records_modified": false,
+    "followup_focused_tests_passed": 175,
+    "followup_deletion_tests_passed": 9,
+    "user_report": "User confirms functions working and latest widget corrections published.",
+    "live_read_only_sample": "_local/payment-live-review-20261019.json",
+    "latest_allocation_tests_passed": 16
+  },
+  "retained_rules": [
+    "Financial fields of source operations with invoices/payments stay read-only. Source-linked payments cannot be redistributed directly; undo and register the corrected payment.",
+    "Recorded payment amounts follow signed allocations. No new unassigned-payment model or currency conversions.",
+    "Posted/reconciled payments and existing accounting links block deletion. No accounting entry generation introduced.",
+    "Legacy incomplete payment deletions are blocked for review instead of guessing already removed invoice relationships."
+  ],
+  "limits": [
+    "Read-only CRM access became available for the follow-up sample. Deployed function source and external workflows remain unverified.",
+    "Recovery uses browser storage and browser locks, not cross-user atomic transactions; earlier user decision about coordination retained.",
+    "No bulk historical correction."
+  ]
+}

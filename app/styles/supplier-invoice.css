@@ -1,0 +1,459 @@
+@layer widget-views {
+/* Supplier invoice only: the other invoice entry points retain their own layout. */
+/* Create and Edit share the supplier form, tax, service and attachment components. */
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) {
+  display: flex; flex-direction: column; position: fixed; inset: 12px;
+  padding: 0; margin: 0 auto; width: auto; max-width: 1280px; height: auto;
+  overflow: hidden; border: 1px solid #dfe3e8; border-radius: 12px;
+  background: #fff; color: #26313d; box-shadow: 0 18px 60px #17212e30;
+  font-size: 13px;
+}
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog)[hidden] { display: none; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) [hidden] { display: none !important; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) > .panel-header {
+  flex: 0 0 auto; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center;
+  gap: 12px; margin: 0; padding: 14px 20px; border-bottom: 1px solid #dfe3e8;
+}
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) h2 { margin: 0; font-size: 19px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) h3 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: 0; text-transform: none; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-title-context { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-header-supplier { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #626c78; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-close { flex: 0 0 32px; height: 32px; width: 32px; padding: 0; border: 0; box-shadow: none; background: transparent; color: #626c78; font-size: 24px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-form { display: flex; flex: 1 1 auto; flex-direction: column; gap: 0; min-height: 0; margin: 0; overflow: hidden; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-layout { display: grid; grid-template-columns: minmax(0, 35fr) minmax(0, 65fr); flex: 1 1 auto; min-height: 0; overflow: hidden; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-context,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-editor { padding: 18px 20px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; scroll-padding: 16px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-context { background: #f7f8fa; border-right: 1px solid #e1e5e9; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-editor { background: #fff; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-editor > section + section { border-top: 1px solid #e5e7eb; margin-top: 16px; padding-top: 14px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .icon-button { display: inline-flex; align-items: center; justify-content: center; width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; border: 1px solid #dfe3e8; background: transparent; border-radius: 6px; color: #606a76; font-size: 18px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .field { gap: 5px; margin: 0; padding: 0; min-width: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .field > span { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: #505b67; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .field input:not([type="checkbox"]),
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .field select { height: 38px; min-height: 38px; padding: 7px 9px; font-size: 13px; border: 1px solid #cfd5dc; border-radius: 6px; background: #fff; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) input[type="checkbox"] { accent-color: #bc5819; width: 15px; height: 15px; min-height: 0; margin: 0; flex: 0 0 15px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-document-fields,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-amounts-section,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-amounts-shell,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-summary-card,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-section { display: block; margin: 0; padding: 0; border: 0; box-shadow: none; border-radius: 0; background: transparent; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-inline-section-heading { margin: 0 0 10px; padding: 0; color: #26313d; font-size: 13px; font-weight: 650; letter-spacing: 0; text-transform: none; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-document-grid { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 12px; }
+/* Keep the arrow without the shared white gradient covering CRM picklist colors. */
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-type { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23667085' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-type { background-repeat: no-repeat; background-position: right 15px center; background-size: 12px 8px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-document-grid > :first-child,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-type-field { grid-column: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-main-amounts-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 0 0 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-tax-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 20px; padding: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-tax-input-row { display: flex; align-items: center; gap: 10px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-tax-input-row > input { width: 86px; flex: 0 1 86px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .inline-review-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 0; margin: 0; width: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 12px; color: #505b67; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .inline-review-toggle span { font-size: 12px; text-transform: none; letter-spacing: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-tax-options { margin: 12px 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-additional-vat-fields { margin: 0 0 14px; padding: 12px 0 0; border-top: 1px dashed #dfe3e8; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px 20px; padding-top: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-field { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0; padding: 0; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; grid-column: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-field > span,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-field .field-label-line { color: #626c78; font-size: 12px; text-transform: none; letter-spacing: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-field strong { font-size: 14px; font-weight: 600; white-space: nowrap; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-field-total { padding-top: 9px; margin-top: 4px; border-top: 1px solid #dfe3e8; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-payable-total strong { font-size: 17px; color: #9c4514; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-amount-input[readonly] { width: 86px; min-height: 0; height: auto; padding: 0; text-align: right; border: 0; background: transparent; font-size: 13px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card .invoice-create-summary-card-heading { margin: 0 0 8px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card .table-wrap { overflow: visible; max-height: none; border: 0; background: transparent; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card table { width: 100%; min-width: 0; table-layout: fixed; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card th,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card td { padding: 6px 0; font-size: 12px; overflow-wrap: anywhere; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card th:first-child,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card td:first-child { width: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card th:last-child,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-allocation-card td:last-child { width: 135px; padding-left: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-allocation-input { box-sizing: border-box; width: 100%; min-width: 0; height: 36px; padding: 6px 9px; border: 1px solid #cfd5dc; border-radius: 6px; text-align: right; font-size: 13px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-allocation-totals { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 14px; border: 1px dashed #cfd5dc; border-radius: 8px; background: #fff; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip.is-dragging-file { border-color: #b55419; background: #fff4e9; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-drop-hint { font-size: 12px; color: #626c78; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-picker-button { cursor: pointer; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-picker-button:focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-picker-button:disabled { cursor: default; opacity: .6; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip-label { min-width: 90px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip-label small { font-size: 11px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-name { flex: 1 1 100px; min-width: 0; font-size: 12px; overflow-wrap: anywhere; white-space: normal; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-picker-button { min-height: 36px; padding: 7px 10px; border-radius: 6px; font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-actions { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 10px; margin: 0; padding: 12px 20px; border-top: 1px solid #dfe3e8; background: #fff; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-actions .button { min-height: 38px; padding: 8px 18px; font-size: 13px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-actions { flex-direction: row; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-actions-main { flex: 0 0 auto; width: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-actions .button { width: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-submit { background: #b55419; border-color: #b55419; color: #fff; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-feedback { flex: 0 0 auto; max-height: 110px; overflow: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-feedback .inline-feedback { margin: 0; padding: 8px 20px; border-radius: 0; border-inline: 0; font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .settlement-filter-grid { display: grid; grid-template-columns: minmax(0,1fr) 94px 32px; align-items: end; gap: 8px; margin: 0 0 10px; padding: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .settlement-filter-grid input[type="search"],
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .bookings-stage-toggle { min-height: 36px; height: 36px; font-size: 12px; padding: 6px 8px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .bookings-stage-toggle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .settlement-status-filter-field .bookings-stage-menu { right: 0; left: auto; min-width: 230px; max-width: 290px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-settlement-table-wrap { overflow: visible; max-height: none; height: auto; border: 0; background: transparent; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-list { max-height: 340px; overflow-y: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-option { display: flex; align-items: flex-start; gap: 9px; margin: 0 0 6px; padding: 10px; border: 1px solid #e0e4e9; border-radius: 6px; background: #fff; cursor: pointer; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-option.is-selected { border-color: #c76b2c; background: #fff9f3; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-option > input { margin-top: 3px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-label { display: grid; gap: 4px; flex: 1; min-width: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-label strong { font-size: 13px; overflow-wrap: anywhere; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-label small { color: #687380; font-size: 11px; overflow-wrap: anywhere; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .status-pill { width: fit-content; font-size: 10px; padding: 2px 6px; white-space: normal; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-cost { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-settlement-selection { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 0; font-size: 13px; overflow-wrap: anywhere; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-context-empty { padding: 16px 0; margin: 0; color: #687380; font-size: 13px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-financial-summary { margin-top: 16px; padding-top: 14px; border-top: 1px solid #dfe3e8; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-card-heading { margin-bottom: 10px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-item { display: grid; gap: 4px; min-width: 0; padding: 0; border: 0; background: transparent; border-radius: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-item > span { font-size: 12px; color: #687380; text-transform: none; letter-spacing: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-item strong { font-size: 14px; font-variant-numeric: tabular-nums; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-item-highlight { grid-column: 1/-1; padding-bottom: 10px; border-bottom: 1px solid #e3e6ea; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog, .prepayment-workflow-summary) .invoice-create-summary-item-highlight strong { font-size: 23px; color: #a44d18; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-services-panel { display: block; padding: 14px 0 0; margin-top: 16px; border: 0; border-top: 1px solid #dfe3e8; border-radius: 0; background: transparent; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-services-count { color: #687380; font-size: 11px; font-weight: 400; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-selection { margin-top: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-services-table-wrap { max-height: none; height: auto; overflow: visible; border: 0; background: transparent; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item { padding: 12px 0; border-bottom: 1px solid #e0e4e9; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item > div { display: grid; gap: 4px; overflow-wrap: anywhere; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item strong { font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item span { font-size: 11px; color: #687380; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item dt { font-size: 11px; color: #687380; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-service-item dd { margin: 4px 0 0; font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .settlement-calculation { margin: 0 0 12px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-line { display: flex; align-items: flex-start; gap: 8px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-line details { flex: 1; min-width: 0; padding-top: 6px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-line summary { color: #626c78; font-weight: 400; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-line.is-error summary { color: #a3342d; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-line.is-loading summary::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 7px; border: 2px solid #ddd; border-top-color: #b55419; border-radius: 50%; animation: inline-feedback-spin .8s linear infinite; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-detail-body { padding: 8px 0; font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .settlement-calculation-rows { max-height: 230px; overflow: auto; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .settlement-calculation-row { font-size: 12px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .calculation-record-id { display: block; margin-top: 4px; color: #687380; font-size: 11px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-calculation-warning { margin: 6px 0 0; font-size: 12px; font-weight: 400; }
+@media (max-width: 850px) {
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-layout { grid-template-columns: 1fr; overflow-y: auto; display: block; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-context,
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-editor { overflow: visible; scrollbar-gutter: auto; padding: 16px; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .supplier-invoice-context { border-right: 0; border-bottom: 1px solid #dfe3e8; }
+}
+@media (max-width: 540px) {
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) { inset: 4px; border-radius: 8px; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) > .panel-header { padding: 12px 14px; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) h2 { font-size: 17px; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-document-grid,
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-main-amounts-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) #invoice-create-date-field { grid-column: 1/-1; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-tax-grid { column-gap: 12px; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-tax-input-row { flex-wrap: wrap; gap: 6px; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-calculated-grid { grid-template-columns: 1fr; }
+  :is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-actions { padding: 10px 14px; }
+}
+
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-required { color: #b55419; font-weight: 600; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip-label { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: #344054; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-picker { grid-column: 1; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-drop-hint,
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-name { grid-column: 2; margin: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-name { display: none; color: #344054; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip.has-file .invoice-create-file-name { display: block; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip.has-file .invoice-create-file-drop-hint { display: none; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-remove { grid-column: 3; width: 32px; height: 32px; padding: 0; border-radius: 6px; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog) .invoice-create-file-strip:focus-within { border-color: #b55419; }
+
+.invoice-edit-dialog { box-sizing: border-box; font-family: inherit; }
+.invoice-edit-dialog:not([open]) { display: none !important; }
+.invoice-edit-dialog[open] { display: flex; flex-direction: column; max-height: calc(100dvh - 24px); height: calc(100dvh - 24px); }
+.invoice-edit-dialog::backdrop { background: rgb(16 24 40 / 35%); }
+.invoice-edit-dialog > header { justify-content: space-between; flex-shrink: 0; }
+.invoice-edit-dialog header p { margin: 5px 0 0; color: #626c78; font-size: 13px; }
+.invoice-edit-dialog header button { flex: 0 0 32px; width: 32px; height: 32px; border: 0; background: transparent; color: #626c78; font-size: 24px; cursor: pointer; }
+.invoice-edit-dialog form { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; margin: 0; }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog).invoice-edit-dialog .supplier-invoice-layout { grid-template-columns: minmax(0,30fr) minmax(0,70fr); }
+.invoice-edit-dialog fieldset { min-width: 0; border: 0; margin: 0; padding: 0; }
+.invoice-edit-dialog section + section { border-top: 1px solid #e5e7eb; margin-top: 16px; padding-top: 14px; }
+.invoice-edit-dialog h3 { margin-bottom: 12px !important; }
+.invoice-edit-dialog h4 { margin: 18px 0 10px; font-size: 12px; }
+.invoice-edit-dialog label, .invoice-edit-dialog .edit-tax { font-size: 12px; min-width: 0; color: #505b67; }
+.invoice-edit-dialog .field { display: flex; flex-direction: column; }
+.invoice-edit-dialog input:not([type=checkbox]), .invoice-edit-dialog select, .invoice-edit-dialog textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px; padding: 7px 9px; border: 1px solid #cfd5dc; border-radius: 6px; color: #26313d; background: #fff; font: inherit; }
+.invoice-edit-dialog textarea { resize: vertical; min-height: 64px; }
+.invoice-edit-dialog input[readonly] { background: #f7f8fa; color: #626c78; }
+.invoice-edit-dialog .invoice-create-tax-input-row { margin-top: 5px; }
+.invoice-edit-dialog input[type=checkbox] { width: 17px !important; height: 17px !important; flex: 0 0 17px !important; min-height: 0 !important; padding: 0; margin: 0; }
+.invoice-edit-dialog input:focus-visible, .invoice-edit-dialog select:focus-visible, .invoice-edit-dialog textarea:focus-visible, .invoice-edit-dialog button:focus-visible, .invoice-edit-dialog summary:focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+.invoice-edit-dialog button { cursor: pointer; }
+.invoice-edit-dialog button:disabled, .invoice-edit-dialog fieldset:disabled { opacity: .65; cursor: default; }
+.invoice-edit-dialog .invoice-required { color: #b55419; }
+.invoice-edit-dialog .edit-additional { border-block: 1px dashed #dfe3e8; padding: 12px 0; margin-top: 14px; }
+.invoice-edit-dialog .edit-additional[open] summary { margin-bottom: 12px; }
+.invoice-edit-dialog .invoice-edit-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #dfe3e8; font-size: 12px; color: #626c78; }
+.invoice-edit-dialog .invoice-edit-summary strong { display: block; margin-top: 5px; font-size: 14px; color: #26313d; }
+.invoice-edit-dialog .invoice-edit-summary .edit-emphasis strong { color: #a44d18; font-size: 16px; }
+.invoice-edit-dialog .edit-allocations { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+.invoice-edit-dialog .edit-allocations th { text-align: left; font-weight: 500; color: #626c78; }
+.invoice-edit-dialog .edit-allocations th:last-child, .invoice-edit-dialog .edit-allocations td:last-child { width: 135px; text-align: right; padding-left: 12px; }
+.invoice-edit-dialog .edit-allocations td { padding: 8px 0; border-bottom: 1px solid #e5e7eb; overflow-wrap: anywhere; }
+.invoice-edit-dialog small { display: block; color: #687380; font-size: 11px; margin-bottom: 4px; }
+.invoice-edit-dialog .edit-excess { margin-top: 12px; text-align: left; }
+.invoice-edit-dialog .edit-excess span { white-space: normal; }
+.invoice-edit-dialog .edit-saved-files { list-style: none; margin: 0; padding: 0; }
+.invoice-edit-dialog .edit-saved-files li { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.invoice-edit-dialog .edit-saved-files li > span { min-width: 0; }
+.invoice-edit-dialog .edit-file-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.invoice-edit-dialog .edit-saved-files .is-removed .edit-saved-file-name { text-decoration: line-through; color: #687380; }
+.invoice-edit-dialog .edit-file-plan { margin: 8px 0 0; font-size: 12px; color: #626c78; }
+.invoice-edit-dialog .edit-file-plan:empty { display: none; }
+.invoice-edit-dialog [data-edit-file-name] { display: block; overflow-wrap: anywhere; }
+.invoice-edit-dialog .edit-file-icon { color: #b55419; font-size: 24px; }
+.invoice-edit-dialog .button { width: auto; min-height: 36px; border: 1px solid #cfd5dc; border-radius: 6px; padding: 7px 12px; background: #fff; color: #505b67; font: inherit; }
+.invoice-edit-dialog .button:hover { background: #f7f8fa; }
+.invoice-edit-dialog .button.primary { color: #fff; background: #b55419; border-color: #b55419; }
+.invoice-edit-dialog .button.primary:hover { background: #984514; }
+.invoice-edit-dialog footer { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; flex-shrink: 0; gap: 12px; padding: 12px 20px; border-top: 1px solid #dfe3e8; background: #fff; }
+.invoice-edit-dialog footer > [data-edit-close] { grid-column: 1; justify-self: start; }
+.invoice-edit-dialog footer > [data-edit-save] { grid-column: 3; white-space: nowrap; }
+.invoice-edit-dialog [data-edit-message] { grid-column: 2; justify-self: end; min-width: 0; max-width: 640px; margin: 0; font-size: 12px; line-height: 1.45; max-height: 96px; overflow-y: auto; overflow-wrap: anywhere; color: #626c78; }
+.invoice-edit-dialog [data-edit-message]:empty { display: none; }
+.invoice-edit-dialog [data-edit-message].is-loading { display: flex; align-items: center; gap: 10px; justify-self: stretch; color: #625449; background: #fff8f2; border: 1px solid #f0dfd1; border-radius: 6px; }
+.invoice-edit-dialog [data-edit-message].is-loading .inline-feedback-spinner { display: block; border-color: #f0dfd1; border-top-color: #b55419; }
+.invoice-edit-dialog .edit-progress-copy { display: grid; gap: 3px; min-width: 0; }
+.invoice-edit-dialog .edit-progress-copy strong { font-size: 12px; font-weight: 600; }
+.invoice-edit-dialog .edit-progress-copy > span { font-size: 11px; line-height: 1.4; }
+.invoice-edit-dialog [data-edit-save].is-saving { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.invoice-edit-dialog [data-edit-save].is-saving::before { content: ''; width: 12px; height: 12px; flex: 0 0 12px; border: 2px solid rgb(255 255 255 / 35%); border-top-color: #fff; border-radius: 50%; animation: inline-feedback-spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .invoice-edit-dialog [data-edit-save].is-saving::before, .invoice-edit-dialog [data-edit-message] .inline-feedback-spinner { animation-duration: 2s; } }
+.invoice-edit-dialog [data-edit-message]:not(:empty) { padding: 8px 12px; }
+.invoice-edit-dialog [data-edit-message].is-error { color: #a23821; background: #fff5f2; border: 1px solid #efd4cb; border-left: 3px solid #a23821; border-radius: 6px; }
+.invoice-edit-dialog .is-error, .invoice-edit-dialog .edit-field-error { color: #a23821; }
+.invoice-edit-dialog .edit-field-error { font-size: 11px; margin: 5px 0 0; }
+.invoice-edit-dialog .invoice-create-file-strip > .edit-field-error { grid-column: 1 / -1; }
+.invoice-edit-dialog [aria-invalid=true] { border-color: #a23821; }
+.invoice-edit-dialog .invoice-edit-recovery { padding: 20px; overflow-y: auto; }
+.invoice-edit-dialog .edit-caption { color: #687380; font-size: 11px; margin: -4px 0 16px; }
+.invoice-edit-dialog .edit-settlement { overflow-wrap: anywhere; }
+.invoice-edit-dialog .invoice-create-services-panel { height: auto; }
+.invoice-edit-dialog .edit-settlement > p { margin: 6px 0; font-size: 12px; }
+.invoice-edit-dialog .edit-status { display: inline-block; padding: 4px 8px; border: 1px solid #dfe3e8; border-radius: 5px; font-size: 11px; background: #fff; }
+.invoice-edit-dialog .edit-settlement-totals { margin: 0; }
+.invoice-edit-dialog .edit-settlement-totals > div { display: flex; justify-content: space-between; gap: 12px; margin-top: 9px; font-size: 12px; }
+.invoice-edit-dialog .edit-settlement-totals dt { color: #626c78; }
+.invoice-edit-dialog .edit-settlement-totals dd { margin: 0; white-space: nowrap; font-weight: 600; }
+@media(max-width:850px) {
+ .invoice-edit-dialog .supplier-invoice-layout { display: block; overflow-y: auto; }
+ .invoice-edit-dialog .supplier-invoice-context, .invoice-edit-dialog .supplier-invoice-editor { overflow: visible; }
+}
+@media(max-width:540px) {
+ .invoice-edit-dialog[open] { inset: 6px; height: calc(100dvh - 12px); max-height: calc(100dvh - 12px); }
+ .invoice-edit-dialog .invoice-document-grid, .invoice-edit-dialog .invoice-create-main-amounts-grid, .invoice-edit-dialog .invoice-create-tax-grid { grid-template-columns: 1fr !important; }
+ .invoice-edit-dialog .invoice-edit-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .invoice-edit-dialog .invoice-create-calculated-grid { grid-template-columns: 1fr; }
+ .invoice-edit-dialog .invoice-create-file-strip { grid-template-columns: auto minmax(0,1fr); }
+ .invoice-edit-dialog [data-edit-file] { grid-column: 1 / -1; justify-self: start; }
+ .invoice-edit-dialog .invoice-create-file-strip > .edit-file-actions { grid-column: 1 / -1; }
+ .invoice-edit-dialog footer { padding: 12px 16px; }
+ .invoice-edit-dialog footer { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+ .invoice-edit-dialog footer > [data-edit-save] { grid-column: 2; }
+ .invoice-edit-dialog footer > [data-edit-message] { grid-column: 1 / -1; grid-row: 1; justify-self: stretch; }
+ .invoice-edit-dialog footer:has([data-edit-message]:not(:empty)) > button { grid-row: 2; }
+}
+.invoice-payment-choice {
+  width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: 24px; border: 1px solid #e5e7eb; border-radius: 16px;
+  color: #253041; background: #fff; box-sizing: border-box; overflow: auto;
+}
+.invoice-payment-choice::backdrop { background: rgb(23 32 46 / 38%); }
+.invoice-payment-choice h2 { margin: 0 0 16px; font-size: 19px; }
+.invoice-payment-choice dl { margin: 0 0 16px; padding: 12px; border-radius: 10px; background: #faf9f7; }
+.invoice-payment-choice dl div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.invoice-payment-choice dd { margin: 0; font-weight: 600; white-space: nowrap; }
+.invoice-payment-choice .payment-choice-option { display: flex; gap: 10px; padding: 12px 0; border-top: 1px solid #eee; cursor: pointer; }
+.invoice-payment-choice input { flex-shrink: 0; width: 17px; height: 17px; margin: 3px 0 0; accent-color: #e77822; }
+.invoice-payment-choice small { display: block; margin-top: 4px; line-height: 1.5; color: #657181; }
+.invoice-payment-choice label:has(input:disabled) { opacity: .55; cursor: default; }
+.invoice-payment-choice [data-payment-correction] { margin: 0 0 12px 27px; padding: 12px; border: 1px solid #f2d5bd; border-radius: 10px; background: #fffaf5; }
+.invoice-payment-choice [data-payment-correction] > label:first-child { display: grid; gap: 6px; }
+.invoice-payment-choice select { width: 100%; min-width: 0; padding: 8px; background: white; border: 1px solid #ddd; border-radius: 7px; }
+.invoice-payment-choice .payment-choice-confirm { display: flex; gap: 8px; align-items: flex-start; }
+.invoice-payment-choice [data-payment-effect], .invoice-payment-choice .payment-choice-hint { font-size: 12px; line-height: 1.5; }
+.invoice-payment-choice footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+@media (max-width: 480px) { .invoice-payment-choice { padding: 16px; } }
+:is(#invoice-create-panel.supplier-invoice-single, .invoice-edit-dialog).invoice-finalize-dialog { inset: 0; margin: auto; width: min(680px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); }
+.invoice-finalize-dialog form { flex: 0 1 auto; }
+.invoice-finalize-dialog [data-edit-body] { display: block; flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px; }
+.invoice-finalize-dialog fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.invoice-finalize-dialog header > div { min-width: 0; }
+.invoice-finalize-dialog header h2 { font-size: 19px; }
+.invoice-finalize-dialog header [data-edit-supplier] { margin: 4px 0 0; font-size: 12px; font-weight: 400; color: #687380; overflow-wrap: anywhere; }
+.invoice-finalize-dialog header [data-edit-close] { flex-shrink: 0; border-radius: 6px; }
+.invoice-finalize-dialog header [data-edit-close]:hover { background: #f7f8fa; }
+.invoice-finalize-dialog section + section { border-top: 1px solid #e9e5e1; margin-top: 18px; padding-top: 16px; }
+.invoice-finalize-dialog section h3 { font-size: 14px; margin: 0 0 10px; }
+.invoice-finalize-dialog .final-details-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.invoice-finalize-dialog .final-details-heading h3 { margin: 0 !important; }
+.invoice-finalize-dialog .final-type-badge { padding: 4px 8px; border-radius: 5px; background: #fff3e9; color: #984514; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.invoice-finalize-dialog .final-invoice-fields { display: grid; grid-template-columns: minmax(0, 1fr) 170px; gap: 14px; }
+.invoice-finalize-dialog .final-invoice-fields > .field { min-width: 0; }
+.final-invoice-amounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; margin: 0; }
+.final-invoice-amounts > div { min-width: 0; }
+.final-invoice-amounts dt { font-size: 12px; color: #6b7280; }
+.final-invoice-amounts dd { margin: 3px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.invoice-finalize-dialog .final-invoice-amounts dd small { display: inline; font-weight: 400; }
+.final-invoice-amounts .final-payable { color: #b65016; }
+@media (max-width: 340px) { .final-invoice-amounts { grid-template-columns: minmax(0, 1fr); } }
+.invoice-finalize-number { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; margin-top: 8px; }
+.invoice-finalize-number small { color: #657181; font-size: 11px; }
+.invoice-finalize-number > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.invoice-finalize-dialog .invoice-finalize-number .button { min-height: 28px; font-size: 11px; padding: 4px 7px; border-color: transparent; background: transparent; }
+.invoice-finalize-dialog .invoice-finalize-number .button:hover { background: #faf4ee; color: #984514; }
+.invoice-finalize-dialog .invoice-finalize-number .button[aria-pressed=true] { background: #fff3e9; border-color: #f0d5c1; color: #984514; }
+.invoice-finalize-dialog svg { width: 20px; height: 20px; flex: 0 0 20px; }
+.invoice-finalize-dialog .final-document-info { flex: 1; min-width: 0; }
+.invoice-finalize-dialog .final-document-info small { display: block; color: #687380; font-size: 11px; margin: 2px 0; }
+.invoice-finalize-dialog .final-document-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.4; font-size: 12px; color: #253041; }
+.invoice-finalize-dialog .edit-saved-files .final-document-row { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 7px; gap: 10px; margin-bottom: 14px; }
+.invoice-finalize-dialog .final-document-download { display: inline-flex; align-items: center; justify-content: center; width: 34px; min-height: 34px; padding: 6px; flex: 0 0 34px; }
+.invoice-finalize-dialog .final-upload-label { font-size: 12px; font-weight: 500; margin-bottom: 7px; }
+.invoice-finalize-dialog .final-upload-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; padding: 12px; border: 1px dashed #cfd5dc; border-radius: 7px; background: #fff; }
+.invoice-finalize-dialog .final-upload-zone:has([aria-invalid=true]) { border-color: #a23821; }
+.invoice-finalize-dialog .final-upload-zone.is-dragging-file { border-color: #b55419; background: #fff8f2; }
+.invoice-finalize-dialog .final-upload-zone .button { font-size: 12px; white-space: nowrap; cursor: pointer; }
+.invoice-finalize-dialog .final-upload-zone:not(.has-new-file) [data-edit-file] { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; border: 0; background: transparent; padding: 4px; white-space: normal; }
+.invoice-finalize-dialog .final-browse { color: #b55419; text-decoration: underline; text-underline-offset: 3px; }
+.invoice-finalize-dialog .final-selected-file { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.invoice-finalize-dialog .final-file-remove { flex: 0 0 32px; min-height: 32px; padding: 4px; font-size: 18px; }
+.invoice-finalize-dialog .final-upload-zone > .edit-field-error { flex: 0 0 100%; }
+.invoice-finalize-dialog button { cursor: pointer; }
+.invoice-finalize-dialog button:focus-visible, .invoice-finalize-dialog input:focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+.invoice-finalize-dialog button:disabled { cursor: default; opacity: .55; }
+@media (max-width: 480px) {
+  .invoice-finalize-dialog .final-invoice-fields { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .invoice-finalize-dialog [data-edit-body] { padding: 16px; }
+  .invoice-finalize-dialog .final-selected-file { flex-basis: 100%; }
+  .invoice-finalize-dialog footer { gap: 8px; padding: 12px; }
+  .invoice-finalize-dialog footer .button { font-size: 12px; padding: 7px 9px; }
+}
+
+/* Create: remove the legacy selected-settlement cap; only the service list scrolls.
+   The context column can scroll on short screens to keep its filters and totals reachable. */
+#invoice-create-panel.supplier-invoice-single .supplier-invoice-context { min-height: 0; min-width: 0; }
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel {
+  display: block; height: auto; min-height: 0; max-height: none; overflow: visible;
+  margin-top: 16px; padding: 12px 0 0; border: 0; border-top: 1px solid #dfe3e8;
+  border-radius: 0; background: transparent; box-shadow: none;
+}
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel > summary {
+  display: flex; align-items: center; gap: 8px; min-height: 36px; margin: 0 -4px; padding: 6px 4px;
+  border-radius: 5px; list-style: none; color: #344054; cursor: pointer;
+  font-size: 12px; font-weight: 600;
+}
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel > summary::-webkit-details-marker { display: none; }
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel > summary::after {
+  content: ''; width: 7px; height: 7px; flex: 0 0 7px; margin: 0 5px 3px auto;
+  border-right: 1.5px solid #a84b12; border-bottom: 1.5px solid #a84b12; transform: rotate(45deg);
+}
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel:not([open]) > summary::after { transform: rotate(-45deg); margin-bottom: 0; }
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel > summary:hover { background: #f0f2f5; }
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-panel > summary:focus-visible,
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-table-wrap:focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-count {
+  display: inline-flex; flex-shrink: 0; align-items: center; padding: 2px 7px; border: 1px solid #e1e5e9;
+  border-radius: 12px; background: #fff; font-size: 10px; color: #687380; font-weight: 500; white-space: nowrap;
+}
+#invoice-create-panel.supplier-invoice-single #invoice-create-services-table-wrap {
+  height: auto; min-height: 0; max-height: clamp(200px, 36dvh, 380px);
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: auto; scrollbar-gutter: stable;
+  margin-top: 10px; padding: 2px 4px 4px 2px; border: 0; border-radius: 4px; background: transparent;
+  scroll-padding-block: 4px; container-type: inline-size;
+}
+#invoice-create-panel.supplier-invoice-single .supplier-service-list { display: grid; gap: 8px; min-width: 0; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item {
+  margin: 0; padding: 10px; min-width: 0; background: #fff; border: 1px solid #e0e4e9;
+  border-radius: 6px; box-shadow: none; cursor: default;
+}
+#invoice-create-panel.supplier-invoice-single .supplier-service-item > div { display: grid; gap: 5px; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item strong { display: block; font-size: 12px; font-weight: 600; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item span { color: #687380; font-size: 11px; line-height: 1.4; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0 0; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item dl > div { display: flex; flex-direction: column; min-width: 0; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item dt { color: #687380; font-size: 10px; line-height: 1.4; flex: 1; }
+#invoice-create-panel.supplier-invoice-single .supplier-service-item dd { margin: 4px 0 0; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@container (max-width: 270px) {
+  #invoice-create-panel.supplier-invoice-single .supplier-service-item dl { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+
+#invoice-create-panel .calculation-recovery-result { margin: 8px 0; padding: 8px; border-left: 2px solid #b55419; background: #fff; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+#invoice-create-panel .calculation-recovery-result[data-status="error"] { color: #a3342d; }
+
+/* Calculation status shares the compact, neutral cards used by related services. */
+.prepayment-workflow-summary .prepayment-settlement.invoice-create-summary-card { display: block; margin: 16px 0; padding: 14px 0 0; border: 0; border-top: 1px solid #dfe3e8; border-radius: 0; background: transparent; box-shadow: none; }
+.prepayment-workflow-summary .invoice-create-summary-card-heading h3 { margin: 0; font-size: 13px; font-weight: 650; color: #26313d; letter-spacing: 0; text-transform: none; }
+.prepayment-workflow-summary .invoice-create-summary-grid + p { margin-top: 16px; padding-top: 12px; border-top: 1px solid #dfe3e8; }
+.prepayment-workflow-summary .prepayment-settlement p { overflow-wrap: anywhere; }
+#invoice-create-panel .settlement-list-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; margin: 12px 0 8px; padding: 8px 10px; box-sizing: border-box; border: 1px solid #dfe3e8; border-radius: 6px; background: #fff; color: #344054; font: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; }
+#invoice-create-panel .settlement-list-toggle svg { flex: 0 0 18px; width: 18px; height: 18px; color: #a84b12; transition: transform .16s ease; }
+#invoice-create-panel .settlement-list-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+#invoice-create-panel .settlement-list-toggle [data-settlement-toggle-action] { margin-left: auto; color: #a84b12; font-weight: 500; white-space: nowrap; }
+#invoice-create-panel .settlement-list-toggle:hover { background: #fff7f0; border-color: #d9b79b; }
+#invoice-create-panel .settlement-list-toggle:active { background: #ffeddf; }
+#invoice-create-panel .settlement-list-toggle:focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { #invoice-create-panel .settlement-list-toggle svg { transition: none; } }
+#invoice-create-panel.supplier-invoice-single .settlement-calculation { min-width: 0; width: 100%; box-sizing: border-box; padding: 8px 0; border: 0; border-bottom: 1px solid #dfe3e8; border-radius: 0; background: transparent; }
+#invoice-create-panel .calculation-line { align-items: center; gap: 4px; }
+#invoice-create-panel .calculation-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 7px 4px; min-height: 36px; border: 0; border-radius: 5px; background: transparent; color: #344054; text-align: left; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+#invoice-create-panel .calculation-toggle:hover { background: #f0f2f5; }
+#invoice-create-panel .calculation-toggle:active { background: #e7eaee; }
+#invoice-create-panel .calculation-toggle svg, #invoice-create-calculation-refresh svg { width: 17px; height: 17px; flex-shrink: 0; }
+#invoice-create-panel .calculation-chevron { transition: transform .16s ease; color: #a84b12; }
+#invoice-create-panel .calculation-toggle[aria-expanded="true"] .calculation-chevron { transform: rotate(90deg); }
+#invoice-create-panel .calculation-toggle .calculation-badge { margin-left: auto; }
+#invoice-create-panel .calculation-badge { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; border-radius: 12px; background: #f2f4f7; color: #596575; padding: 3px 7px; font-size: 11px; font-weight: 500; line-height: 1.3; }
+#invoice-create-panel .calculation-badge[data-tone="warning"] { background: #fff6df; color: #8a600d; }
+#invoice-create-panel .calculation-badge[data-tone="error"] { background: #fff0ee; color: #a3342d; }
+#invoice-create-panel #invoice-create-calculation-refresh { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-height: 32px; padding: 6px; flex-shrink: 0; color: #b55419; }
+#invoice-create-panel .calculation-check-line { display: flex; align-items: center; gap: 6px; margin: 1px 4px 8px; color: #687380; font-size: 12px; }
+#invoice-create-panel .calculation-check-line { position: relative; }
+#invoice-create-panel .calculation-help { position: static; }
+#invoice-create-panel .calculation-help button { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid #dfe3e8; border-radius: 50%; background: white; color: #687380; cursor: help; }
+#invoice-create-panel .calculation-help [role="tooltip"] { display: none; position: absolute; top: 100%; left: 0; z-index: 5; width: min(240px, 100%); box-sizing: border-box; padding: 10px; background: #fff; border: 1px solid #dfe3e8; border-radius: 6px; color: #475467; font-size: 12px; line-height: 1.5; }
+#invoice-create-panel .calculation-help:hover [role="tooltip"], #invoice-create-panel .calculation-help:focus-within [role="tooltip"] { display: block; }
+#invoice-create-panel.supplier-invoice-single .settlement-calculation-rows { max-height: clamp(200px, 35dvh, 360px); min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; padding: 2px 4px 4px 2px; scroll-padding: 4px; }
+#invoice-create-panel.supplier-invoice-single .settlement-calculation-row { margin: 0 0 8px; padding: 10px; border: 1px solid #e0e4e9; border-radius: 6px; background: #fff; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+#invoice-create-panel .calculation-card-heading { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; justify-content: space-between; }
+#invoice-create-panel .calculation-card-heading strong { flex: 1 1 100px; font-weight: 600; min-width: 0; color: #344054; }
+#invoice-create-panel .calculation-metadata { margin: 8px 0; color: #687380; font-size: 12px; }
+#invoice-create-panel .calculation-metadata > div { margin-top: 5px; }
+#invoice-create-panel .calculation-metadata dd { margin: 1px 0 0; color: #475467; font-variant-numeric: tabular-nums; }
+#invoice-create-panel .calculation-technical summary { color: #687380; cursor: pointer; font-size: 12px; padding: 5px 0; }
+#invoice-create-panel .calculation-technical pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; color: #687380; margin: 5px 0; }
+#invoice-create-panel .settlement-calculation-row .calculation-recover { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; margin: 8px 0 0; padding: 5px 9px; font-size: 12px; }
+#invoice-create-panel .calculation-spinner { display: inline-block; width: 12px; height: 12px; flex: 0 0 12px; border: 2px solid #e1d9d2; border-top-color: #b55419; border-radius: 50%; animation: inline-feedback-spin .8s linear infinite; }
+#invoice-create-panel .is-checking svg { animation: inline-feedback-spin 1s linear infinite; }
+#invoice-create-panel .settlement-calculation :is(button, summary, [tabindex]):focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  #invoice-create-panel .calculation-chevron { transition: none; }
+  #invoice-create-panel .calculation-spinner, #invoice-create-panel .is-checking svg { animation: none; }
+}
+
+/* A confirmed invoice can finish its related updates without blocking navigation. */
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background[open] {
+  position: fixed; inset: auto 16px 16px auto; margin: 0;
+  width: min(440px, calc(100vw - 32px)); height: auto; max-height: 50vh;
+  z-index: 1000; box-shadow: 0 6px 28px #0003; overflow: auto;
+}
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background [data-edit-body] { display: none; }
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background form,
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background footer { display: flex; flex-wrap: wrap; height: auto; overflow: visible; }
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background footer { padding: 12px; gap: 8px; }
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background [data-edit-message] { flex: 1 0 100%; }
+.invoice-edit-dialog .invoice-edit-background-note { display: none; }
+:is(#invoice-create-panel, .invoice-edit-dialog).invoice-edit-background .invoice-edit-background-note { display: block; margin: 0; font-size: 12px; color: #626c78; }
+
+}

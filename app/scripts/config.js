@@ -1,6 +1,9 @@
 (function (global) {
 var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
+  // Entry generation is paused; viewing and linking existing entries remain available.
+  ns.ACCOUNTING_ENTRY_GENERATION_ENABLED = false;
+
   ns.MODULES = {
     suppliers: "Vendors",
     bookings: "Deals",
@@ -116,8 +119,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       mfsp: ["MFSP_Reference", "MFSP Reference"],
       booking: ["Booking"],
       ezusReference: ["Ezus_Supplier_Reference", "Ezus Supplier Reference"],
-      supplierAccounting: ["Cuenta_Contable_Supplier", "Cuenta Contable (Supplier)", "Cuenta_Contable", "Cuenta Contable"],
-      accountingStatus: ["Accounting_Status", "Accounting Status"]
+      supplierAccounting: ["Cuenta_Contable_Supplier", "Cuenta Contable (Supplier)", "Cuenta_Contable", "Cuenta Contable"]
     },
     payment: {
       reference: ["Name", "Payment_Reference", "Payment Reference"],
@@ -173,7 +175,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createInitialState = function () {
     return {
-      currentTab: "invoices",
+      currentTab: "suppliers",
       accountingTab: "entries",
       supplier: null,
       supplierId: "",
@@ -402,7 +404,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         },
         invoices: {
           page: 1,
-          perPage: 10,
+          perPage: 50,
           hasMore: false,
           hasLoaded: false,
           showAttachments: false,
@@ -445,11 +447,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         },
         payments: {
           page: 1,
-          perPage: 10,
+          perPage: 50,
+          recordIds: [],
           hasMore: false,
           hasLoaded: false,
           section: "payments",
-          view: "open",
+          view: "closed",
           detailTab: "payment",
           statusDropdownOpen: false,
           filters: {

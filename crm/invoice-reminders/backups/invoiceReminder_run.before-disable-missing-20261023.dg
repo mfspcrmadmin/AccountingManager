@@ -1,0 +1,87 @@
+string standalone.invoiceReminder_run(String mode)
+{
+if(mode != "preview" && mode != "send")
+{
+	throw "Invalid reminder execution mode";
+}
+result = {"mode":mode,"sent":0,"eligible":0,"processed":0,"errors":0};
+// Persist keyset cursors so large datasets are not truncated or starved.
+// Preview has its own cursor and never calls sendmail or reserves a send.
+cursorKey = "invoice-reminders:cursor:" + mode;
+rows = standalone.jobs_query("select id, Payload_JSON, Modified_Time from Admin_Process_Jobs where Active_Key = '" + cursorKey + "' limit 1").get("data");
+if(rows.isEmpty())
+{
+	created = zoho.crm.createRecord("Admin_Process_Jobs",{"Active_Key":cursorKey,"Status":"On Hold","Source_Function":"invoiceReminder_run","Trigger_Reason":"Reminder scan cursor - not a send job","Payload_JSON":"{\"service\":\"0\",\"proforma\":\"0\"}"},{"trigger":List()});
+	if(created.get("id") == null)
+	{
+		throw "Could not create reminder cursor";
+	}
+	rows = standalone.jobs_query("select id, Payload_JSON, Modified_Time from Admin_Process_Jobs where Active_Key = '" + cursorKey + "' limit 1").get("data");
+}
+cursorRecord = rows.get(0);
+cursors = cursorRecord.get("Payload_JSON").toString().toMap();
+details = List();
+todayText = zoho.currenttime.toString("yyyy-MM-dd","Europe/Madrid");
+cutoff = todayText.toDate("yyyy-MM-dd").addDay(-10).toString("yyyy-MM-dd");
+kindValues = "service,proforma".toList(",");
+for each  kind in kindValues
+{
+	cursor = ifnull(cursors.get(kind),"0").toString();
+	if(!cursor.matches("[0-9]+"))
+	{
+		throw "Invalid scan cursor";
+	}
+	query = "select id from Supplier_Invoices where (Invoice_Type = 'Proforma' and id > '" + cursor + "') order by id asc limit 25";
+	if(kind == "service")
+	{
+		query = "select id from Booking_Services where ((Booking.Stage = 'Trip Accounting Closure' and Service_Date <= '" + cutoff + "') and id > '" + cursor + "') order by id asc limit 25";
+	}
+	batch = standalone.jobs_query(query);
+	for each  row in batch.get("data")
+	{
+		targetId = row.get("id").toString();
+		try 
+		{
+			outcome = standalone.invoiceReminder_send(kind,targetId,mode).toMap();
+			summary = {"kind":kind,"record_id":targetId,"eligible":outcome.get("eligible"),"sent":outcome.get("sent"),"reason":outcome.get("reason"),"job_id":outcome.get("job_id")};
+			if(mode == "preview" && outcome.get("eligible") == true)
+			{
+				summary.put("recipient",outcome.get("recipient"));
+				summary.put("subject",outcome.get("subject"));
+			}
+			details.add(summary);
+			if(outcome.get("eligible") == true)
+			{
+				result.put("eligible",result.get("eligible") + 1);
+			}
+			if(outcome.get("sent") == true)
+			{
+				result.put("sent",result.get("sent") + 1);
+			}
+			if(outcome.get("error") == true)
+			{
+				result.put("errors",result.get("errors") + 1);
+			}
+		}
+		catch (error)
+		{
+			result.put("errors",result.get("errors") + 1);
+			details.add({"kind":kind,"record_id":targetId,"reason":error.toString()});
+		}
+		result.put("processed",result.get("processed") + 1);
+		cursors.put(kind,targetId);
+	}
+	if(batch.get("more_records") != true)
+	{
+		cursors.put(kind,"0");
+	}
+}
+result.put("details",details);
+result.put("cursors",cursors);
+saved = standalone.jobs_conditionalUpdate(cursorRecord.get("id").toString(),cursorRecord.get("Modified_Time").toString(),{"Payload_JSON":cursors.toString(),"Last_Result_JSON":result.toString(),"Last_Run_At":zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid")});
+if(saved.get("error") == true)
+{
+	result.put("cursor_conflict",true);
+}
+return result.toString();
+}

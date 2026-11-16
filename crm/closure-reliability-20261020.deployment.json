@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-20",
+  "status": "function_published_widget_publication_confirmed_by_user_live_e2e_pending",
+  "required_schema_changes": [],
+  "deployment": [
+    {
+      "target": "CRM existing bp_orchestrateBookingTransition function",
+      "source": "crm/settlement-reliability/bp_orchestratebookingtransition.dg",
+      "change": "Preserve existing closure/review states and prevent a repeated closure transition from moving a completed booking back in Ezus.",
+      "status": "published_success_readback_verified",
+      "function_id": "616617000169225147",
+      "backup": "crm/settlement-reliability/backups/bp_orchestratebookingtransition.before-closure-20261020.dg",
+      "readback": "_local/closure-production-readback-20261020.dg",
+      "preserved_production_changes": "Existing departure accounting assignment and manual reservation assignment workflows."
+    },
+    {
+      "target": "Accounting Manager widget",
+      "source": "app/scripts/bookings.js",
+      "change": "Consistent settlement totals and split invoice associations; live review validation; mandatory justification and booking Note for accepted closure exceptions.",
+      "status": "publication_confirmed_by_user_not_independently_verified"
+    }
+  ],
+  "existing_fields_used": [
+    "Deals.Closure_Status",
+    "Deals.Closure_Completed_By",
+    "Deals.Closure_Completed_At",
+    "Supplier_Settlements.Closure_Review_Status"
+  ],
+  "audit": "Existing Notes related to the booking, titled Trip closure accepted exceptions, with actor, timestamp, reason and financial exceptions.",
+  "verification": {
+    "crm_live_compilation": true,
+    "function_readback_matches_ignoring_whitespace": true,
+    "production_records_modified": false,
+    "local_closure_tests": {"passed": 42, "failed": 0},
+    "integration_test": "tests/trip-closure-integration.test.js",
+    "integration_scope": "Actual widget handlers and transpiled Deluge closure blocks share persistent simulated CRM data; balanced and justified-exception lifecycle, block/resume, failed audit recovery, repeat transition, completed protection and reopening.",
+    "live_browser_e2e": "pending: no browsers exposed; chrome and iab return Browser is not available",
+    "log": "_local/booking-closure-fixes-20261020.txt"
+  },
+  "limits": [
+    "Read-check-write workflow is not an atomic cross-user transaction.",
+    "Financial displays use existing settlement totals; this change does not run a historical recalculation.",
+    "Local integration does not execute the Zoho runtime, remote Ezus transition, browser DOM interactions or production workflows."
+  ]
+}

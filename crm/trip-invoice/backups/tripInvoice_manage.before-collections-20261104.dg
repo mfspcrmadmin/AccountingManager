@@ -1,0 +1,261 @@
+string standalone.tripInvoice_manage(String bookingId, String action, String invoiceDate, String amountBasis, String expectedSnapshot)
+{
+result = {"success":false};
+try 
+{
+	if(!bookingId.matches("^[0-9]+$") || !"inspect,preview,issue".toList(",").contains(action))
+	{
+		throw "Invalid trip invoice request.";
+	}
+	booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+	if(booking.get("id") == null)
+	{
+		throw "The Booking is unavailable.";
+	}
+	existing = standalone.tripInvoice_readRelated("Invoices",bookingId).toMap();
+	if(existing.get("success") != true)
+	{
+		throw existing.get("message");
+	}
+	if(existing.get("records").size() > 1)
+	{
+		throw "This Booking already has multiple sales invoices. Review them in CRM before invoicing.";
+	}
+	invoice = Map();
+	if(existing.get("records").size() == 1)
+	{
+		invoice = existing.get("records").get(0);
+	}
+	if(booking.get("Sales_Invoice") != null)
+	{
+		linkedInvoice = zoho.crm.getRecordById("Invoices",booking.get("Sales_Invoice").get("id").toLong());
+		if(linkedInvoice.get("id") == null || ifnull(linkedInvoice.get("Deal_Name__s"),Map()).get("id") != bookingId)
+		{
+			throw "The saved sales invoice link is unavailable or belongs to another Booking. Review it in CRM.";
+		}
+		if(invoice.get("id") != null && invoice.get("id") != linkedInvoice.get("id"))
+		{
+			throw "The saved invoice link differs from the Booking sales invoice. Review in CRM.";
+		}
+		invoice = linkedInvoice;
+	}
+	if(invoice.get("id") != null && ifnull(invoice.get("Type"),"Invoice") != "Invoice")
+	{
+		throw "The Booking is linked to a credit note. Review its sales invoices in CRM.";
+	}
+	if(invoice.get("id") == null && ifnull(booking.get("Sales_Invoice_Number"),"") != "")
+	{
+		throw "The Booking already has an invoice number but its invoice is unavailable. Review it in CRM before invoicing.";
+	}
+	if(invoice.get("id") == null)
+	{
+		if(ifnull(booking.get("Closure_Status"),"") != "Closure Completed")
+		{
+			throw "Complete Trip closure before invoicing this Booking.";
+		}
+		if(booking.get("Balance_Amount") == null || booking.get("Balance_Amount").toDecimal() != 0)
+		{
+			throw "Balance Due Amount must be zero before invoicing.";
+		}
+		related = standalone.tripInvoice_readRelated("Supplier_Settlements",bookingId).toMap();
+		if(related.get("success") != true)
+		{
+			throw related.get("message");
+		}
+		activeCount = 0;
+		relatedRows = related.get("records");
+		for each  settlement in relatedRows
+		{
+			if(ifnull(settlement.get("Admin_Status"),"") != "No services")
+			{
+				activeCount = activeCount + 1;
+				if(ifnull(settlement.get("Closure_Review_Status"),"") != "Reviewed")
+				{
+					throw "All active settlements must be reviewed before invoicing.";
+				}
+			}
+		}
+		if(activeCount == 0)
+		{
+			throw "No active reviewed settlements were found.";
+		}
+		if(booking.get("Account_Name") == null || booking.get("Sales_Price_inc_Taxes") == null || ifnull(booking.get("Currency"),"") == "")
+		{
+			throw "The Booking needs a client, Sales Price and currency before invoicing.";
+		}
+		if(action == "inspect")
+		{
+			result.put("success",true);
+			result.put("existing",false);
+			result.put("client",booking.get("Account_Name"));
+			result.put("mfsp",booking.get("MFSP_Reference"));
+			result.put("sales_price",booking.get("Sales_Price_inc_Taxes"));
+			result.put("commission",booking.get("Final_Commission"));
+			result.put("currency",booking.get("Currency"));
+			return result.toString();
+		}
+		if(amountBasis != "gross")
+		{
+			throw "Sales invoices use the full Booking Sales Price.";
+		}
+		if(!invoiceDate.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") || invoiceDate.toDate("yyyy-MM-dd").toString("yyyy-MM-dd") != invoiceDate)
+		{
+			throw "Choose a valid invoice date.";
+		}
+		gross = booking.get("Sales_Price_inc_Taxes").toDecimal();
+		commission = ifnull(booking.get("Final_Commission"),0).toDecimal();
+		amount = gross;
+		amount = amount.round(2);
+		if(amount <= 0)
+		{
+			throw "A sales invoice requires a positive amount. Review zero or negative trips separately.";
+		}
+		snapshotData = {"booking":bookingId,"modified":booking.get("Modified_Time"),"date":invoiceDate,"basis":amountBasis,"amount":amount,"currency":booking.get("Currency"),"client":booking.get("Account_Name").get("id"),"settlements":relatedRows};
+		snapshot = snapshotData.toString();
+		result.put("snapshot",snapshot);
+		result.put("booking_id",bookingId);
+		result.put("mfsp",booking.get("MFSP_Reference"));
+		result.put("client",booking.get("Account_Name"));
+		result.put("sales_price",gross);
+		result.put("commission",commission);
+		result.put("amount",amount);
+		result.put("currency",booking.get("Currency"));
+		result.put("invoice_date",invoiceDate);
+		result.put("series","FV-" + invoiceDate.subString(0,4) + "-000001");
+		if(action == "preview")
+		{
+			result.put("success",true);
+			result.put("existing",false);
+			return result.toString();
+		}
+		if(expectedSnapshot == "" || snapshot != expectedSnapshot)
+		{
+			throw "The Booking or its settlements changed. Generate a new preview before invoicing.";
+		}
+		year = invoiceDate.subString(0,4).toLong();
+		query = {"select_query":"select Trip_Invoice_Sequence from Invoices where Trip_Invoice_Year = " + year + " order by Trip_Invoice_Sequence desc limit 1"};
+		sequenceResponse = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/coql"
+			type :POST
+			parameters:query.toString()
+			headers:{"Content-Type":"application/json"}
+			detailed:true
+			connection:"crm_oauth_connection"
+		];
+		sequence = 1;
+		if(sequenceResponse.get("responseCode") == 200)
+		{
+			sequencePayload = sequenceResponse.get("responseText").toString().toMap();
+			if(sequencePayload.get("data") == null || sequencePayload.get("data").size() != 1)
+			{
+				throw "Could not read the invoice sequence.";
+			}
+			sequence = sequencePayload.get("data").get(0).get("Trip_Invoice_Sequence").toLong() + 1;
+		}
+		else if(sequenceResponse.get("responseCode") != 204)
+		{
+			throw "Could not read the invoice sequence.";
+		}
+		attempts = "1,2,3,4,5,6,7,8,9,10".toList(",");
+		for each  attempt in attempts
+		{
+			if(sequence > 999999)
+			{
+				throw "The annual invoice series is exhausted.";
+			}
+			digits = "000000" + sequence;
+			number = "FV-" + year + "-" + digits.subString(digits.length() - 6,digits.length());
+			line = {"Product_Name":{"id":"616617000025032722"},"Quantity":1,"List_Price":amount,"Description":"Trip " + ifnull(booking.get("MFSP_Reference"),bookingId),"MFSP_Reference":booking.get("MFSP_Reference")};
+			lines = List();
+			lines.add(line);
+			data = {"Subject":number,"Invoice_Date":invoiceDate,"Due_Date":invoiceDate,"Deal_Name__s":bookingId,"Account_Name":booking.get("Account_Name").get("id"),"Currency":booking.get("Currency"),"Type":"Invoice","Tax":0,"Invoiced_Items":lines,"Trip_Invoice_Number":number,"Trip_Booking_Key":"BOOKING-" + bookingId,"Trip_Invoice_Year":year,"Trip_Invoice_Sequence":sequence,"Agent_commission":commission};
+			records = List();
+			records.add(data);
+			createBody = {"data":records,"trigger":List()};
+			createResponse = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/Invoices"
+				type :POST
+				parameters:createBody.toString()
+				headers:{"Content-Type":"application/json"}
+				detailed:true
+				connection:"crm_oauth_connection"
+			];
+			createPayload = createResponse.get("responseText").toString().toMap();
+			if(createPayload.get("data") == null || createPayload.get("data").size() != 1)
+			{
+				throw "Invoice creation was not confirmed. Retry this Booking to check whether it was created.";
+			}
+			created = createPayload.get("data").get(0);
+			if(created.get("code") == "SUCCESS" && created.get("status") == "success" && ifnull(created.get("details"),Map()).get("id") != null)
+			{
+				invoice = zoho.crm.getRecordById("Invoices",created.get("details").get("id").toLong());
+				break;
+			}
+			if(created.get("code") != "DUPLICATE_DATA")
+			{
+				throw "Invoice creation was not confirmed: " + created + ". Retry the same Booking and date to recover safely.";
+			}
+			duplicateId = ifnull(ifnull(created.get("details"),Map()).get("id"),"").toString();
+			if(duplicateId != "")
+			{
+				duplicate = zoho.crm.getRecordById("Invoices",duplicateId.toLong());
+				if(ifnull(duplicate.get("Deal_Name__s"),Map()).get("id") == bookingId)
+				{
+					invoice = duplicate;
+					break;
+				}
+			}
+			recovered = standalone.tripInvoice_readRelated("Invoices",bookingId).toMap();
+			if(recovered.get("success") != true)
+			{
+				throw "Could not check concurrent invoice creation. Retry this Booking.";
+			}
+			if(recovered.get("records").size() > 1)
+			{
+				throw "Multiple sales invoices found. Review in CRM.";
+			}
+			if(recovered.get("records").size() == 1)
+			{
+				invoice = recovered.get("records").get(0);
+				break;
+			}
+			sequence = sequence + 1;
+		}
+		if(invoice.get("id") == null)
+		{
+			throw "Invoice numbering is busy. Retry this Booking; no duplicate will be created.";
+		}
+	}
+	result.put("success",true);
+	result.put("existing",true);
+	result.put("invoice_id",invoice.get("id"));
+	result.put("invoice_number",invoice.get("Subject"));
+	result.put("invoice_date",invoice.get("Invoice_Date"));
+	result.put("amount",invoice.get("Grand_Total"));
+	result.put("currency",invoice.get("Currency"));
+	result.put("booking_link_missing",ifnull(booking.get("Sales_Invoice"),Map()).get("id") != invoice.get("id") || booking.get("Sales_Invoice_Number") != invoice.get("Subject") || booking.get("Sales_Invoice_Date") != invoice.get("Invoice_Date"));
+	if(action == "issue")
+	{
+		try 
+		{
+			link = zoho.crm.updateRecord("Deals",bookingId.toLong(),{"Sales_Invoice":invoice.get("id"),"Sales_Invoice_Number":invoice.get("Subject"),"Sales_Invoice_Date":invoice.get("Invoice_Date")},{"trigger":List()});
+			if(link.get("id") == null)
+			{
+				throw "Booking link update was not confirmed.";
+			}
+			result.put("booking_link_missing",false);
+		}
+		catch (linkError)
+		{
+			result.put("warning","The invoice exists, but its Booking link could not be saved. Retry this Booking to restore the link; do not create a second invoice.");
+		}
+	}
+}
+catch (e)
+{
+	result.put("message",e.toString());
+}
+return result.toString();
+}

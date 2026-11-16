@@ -1,0 +1,49 @@
+string standalone.tripInvoice_readRelated(String moduleName, String bookingId)
+{
+result = {"success":false,"records":List()};
+try
+{
+    if(!bookingId.matches("^[0-9]+$") || !"Invoices,Supplier_Settlements,Payment_Requests,Invoices_X_Payment_R".toList(",").contains(moduleName)) { throw "Invalid trip invoice query."; }
+    lookupField = "Booking";
+    fields = "id, Admin_Status, Settlement_Type, Closure_Review_Status, Modified_Time";
+    if(moduleName == "Invoices") { lookupField = "Deal_Name__s"; fields = "id, Subject, Invoice_Date, Grand_Total, Currency, Type, Trip_Booking_Key, Trip_Invoice_Number, Deal_Name__s, Modified_Time, Invoice_Origin, Booking_MFSP, Original_Sales_Invoice, Collections_Status, Collected_Amount, Refunded_Amount, Total_Paid_Amount, Balance_Due, Collection_Source, Collections_Checked_At"; }
+    if(moduleName == "Payment_Requests") { fields = "id, Amount, Currency, Paid, Status, Payment_ID, Modified_Time"; }
+    if(moduleName == "Invoices_X_Payment_R") { lookupField = "Payment_Requests"; fields = "id, Invoices, Payment_Requests"; }
+    rows = List();
+    pages = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24".toList(",");
+    for each page in pages
+    {
+        query = Map();
+        query.put("select_query","select " + fields + " from " + moduleName + " where " + lookupField + " = '" + bookingId + "' order by id asc limit " + (page.toLong() * 200) + ", 200");
+        response = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/coql"
+            type :POST
+            parameters:query.toString()
+            headers:{"Content-Type":"application/json"}
+            detailed:true
+            connection:"crm_oauth_connection"
+        ];
+        if(response.get("responseCode") == 204) {
+            break;
+        }
+        if(response.get("responseCode") != 200) { throw "Could not verify all trip invoice records: " + response; }
+        payload = response.get("responseText").toString().toMap();
+        if(payload.get("data") == null) { throw "Incomplete trip invoice records."; }
+        if(payload.get("info") == null || payload.get("info").get("more_records") == null) { throw "Incomplete trip invoice pagination metadata."; }
+        batch = payload.get("data");
+        for each row in batch
+        {
+            rows.add(row);
+        }
+        if(ifnull(payload.get("info"),Map()).get("more_records") != true) {
+            break;
+        }
+        if(batch.size() == 0 || page == "24") { throw "Trip invoice record limit reached. No partial result accepted."; }
+    }
+    result.put("success",true);
+    result.put("records",rows);
+}
+catch (e) { result.put("message",e.toString()); }
+return result.toString();
+}

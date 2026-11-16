@@ -1,0 +1,222 @@
+/* Shared visual contract. Views own composition; this layer owns equivalent
+   controls. Scoped to the iframe body, including dynamically appended dialogs. */
+@layer widget-controls {
+  /* Follow native/ARIA requirements, including dynamically rendered forms and
+     fields whose requirement changes with the selected workflow. */
+  .accounting-widget label.field:has(:is(input, select, textarea):is([required], [aria-required="true"])) > span:first-child::after {
+    content: "Required";
+    display: inline-block;
+    margin-inline-start: 0.45rem;
+    padding: 0.05rem 0.35rem;
+    border: 1px solid currentColor;
+    border-radius: 0.25rem;
+    color: #9f1239;
+    font-size: 0.65rem;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: normal;
+    text-transform: none;
+    vertical-align: middle;
+  }
+  body.accounting-widget { font-family: var(--font-ui); font-size: var(--font-size-ui); line-height: 1.45; }
+  .accounting-widget :where(button, input, select, textarea, summary) { font-family: var(--font-ui); }
+  .accounting-widget :where(button, a, summary, input, select, textarea) {
+    transition: color var(--motion-fast), background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
+  }
+  .accounting-widget :where(button, a, summary, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+  }
+  .accounting-widget :where(input:not([type="checkbox"], [type="radio"], [type="file"], [type="hidden"], [type="range"], [type="color"]), select, textarea) {
+    min-height: var(--control-height);
+    min-width: 0;
+    max-width: 100%;
+    padding: var(--control-padding);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--panel-strong);
+    color: var(--text);
+    font-size: var(--font-size-ui);
+    font-weight: 400;
+    line-height: 1.4;
+    box-shadow: none;
+  }
+  .accounting-widget :where(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
+  .accounting-widget :where(.supplier-rail-search, .setup-search) {
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--panel-strong);
+  }
+  .accounting-widget :where(.supplier-rail-search, .setup-search):focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
+  .accounting-widget :where(.supplier-rail-search, .setup-search) input {
+    width: 100%; border: 0; background: transparent; box-shadow: none; outline-offset: -3px;
+  }
+  .accounting-widget .supplier-rail-search .button { border: 0; background: transparent; }
+  /* This composite control draws focus on its outer shell only. */
+  .accounting-widget .supplier-rail-search input:focus {
+    outline: none; box-shadow: none; border: 0; border-radius: 0;
+  }
+  .accounting-widget .settlement-combobox input { padding-right: 42px; }
+  .accounting-widget .settlement-combobox-toggle { font-size: 0; width: 28px; height: 28px; right: 6px; border-radius: 6px; background: transparent; box-shadow: none; color: var(--muted); }
+  .accounting-widget :where(.settlement-combobox-toggle, .bookings-stage-toggle, .card-purchases-status-toggle)::after {
+    content: ""; width: 7px; height: 7px; border: 0; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg);
+  }
+  .accounting-widget :where(.bookings-stage-toggle, .card-purchases-status-toggle)::after { right: 14px; transform: translateY(-70%) rotate(45deg); }
+  .accounting-widget :where(.bookings-stage-toggle, .card-purchases-status-toggle)[aria-expanded="true"]::after { transform: translateY(-20%) rotate(225deg); }
+  .accounting-widget :where(input, select, textarea):hover:not(:disabled, [readonly]) { border-color: var(--accent); }
+  .accounting-widget :where(input, select, textarea):focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+  .accounting-widget textarea { min-height: 88px; resize: vertical; }
+  .accounting-widget :where([data-prepayment-workflow-vat], [data-prepayment-workflow-irpf], #card-purchase-vat, #operation-field-Percent, .invoice-create-tax-rate input[type="number"]) { width: 110px; max-width: 100%; }
+  .accounting-widget select:not([multiple]) {
+    appearance: none;
+    padding-right: 38px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%23667085' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+    cursor: pointer;
+    text-overflow: ellipsis;
+  }
+  .accounting-widget select[multiple] { background-image: none; min-height: 120px; padding: 4px; }
+  .accounting-widget :where(input, textarea)[readonly] { background-color: var(--panel-soft); color: var(--muted); border-style: dashed; }
+  .accounting-widget :where(input, select, textarea):disabled { background-color: #f2f4f7; color: var(--muted); cursor: not-allowed; opacity: 1; }
+  .accounting-widget :where(input, select, textarea)[aria-invalid="true"],
+  .accounting-widget .field.has-error :where(input, select, textarea) { border-color: var(--danger); }
+  .accounting-widget :where(.field-error, .operation-field-error, [data-field-error]) { color: var(--danger); font-size: var(--font-size-caption); overflow-wrap: anywhere; }
+  .accounting-widget .field { min-width: 0; gap: 6px; }
+  .accounting-widget :where(.field > span, .operation-edit-field > label, .field-label-line > span:first-child) {
+    color: var(--text); font-size: var(--font-size-caption); font-weight: 600; line-height: 1.4; text-transform: none; letter-spacing: normal;
+  }
+  .accounting-widget .list-toolbar .field > span { display: block; }
+  .accounting-widget :where(input[type="checkbox"], input[type="radio"]):not(.prepayment-bank-toggle input) {
+    width: 16px; height: 16px; min-height: 16px; flex: 0 0 16px;
+    margin: 0; padding: 0; accent-color: var(--accent); vertical-align: middle; box-shadow: none; cursor: pointer;
+  }
+  .accounting-widget label:has(> :is(input[type="checkbox"], input[type="radio"])) { cursor: pointer; }
+  .accounting-widget .button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: var(--control-height); padding: 8px 12px;
+    border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    background: var(--panel-strong); color: var(--text);
+    font-size: var(--font-size-ui); font-weight: 600; line-height: 1.4;
+    box-shadow: none; transform: none; cursor: pointer;
+  }
+  .accounting-widget .button:hover:not(:disabled) { background: var(--panel-soft); border-color: var(--muted); box-shadow: none; transform: none; }
+  .accounting-widget .button.primary { background: var(--color-action); border-color: var(--color-action); color: white; }
+  .accounting-widget .button.primary:hover:not(:disabled) { background: var(--color-action-hover); border-color: var(--color-action-hover); }
+  .accounting-widget .button:is(.secondary, .button-accent-alt, .button-supplier-sync) { background: var(--panel-strong); color: var(--text); border-color: var(--color-border-strong); }
+  .accounting-widget .button:is(.tertiary, .discreet) { background: transparent; border-color: transparent; color: var(--muted); }
+  .accounting-widget .button:is(.button-danger, .danger) { background: var(--danger-bg); color: var(--danger); border-color: #f4b4ae; }
+  .accounting-widget .button:is(.button-danger, .danger):hover:not(:disabled) { background: #fee4e2; border-color: var(--danger); }
+  .accounting-widget .button:active:not(:disabled) { filter: brightness(.96); }
+  .accounting-widget :where(button:disabled, .button.is-soft-disabled) { opacity: 1; cursor: not-allowed; transform: none; }
+  .accounting-widget .button:disabled { background: #f2f4f7; color: var(--muted); border-color: var(--line); }
+  .accounting-widget :where(.button.compact, .table-actions .button, .pagination .button) { min-height: var(--control-compact); padding: 5px 9px; font-size: var(--font-size-caption); }
+  .accounting-widget :where(.icon-button, .button.icon-button) { width: var(--control-icon); height: var(--control-icon); min-height: var(--control-icon); min-width: var(--control-icon); padding: 0; }
+  .accounting-widget :where(.button, .icon-button) > svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .accounting-widget :where(.tab-button, .segmented-control-button) { min-height: 36px; font-size: var(--font-size-caption); border-radius: var(--radius-sm); box-shadow: none; transform: none; }
+  .accounting-widget :where(.tab-button, .segmented-control-button):hover { background: var(--panel-soft); color: var(--text); transform: none; box-shadow: none; }
+  .accounting-widget :where(.tab-button, .segmented-control-button).is-active { background: var(--color-primary-soft); color: var(--accent-strong); box-shadow: inset 0 -2px var(--accent); }
+  .accounting-widget :where(.bookings-stage-toggle, .card-purchases-status-toggle, .setup-picker summary) {
+    min-height: var(--control-height); border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm);
+    background: var(--panel-strong); color: var(--text); font-size: var(--font-size-ui); font-weight: 400; padding: 8px 38px 8px 12px;
+  }
+  .accounting-widget :where(.settlement-dropdown, .payment-account-dropdown-popover, .bookings-stage-menu, .card-purchases-status-menu, .setup-picker-menu, .operation-lookup-results:not(:empty), .action-menu-popover, .ui-select-menu) {
+    border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--panel-strong);
+    box-shadow: var(--shadow-menu); color: var(--text); padding: 6px;
+    overscroll-behavior: contain;
+  }
+  .accounting-widget :where(.settlement-option, .bookings-stage-option, .service-multi-filter-option, #setup-profile-options button, .operation-lookup-results button, .ui-select-option) {
+    min-height: 36px; padding: 8px 10px; border: 0; border-radius: 6px;
+    color: var(--text); background: transparent; font-size: var(--font-size-ui); text-align: left;
+    box-shadow: none; transform: none; cursor: pointer; overflow-wrap: anywhere;
+  }
+  .accounting-widget :where(.settlement-option, .bookings-stage-option, .service-multi-filter-option, #setup-profile-options button, .operation-lookup-results button, .ui-select-option):hover:not(:disabled) {
+    background: var(--panel-soft); transform: none;
+  }
+  .accounting-widget :where(.settlement-option.is-selected, .ui-select-option[aria-selected="true"], .service-multi-filter-option.is-selected, .service-multi-filter-option:has(input:checked), #setup-profile-options button[aria-pressed="true"], .bookings-stage-option:has(input:checked)) {
+    background: var(--color-primary-soft); color: var(--accent-strong); font-weight: 600;
+  }
+  .accounting-widget :where(.settlement-option-title, .settlement-option-meta) { white-space: normal; overflow-wrap: anywhere; }
+  /* Account names and bank details need natural-height rows, with only the
+     results scrolling when the floating menu has limited viewport space. */
+  .accounting-widget .payment-account-dropdown-popover:not([hidden]) {
+    display: flex; flex-direction: column; overflow: hidden; padding: 0;
+  }
+  .accounting-widget .payment-account-dropdown-search-shell { flex: 0 0 auto; min-width: 0; }
+  .accounting-widget .payment-account-dropdown-search { flex: 1 1 auto; width: 0; padding: 7px 9px; }
+  .accounting-widget .payment-account-dropdown-options {
+    display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
+    max-height: none; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  }
+  .accounting-widget .payment-account-dropdown-options .settlement-option {
+    flex: 0 0 auto; display: block; height: auto; min-height: 54px;
+    padding: 9px 11px; line-height: 1.4;
+  }
+  .accounting-widget .payment-account-dropdown-options :is(.settlement-option-title, .settlement-option-meta) {
+    display: block; white-space: normal; overflow-wrap: anywhere; line-height: 1.4;
+  }
+  .accounting-widget .ui-select-menu {
+    position: fixed; inset: auto; margin: 0; z-index: 10000; overflow: hidden;
+    max-width: calc(100vw - 16px); display: flex; flex-direction: column; gap: 6px;
+  }
+  .accounting-widget .ui-select-menu:not(:popover-open) { display: none; }
+  .accounting-widget .ui-select-options { overflow: auto; overscroll-behavior: contain; min-height: 0; }
+  .accounting-widget .ui-select-option { display: flex; align-items: center; gap: 8px; width: 100%; }
+  .accounting-widget .ui-select-option::before { content: ""; flex: 0 0 16px; width: 16px; }
+  .accounting-widget .ui-select-option[aria-selected="true"]::before { content: "✓"; }
+  .accounting-widget .ui-select-group { margin: 8px 10px 4px; font-size: 11px; font-weight: 700; color: var(--muted); }
+  .accounting-widget .ui-select-empty { padding: 12px; margin: 0; color: var(--muted); }
+  .accounting-widget .ui-option-search {
+    display: flex; align-items: center; gap: 4px; flex: 0 0 auto; min-width: 0;
+    position: sticky; top: 0; z-index: 1; background: var(--panel-strong); padding-bottom: 6px;
+  }
+  .accounting-widget .ui-option-search input { width: 0; flex: 1; }
+  .accounting-widget .ui-option-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+  .accounting-widget .ui-option-search-clear {
+    flex: 0 0 32px; width: 32px; height: 32px; border: 0; border-radius: 6px;
+    background: transparent; color: var(--muted); font-size: 20px; cursor: pointer;
+  }
+  .accounting-widget .ui-option-search-clear:hover:not(:disabled) { background: var(--panel-soft); color: var(--text); }
+  .accounting-widget .ui-option-search-clear:disabled { color: var(--color-text-subtle); }
+  .accounting-widget .ui-select-option:disabled { color: var(--muted); cursor: not-allowed; }
+  .accounting-widget :where(.ui-select-option, #setup-profile-options button):active:not(:disabled) { background: var(--color-primary-soft); }
+  .accounting-widget :where(.bookings-stage-option, .service-multi-filter-option)[hidden] { display: none; }
+  .accounting-widget .setup-picker-menu { display: flex; flex-direction: column; overflow: hidden; }
+  .accounting-widget #setup-profile-options { min-height: 0; overflow: auto; max-height: none; }
+  .accounting-widget #setup-profile-options button { overflow-wrap: anywhere; }
+  .accounting-widget #setup-profile-options button[aria-pressed="true"]::before { content: "\2713"; margin-right: 8px; }
+  .accounting-widget :where(.notice, .inline-feedback) { border-radius: var(--radius-sm); font-size: var(--font-size-ui); box-shadow: none; overflow-wrap: anywhere; }
+  .accounting-widget :where(.notice.success, .inline-feedback[data-tone="success"]) { color: var(--success); background: var(--success-bg); border-color: #bbdfc5; }
+  .accounting-widget :where(.notice.error, .inline-feedback[data-tone="error"]) { color: var(--danger); background: var(--danger-bg); border-color: #f4b4ae; }
+  .accounting-widget :where(.notice.warning, .inline-feedback[data-tone="warning"]) { color: var(--warning); background: var(--warning-bg); border-color: #efd899; }
+  .accounting-widget .empty-state { padding: 20px 16px; color: var(--muted); background: var(--panel-soft); border: 1px dashed var(--color-border-strong); border-radius: var(--radius-sm); font-size: var(--font-size-ui); }
+  .accounting-widget :where(.badge, .status-pill) { font-size: 11px; line-height: 1.4; border-radius: 999px; }
+  .accounting-widget :where(.table-wrap, .booking-won-table-wrap) { max-width: 100%; overflow: auto; overscroll-behavior: contain; border-radius: var(--radius-sm); }
+  .accounting-widget .results-table { font-size: var(--font-size-ui); }
+  .accounting-widget .results-table thead th { font-size: 11px; color: var(--muted); background: var(--panel-soft); height: 36px; }
+  .accounting-widget .results-table tbody td { border-bottom-color: var(--line); }
+  .accounting-widget .results-table tbody tr.is-clickable:hover td { background: #fffaf5; }
+  .accounting-widget .results-table tbody tr:is(.is-selected, .is-active, .is-checked) td { background: var(--color-primary-soft); }
+  .accounting-widget :where(dialog, [role="dialog"]) { max-width: 100vw; }
+  .accounting-widget dialog { max-height: calc(100dvh - 32px); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-dialog); }
+  .accounting-widget :where(.panel-header h2, [role="dialog"] h2, dialog h2) { font-size: 18px; line-height: 1.3; }
+  .accounting-widget :where(dialog, [role="dialog"]) :where(input[type="date"], input[type="number"]) { font-variant-numeric: tabular-nums; }
+  .accounting-widget :where(.panel, .list-toolbar, .panel-header, form, [role="dialog"]) > * { min-width: 0; }
+  .accounting-widget :where(.list-toolbar, .panel-header) { gap: var(--space-2); }
+  @media (max-width: 680px) {
+    .accounting-widget .shell { padding: 8px 8px 24px; }
+    .accounting-widget .page-header { align-items: flex-start; }
+    .accounting-widget .page-header .tab-nav { flex: 1; min-width: 0; }
+    .accounting-widget .page-header .tab-nav { flex-wrap: wrap; overflow: visible; }
+    .accounting-widget .tab-button { padding: 7px 9px; }
+    .accounting-widget :where(.workspace-grid, .dashboard-grid, .suppliers-workspace, .invoices-workspace, .payments-workspace, .accounting-workspace) { grid-template-columns: minmax(0, 1fr); }
+    .accounting-widget :where(.panel-header, .list-toolbar) { flex-wrap: wrap; }
+    .accounting-widget :where(.panel-header, .list-toolbar) > :where(input, select, .field) { min-width: 0; max-width: 100%; }
+    .accounting-widget dialog { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+    .accounting-widget .panel { padding: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .accounting-widget *, .accounting-widget *::before, .accounting-widget *::after {
+      animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; scroll-behavior: auto !important;
+    }
+  }
+}

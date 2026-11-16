@@ -1,0 +1,312 @@
+string standalone.accountingOperation_edit(String requestJson)
+{
+result = {"success":false,"saved":false};
+try 
+{
+	if(requestJson.length() > 30000)
+	{
+		throw "The edit request is too large.";
+	}
+	request = requestJson.toMap();
+	moduleName = ifnull(request.get("module"),"").toString();
+	recordId = ifnull(request.get("id"),"").toString();
+	if(!"Prepayments,Card_Purchases".toList(",").contains(moduleName) || !recordId.matches("[0-9]+"))
+	{
+		throw "Invalid operation record.";
+	}
+	current = zoho.crm.getRecordById(moduleName,recordId.toLong());
+	if(current.get("id") == null)
+	{
+		throw "The operation could not be loaded.";
+	}
+	locked = current.get("Vendor_Invoice") != null || current.get("Vendor_Payment") != null;
+	if("Prepayment recorded,Purchase recorded,Refund recorded,Discard - Credit,Discard - Already Paid".toList(",").contains(ifnull(current.get("Accounting_Status"),"")))
+	{
+		locked = true;
+	}
+	if(moduleName == "Prepayments")
+	{
+		queryHeaders = Map();
+		queryHeaders.put("Content-Type","application/json");
+		query = {"select_query":"select id from Prepayment_Invoice_Allocations where Prepayment = '" + recordId + "' limit 0, 1"};
+		allocationResponse = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/coql"
+			type :POST
+			parameters:query.toString()
+			headers:queryHeaders
+			detailed:true
+			connection:"crm_oauth_connection"
+		];
+		if(allocationResponse.get("responseCode") == 200)
+		{
+			locked = true;
+		}
+		if(allocationResponse.get("responseCode") != 200 && allocationResponse.get("responseCode") != 204)
+		{
+			throw "Could not verify linked invoices. No changes were made.";
+		}
+	}
+	result.put("record",current);
+	result.put("financial_locked",locked);
+	if(request.get("action") == "read")
+	{
+		result.put("success",true);
+		return result.toString();
+	}
+	if(request.get("action") != "save")
+	{
+		throw "Invalid edit action.";
+	}
+	expected = ifnull(request.get("modified_time"),"").toString();
+	if(expected == "" || expected != current.get("Modified_Time"))
+	{
+		throw "This record has changed. Reopen it before saving; your changes have not been applied.";
+	}
+	changes = request.get("changes");
+	if(changes == null)
+	{
+		throw "Missing edit fields.";
+	}
+	allowed = "Name,Owner,Currency,Amount,Percent,Prepayment_Request,When_To_Be_Paid,Due_Date,Payment_Date,Accounting_Status,Bank_Payment_Requested,Bank_Receipt_Needed".toList(",");
+	financial = "Currency,Amount,Percent,Prepayment_Request,Payment_Date,Accounting_Status".toList(",");
+	fileField = "Payment_Proof";
+	lookups = {"Owner":"users","Prepayment_Request":"Prepayment_Requests"};
+	if(moduleName == "Card_Purchases")
+	{
+		allowed = "Name,Owner,Email,Currency,Amount,Card_Payment_Account,Booking,Boking_Service,Original_Card_Purchase,Transaction_Notes,Transaction_Type,Accounting_Status,Transaction_Date,Supplier,Review_Notes,Settlement,Invoice_Number".toList(",");
+		financial = "Currency,Amount,Card_Payment_Account,Booking,Boking_Service,Original_Card_Purchase,Transaction_Type,Accounting_Status,Transaction_Date,Supplier,Settlement,Invoice_Number".toList(",");
+		fileField = "Supporting_Documents";
+		lookups = {"Owner":"users","Card_Payment_Account":"Payment_Accounts","Original_Card_Purchase":"Payment_Accounts","Booking":"Deals","Boking_Service":"Booking_Services","Supplier":"Vendors","Settlement":"Supplier_Settlements"};
+	}
+	proposed = Map();
+	proposed.putAll(current);
+	patch = Map();
+	for each  field in changes.keys()
+	{
+		result.put("field",field);
+		if(!allowed.contains(field))
+		{
+			throw "This field is maintained by the registration process and cannot be edited here.";
+		}
+		if(locked && financial.contains(field))
+		{
+			throw "Financial fields cannot change after an invoice or payment has been registered.";
+		}
+		value = changes.get(field);
+		if(lookups.containKey(field))
+		{
+			if(value != null)
+			{
+				lookupId = ifnull(value.get("id"),"").toString();
+				if(!lookupId.matches("[0-9]+"))
+				{
+					throw "Select a valid related record.";
+				}
+				if(field != "Owner")
+				{
+					linked = zoho.crm.getRecordById(lookups.get(field),lookupId.toLong());
+					if(linked.get("id") == null)
+					{
+						throw "The selected related record is unavailable.";
+					}
+					if("Card_Payment_Account,Original_Card_Purchase".toList(",").contains(field) && (ifnull(linked.get("Owner_Type"),"").toString().toLowerCase() != "own" || ifnull(linked.get("Status"),"").toString().toLowerCase() == "inactive"))
+					{
+						throw "Select an active Own payment account.";
+					}
+				}
+				value = {"id":lookupId};
+			}
+		}
+		if("Amount,Percent".toList(",").contains(field))
+		{
+			if(value == null || value.toDecimal() < 0 || value.toDecimal().round(2) != value.toDecimal())
+			{
+				throw "Enter a non-negative amount with up to two decimals.";
+			}
+			if(field == "Percent" && value.toDecimal() > 100)
+			{
+				throw "Percent must be between 0 and 100.";
+			}
+		}
+		if(field == "Name" && (ifnull(value,"").toString().trim() == "" || value.toString().length() > 120))
+		{
+			throw "Enter a name of up to 120 characters.";
+		}
+		if(field == "Currency" && !"EUR,USD".toList(",").contains(value))
+		{
+			throw "Select EUR or USD.";
+		}
+		if(field == "Transaction_Type" && !"Purchase,Refund".toList(",").contains(value))
+		{
+			throw "Select Purchase or Refund.";
+		}
+		if(field == "When_To_Be_Paid" && value != null && !"Specific Date,Within 1 day,Within 2 days,Within 3 days,10 days prior to service date,15 days prior to service date,20 days prior to service date,30 days prior to service date".toList(",").contains(value))
+		{
+			throw "Select a valid payment schedule.";
+		}
+		if("Bank_Payment_Requested,Bank_Receipt_Needed".toList(",").contains(field) && value != true && value != false)
+		{
+			throw "Choose a valid checkbox value.";
+		}
+		if(field == "Accounting_Status")
+		{
+			statuses = "Pending invoice,Cancelled,Discard - Credit,Discard - Already Paid".toList(",");
+			if(moduleName == "Card_Purchases")
+			{
+				statuses = "Pending invoice,Pending credit note,Refund pending,Needs review,Cancelled".toList(",");
+			}
+			if(!statuses.contains(value))
+			{
+				throw "Use the registration action to record an invoice or payment.";
+			}
+		}
+		proposed.put(field,value);
+		patch.put(field,value);
+	}
+	if(moduleName == "Prepayments" && changes.containKey("Prepayment_Request") && proposed.get("Prepayment_Request") == null)
+	{
+		result.put("field","Prepayment_Request");
+		throw "Select a prepayment request.";
+	}
+	relationsChanged = changes.containKey("Supplier") || changes.containKey("Booking") || changes.containKey("Settlement") || changes.containKey("Boking_Service");
+	if(moduleName == "Card_Purchases" && relationsChanged)
+	{
+		if(proposed.get("Supplier") == null || proposed.get("Booking") == null)
+		{
+			throw "A supplier and booking are required.";
+		}
+		supplierId = proposed.get("Supplier").get("id").toString();
+		bookingId = proposed.get("Booking").get("id").toString();
+		relationFields = "Settlement,Boking_Service".toList(",");
+		for each  linkField in relationFields
+		{
+			if(proposed.get(linkField) != null)
+			{
+				result.put("field",linkField);
+				linked = zoho.crm.getRecordById(lookups.get(linkField),proposed.get(linkField).get("id").toLong());
+				if(linked.get("Supplier") == null || linked.get("Booking") == null || linked.get("Supplier").get("id").toString() != supplierId || linked.get("Booking").get("id").toString() != bookingId)
+				{
+					throw "Select a record belonging to the selected supplier and booking.";
+				}
+			}
+		}
+		if(changes.containKey("Supplier"))
+		{
+			supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+			patch.put("Supplier_Code",supplier.get("TP_Reference"));
+		}
+		if(changes.containKey("Booking"))
+		{
+			booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+			patch.put("MFSP_Reference",booking.get("MFSP_Reference"));
+		}
+	}
+	if(moduleName == "Card_Purchases" && changes.containKey("Transaction_Type") && !changes.containKey("Accounting_Status"))
+	{
+		nextStatus = "Pending invoice";
+		if(proposed.get("Transaction_Type") == "Refund")
+		{
+			nextStatus = "Pending credit note";
+		}
+		patch.put("Accounting_Status",nextStatus);
+	}
+	if(moduleName == "Card_Purchases" && changes.containKey("Accounting_Status"))
+	{
+		result.put("field","Accounting_Status");
+		if(proposed.get("Transaction_Type") == "Refund" && proposed.get("Accounting_Status") == "Pending invoice")
+		{
+			throw "Refunds must use Pending credit note.";
+		}
+		if(proposed.get("Transaction_Type") != "Refund" && "Pending credit note,Refund pending".toList(",").contains(proposed.get("Accounting_Status")))
+		{
+			throw "This status is only available for refunds.";
+		}
+	}
+	result.put("field",fileField);
+	removed = ifnull(request.get("remove_files"),List());
+	added = ifnull(request.get("add_files"),List());
+	oldFiles = ifnull(current.get(fileField),List());
+	if(oldFiles.size() - removed.size() + added.size() > 5)
+	{
+		throw "A maximum of five documents can be saved.";
+	}
+	fileUpdates = List();
+	seen = Map();
+	for each  removeId in removed
+	{
+		found = false;
+		for each  oldFile in oldFiles
+		{
+			if(ifnull(oldFile.get("id"),ifnull(oldFile.get("attachment_Id"),"")).toString() == removeId)
+			{
+				found = true;
+			}
+		}
+		if(!found || seen.containKey(removeId))
+		{
+			throw "The saved documents have changed. Reopen this record.";
+		}
+		seen.put(removeId,true);
+		fileUpdates.add({"id":removeId,"_delete":null});
+	}
+	for each  newFile in added
+	{
+		fileId = ifnull(newFile.get("id"),"").toString();
+		if(!fileId.matches("[A-Za-z0-9_-]+") || seen.containKey(fileId))
+		{
+			throw "Invalid uploaded document.";
+		}
+		seen.put(fileId,true);
+		fileUpdates.add({"File_Id__s":fileId});
+	}
+	if(!fileUpdates.isEmpty())
+	{
+		patch.put(fileField,fileUpdates);
+	}
+	result.put("field","");
+	if(patch.isEmpty())
+	{
+		result.put("success",true);
+		return result.toString();
+	}
+	// Single conditional update: a concurrent registration cannot be overwritten.
+	rows = List();
+	rows.add(patch);
+	body = {"data":rows,"trigger":List()};
+	headers = {"Content-Type":"application/json","If-Unmodified-Since":expected};
+	result.put("uncertain",true);
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/" + moduleName + "/" + recordId
+		type :PUT
+		parameters:body.toString()
+		headers:headers
+		detailed:true
+		connection:"crm_oauth_connection"
+	];
+	if(response.get("responseCode") == 412)
+	{
+		result.put("uncertain",false);
+		throw "This record changed during editing. Reopen it before saving.";
+	}
+	payload = response.get("responseText").toString().toMap();
+	if(payload.get("data") == null || payload.get("data").get(0).get("code") != "SUCCESS")
+	{
+		if(payload.get("data") != null && payload.get("data").get(0).get("status") == "error")
+		{
+			result.put("uncertain",false);
+		}
+		throw "CRM rejected the update: " + payload.toString();
+	}
+	result.put("saved",true);
+	result.put("uncertain",false);
+	result.put("success",true);
+	result.put("record",zoho.crm.getRecordById(moduleName,recordId.toLong()));
+}
+catch (error)
+{
+	result.put("message",error.toString());
+}
+return result.toString();
+}

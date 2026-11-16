@@ -212,6 +212,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
   }
 
   function getInvoiceTotalAmount(record, fieldCandidates) {
+    var payable = record && record.Total_Payable_Amount;
+    if (payable !== null && payable !== undefined && payable !== "") { return Number(payable); }
     return Number(
       getCandidateValue(record, fieldCandidates.invoice.totalAmount) ||
       getCandidateValue(record, fieldCandidates.invoice.amount) ||
@@ -220,6 +222,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
   }
 
   function getInvoicePendingAmount(record, fieldCandidates) {
+    if (record && record.Total_Payable_Amount !== null && record.Total_Payable_Amount !== undefined && record.Total_Payable_Amount !== "") {
+      return Math.round((Number(record.Total_Payable_Amount) - Number(record.Amount_Paid || 0)) * 100) / 100;
+    }
     var unpaidAmount = getCandidateValue(record, fieldCandidates.invoice.unpaidAmount);
     var totalAmount = getInvoiceTotalAmount(record, fieldCandidates);
     var amountPaid = Number(getCandidateValue(record, fieldCandidates.invoice.amountPaid) || 0);
@@ -360,6 +365,22 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   function matchesText(value, query) {
     return normalizeQuery(value).indexOf(normalizeQuery(query)) !== -1;
+  }
+
+  // One palette for booking stages in tables and filter menus.
+  function getBookingStatusTone(value) {
+    var tones = {
+      "request qualified": "info", "quotation": "info", "proposal sent": "info",
+      "pending res assignment": "caution", "reservation in progress": "info",
+      "changes requested": "warning", "all services confirmed": "positive",
+      "fid sent": "info", "pending review": "caution", "fid in review": "info",
+      "review done": "positive", "on tour": "info", "trip accounting closure": "warning",
+      "cancelled": "danger", "cancelled w/charges": "danger", "dead": "neutral",
+      "booking completed": "positive", "closure pending": "caution",
+      "closure in review": "info", "closure blocked": "danger",
+      "closure reopened": "warning", "closure completed": "positive"
+    };
+    return tones[String(value || "").trim().toLowerCase()] || "neutral";
   }
 
   function getStatusTone(value) {
@@ -507,8 +528,17 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     getLookupId: getLookupId,
     getLookupName: getLookupName,
     getLookupValue: getLookupValue,
+    // Export cash direction: refunds/credit notes subtract even when CRM stores magnitudes.
+    getExportSignedAmount: function (value, record, invoice) {
+      var amount = Number(value || 0);
+      if (!Number.isFinite(amount)) { throw new Error("Invalid amount. Correct the CRM record before exporting."); }
+      var subtract = record && (record.Invoice_Type === "Credit Note" || record.Movement_Type === "Supplier Refund") ||
+        invoice && invoice.Invoice_Type === "Credit Note";
+      return subtract ? -Math.abs(amount) : amount;
+    },
     getPaymentAmount: getPaymentAmount,
     getStatusTone: getStatusTone,
+    getBookingStatusTone: getBookingStatusTone,
     getSupplierIdFromPayload: getSupplierIdFromPayload,
     isDateInRange: isDateInRange,
     matchesSupplierQuery: matchesSupplierQuery,

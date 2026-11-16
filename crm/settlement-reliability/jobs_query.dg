@@ -1,0 +1,26 @@
+string standalone.jobs_query(String query)
+{
+body = Map();
+body.put("select_query",query);
+headers = Map();
+headers.put("Content-Type","application/json");
+response = invokeurl
+[
+ url :"https://www.zohoapis.eu/crm/v8/coql"
+ type :POST
+ parameters:body.toString()
+ headers:headers
+ detailed:true
+ connection:"crm_oauth_connection"
+];
+result = Map();
+result.put("data",List());
+result.put("more_records",false);
+if(response.get("responseCode") == 204) { return result; }
+if(response.get("responseCode") != 200) { throw "COQL read failed: " + response; }
+payload = response.get("responseText").toString().toMap();
+if(isnull(payload.get("data"))) { throw "Incomplete COQL response"; }
+result.put("data",payload.get("data"));
+result.put("more_records",ifnull(ifnull(payload.get("info"),Map()).get("more_records"),false));
+return result;
+}

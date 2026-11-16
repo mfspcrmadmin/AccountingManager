@@ -1,0 +1,41 @@
+string standalone.supplierPayment_readAllocations(String paymentId)
+{
+result = {"success":false,"records":List()};
+try
+{
+    if(!paymentId.matches("[0-9]+")) { throw "Invalid payment id."; }
+    records = List();
+    pages = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25".toList(",");
+    for each page in pages
+    {
+        offset = (page.toLong() - 1) * 200;
+        query = {"select_query":"select id, Modified_Time, Locked__s, Supplier_Invoice, Supplier_Payment, Allocated_Amount, Movement_Type, Currency from Supplier_Pay_Allocations where Supplier_Payment = '" + paymentId + "' order by id asc limit " + offset + ", 200"};
+        response = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/coql"
+            type :POST
+            parameters:query.toString()
+            headers:{"Content-Type":"application/json"}
+            detailed:true
+            connection:"crm_oauth_connection"
+        ];
+        if(response.get("responseCode") == 204) { break; }
+        if(response.get("responseCode") != 200) { throw "Could not read payment allocations."; }
+        payload = response.get("responseText").toString().toMap();
+        if(payload.get("data") == null) { throw "Incomplete payment allocation response."; }
+        for each row in payload.get("data")
+        {
+            records.add(row);
+        }
+        if(payload.get("info").get("more_records") == false) { break; }
+        if(page == "25") { throw "Payment allocation query limit reached."; }
+    }
+    result.put("success",true);
+    result.put("records",records);
+}
+catch(e)
+{
+    result.put("message",e.toString());
+}
+return result.toString();
+}

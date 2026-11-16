@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-12",
+  "scope": "Restore shared SION beneficiary resolution for agency commission payments",
+  "published": [
+    {"api_name": "ensuresupplierpaymentaccount", "id": "616617000160860266", "source": "crm/ensureSupplierPaymentAccount.dg", "readback": "Verified both eligibility checks; Zoho reformatted redundant parentheses and inline blocks"},
+    {"api_name": "createsupplierpaymentfrominvoices", "id": "616617000160860001", "source": "crm/invoice-edit/createsupplierpaymentfrominvoices.agency-sion-20261112.dg", "readback": "Published source matches"}
+  ],
+  "widget": {"source": "app/scripts/payment-create.js", "status": "local_pending_publication"},
+  "rules": [
+    "Only configured shared account 616617000166884362; Active, unlocked, Agency owner type, SION method, no supplier owner",
+    "Vendor must be Agency, linked to an agency and have shared SION as its default",
+    "Payment creation re-reads invoices and restricts SION to Commission invoices before payment creation",
+    "Ordinary supplier account eligibility and guarded bank-account creation preserved"
+  ],
+  "validation": {"focused_tests_passed": 10, "widget_syntax": "passed", "new_production_payment_executed": false, "payment_accounts_modified": false},
+  "notes": "No payment retry. CRM update accepted without publish object; including publish returned INVALID_REQUEST without changing source."
+}

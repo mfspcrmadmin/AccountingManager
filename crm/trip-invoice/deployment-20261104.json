@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-04",
+  "functions": {
+    "tripinvoice_readrelated": {
+      "id": "616617000177031279",
+      "published": true,
+      "rest_api_mode": [
+        "None"
+      ],
+      "internal_only": true
+    },
+    "tripinvoice_manage": {
+      "id": "616617000177035431",
+      "published": true,
+      "rest_api_mode": [
+        "Oauth"
+      ],
+      "oauth_activation_required": false
+    },
+    "tripinvoice_collections": {
+      "id": "616617000177026279",
+      "published": true,
+      "internal_only": true,
+      "rest_api_mode": [
+        "None"
+      ]
+    },
+    "tripinvoice_pdf": {
+      "id": "616617000176992888",
+      "published": true,
+      "internal_only": true
+    }
+  },
+  "schema_created": {
+    "Invoices": {
+      "Trip_Invoice_Number": "616617000177009793",
+      "Trip_Booking_Key": "616617000177009803",
+      "Trip_Invoice_Year": "616617000177009812",
+      "Trip_Invoice_Sequence": "616617000177009820"
+    },
+    "Deals": {
+      "Sales_Invoice_Number": "616617000177020590",
+      "Sales_Invoice_Date": "616617000177020600",
+      "Sales_Invoice": "616617000177020608"
+    }
+  },
+  "unique_fields_verified": [
+    "Invoices.Trip_Invoice_Number",
+    "Invoices.Trip_Booking_Key"
+  ],
+  "published_source_read_back": true,
+  "read_helper_compiler_normalization": "Compiler removed redundant parentheses around page.toLong() * 200; remaining normalized source matches.",
+  "real_invoice_created": false,
+  "live_widget_acceptance": false,
+  "zip_generated": false,
+  "validation": {
+    "node_tests_passed": 59,
+    "browser_checks": [
+      "trip-invoice.browser.cjs",
+      "trip-closure-scroll.browser.cjs",
+      "trip-invoice-pdf.browser.cjs"
+    ]
+  },
+  "pending": [
+    "Publish widget source",
+    "First controlled financial operation acceptance",
+    "First live PDF attachment and re-download acceptance"
+  ],
+  "module_rename": {
+    "current_label": "Sales Invoices",
+    "singular_label": "Sales Invoice",
+    "previous_label": "OLD Invoices",
+    "api_name": "Invoices",
+    "changed": true,
+    "profiles_preserved": true
+  }
+}

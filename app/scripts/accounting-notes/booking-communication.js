@@ -171,7 +171,7 @@ async function openNotesDialog(state, field, onSaved) {
   const dialog = document.createElement("dialog");
   dialog.className = "communication-editor communication-notes-dialog";
   dialog.setAttribute("aria-label", label);
-  dialog.innerHTML = '<header class="summary-section-header"><h2>' + label + '</h2><button type="button" class="button tertiary communication-edit-icon" data-close aria-label="Close" title="Close">' + closeIcon + '</button></header><p role="status"></p><div data-notes-body></div>';
+  dialog.innerHTML = '<header class="summary-section-header"><h2>' + label + '</h2><button type="button" class="widget-popup-close button tertiary communication-edit-icon" data-close aria-label="Close" title="Close">&times;</button></header><p role="status"></p><div data-notes-body></div>';
   const body = dialog.querySelector("[data-notes-body]"), feedback = dialog.querySelector('[role="status"]');
   let busy = false, fresh;
   const button = (label, action) => {

@@ -1,0 +1,190 @@
+string standalone.jobs_processPendingAdminProcessJobs()
+{
+result = Map();
+result.put("error",false);
+result.put("message","");
+result.put("loaded_jobs",0);
+result.put("processed_jobs",0);
+result.put("done_jobs",0);
+result.put("retry_jobs",0);
+result.put("error_jobs",0);
+result.put("cancelled_jobs",0);
+result.put("job_results",List());
+adminJobsModule = "Admin_Process_Jobs";
+maxJobsToProcess = 15;
+pageNumbers = "1,2,3".toList(",");
+statusesToLoad = "Pending,Retry,Processing".toList(",");
+now = zoho.currenttime;
+jobById = Map();
+orderedJobIds = List();
+for each  statusToLoad in statusesToLoad
+{
+	stopLoading = false;
+	for each  pageNumText in pageNumbers
+	{
+		if(stopLoading == false)
+		{
+			pageNum = pageNumText.toLong();
+			try 
+			{
+				jobPage = zoho.crm.searchRecords(adminJobsModule,"(Status:equals:" + statusToLoad + ")",pageNum,200);
+				if(!isnull(jobPage) && !jobPage.isEmpty())
+				{
+					for each  jobRec in jobPage
+					{
+						jobId = ifnull(jobRec.get("id"),"").toString();
+						if(jobId != "" && isnull(jobById.get(jobId)))
+						{
+							jobById.put(jobId,jobRec);
+							orderedJobIds.add(jobId);
+						}
+					}
+					if(jobPage.size() < 200)
+					{
+						stopLoading = true;
+					}
+				}
+				else
+				{
+					stopLoading = true;
+				}
+			}
+			catch (eLoadJobs)
+			{
+				result.put("error",true);
+				result.put("message","Error loading Admin Process Jobs: " + eLoadJobs.toString());
+				return result;
+			}
+		}
+	}
+}
+result.put("loaded_jobs",orderedJobIds.size());
+processedCount = 0;
+doneCount = 0;
+retryCount = 0;
+errorCount = 0;
+cancelledCount = 0;
+jobResults = List();
+for each  jobId in orderedJobIds
+{
+	jobRec = jobById.get(jobId);
+	jobStatus = ifnull(jobRec.get("Status"),"").toString().trim();
+	if(jobStatus.equalsIgnoreCase("Processing"))
+	{
+		// Only reclaim an expired (or legacy, unexpired) lock. This makes jobs
+		// recoverable after a timeout without allowing concurrent processing.
+		lockExpired = false;
+		lockExpiresAtRaw = ifnull(jobRec.get("Lock_Expires_At"),"").toString().trim();
+		if(lockExpiresAtRaw == "")
+		{
+			lockExpired = true;
+		}
+		else
+		{
+			try 
+			{
+				lockExpiresAt = lockExpiresAtRaw.toTime();
+				if(lockExpiresAt < now)
+				{
+					lockExpired = true;
+				}
+			}
+			catch (eLockExpiry)
+			{
+				// An unparsable expiry must not block a job forever.
+				lockExpired = true;
+			}
+		}
+		if(lockExpired == false)
+		{
+			continue;
+		}
+		attempts = 0;
+		maxAttempts = 5;
+		try 
+		{
+			attempts = ifnull(jobRec.get("Attempts"),0).toString().toLong();
+		}
+		catch (eRecoveryAttempts)
+		{
+			attempts = 0;
+		}
+		try 
+		{
+			maxAttempts = ifnull(jobRec.get("Max_Attempts"),5).toString().toLong();
+		}
+		catch (eRecoveryMaxAttempts)
+		{
+			maxAttempts = 5;
+		}
+		recoveryUpdate = Map();
+		recoveryUpdate.put("Locked_At",null);
+		recoveryUpdate.put("Lock_Expires_At",null);
+		recoveryUpdate.put("Last_Error","Job lock expired; returned to queue by jobs_processPendingAdminProcessJobs");
+		if(attempts >= maxAttempts)
+		{
+			recoveryUpdate.put("Status","Error");
+			recoveryUpdate.put("Completed_At",standalone.jobs_formatDateTimeForCRM(now.toString("yyyy-MM-dd'T'HH:mm:ssZ")));
+			try 
+			{
+				_ = zoho.crm.updateRecord(adminJobsModule,jobId,recoveryUpdate);
+			}
+			catch (eRecoverToError)
+			{
+				result.put("error",true);
+				result.put("message","Could not close expired job " + jobId + ": " + eRecoverToError.toString());
+				return result;
+			}
+			errorCount = errorCount + 1;
+			continue;
+		}
+		recoveryUpdate.put("Status","Retry");
+		try 
+		{
+			_ = zoho.crm.updateRecord(adminJobsModule,jobId,recoveryUpdate);
+		}
+		catch (eRecoverToRetry)
+		{
+			result.put("error",true);
+			result.put("message","Could not requeue expired job " + jobId + ": " + eRecoverToRetry.toString());
+			return result;
+		}
+		jobRec.put("Status","Retry");
+	}
+	// Do not stop iterating when the execution quota is reached: remaining
+	// Processing jobs still need their expired locks released in this run.
+	// Only the actual business work is limited to maxJobsToProcess.
+	if(processedCount >= maxJobsToProcess)
+	{
+		continue;
+	}
+	jobRunRes = standalone.jobs_processAdminProcessJob(jobRec);
+	jobResults.add(jobRunRes);
+	processedCount = processedCount + 1;
+	finalStatus = ifnull(jobRunRes.get("final_status"),"").toString();
+	if(finalStatus == "Done")
+	{
+		doneCount = doneCount + 1;
+	}
+	else if(finalStatus == "Retry")
+	{
+		retryCount = retryCount + 1;
+	}
+	else if(finalStatus == "Error")
+	{
+		errorCount = errorCount + 1;
+	}
+	else if(finalStatus == "Cancelled")
+	{
+		cancelledCount = cancelledCount + 1;
+	}
+}
+result.put("processed_jobs",processedCount);
+result.put("done_jobs",doneCount);
+result.put("retry_jobs",retryCount);
+result.put("error_jobs",errorCount);
+result.put("cancelled_jobs",cancelledCount);
+result.put("job_results",jobResults);
+result.put("message","Admin Process Jobs processed");
+return result;
+}

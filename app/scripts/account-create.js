@@ -501,6 +501,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       state.loaded.accountingAccounts = false;
       state.records.accountingAccounts = [];
       await ensureAccountingAccountsLoaded();
+      if (accountId && !state.records.accountingAccounts.some(function (r) { return String(r.id) === String(accountId); })) {
+        var savedAccount = await crm.getRecord(MODULES.accountingAccounts, accountId);
+        if (savedAccount) { state.records.accountingAccounts.push(savedAccount); }
+      }
       state.views.accountingAccounts.selectedId = accountId || "";
     }
 
@@ -578,6 +582,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       state.records.paymentAccounts = [];
 
       await ensurePaymentAccountsLoaded();
+      if (recordId && !state.records.paymentAccounts.some(function (r) { return String(r.id) === String(recordId); })) {
+        var savedAccount = await crm.getRecord(MODULES.paymentAccounts, recordId);
+        if (savedAccount) { state.records.paymentAccounts.push(savedAccount); }
+      }
 
       if (recordId) {
         state.views.paymentAccounts.selectedId = recordId;

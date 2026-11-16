@@ -8,6 +8,17 @@
   function day(value) { return String(value || "").slice(0, 10); }
   function date(value) { var d = day(value); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split("-").reverse().join("/") : "—"; }
   function number(value) { return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? Number(value) : null; }
+  function percentageCell(value) {
+    var percent = number(value), valid = percent !== null && percent >= 0 && percent <= 100;
+    if (!valid) { return '<span class="prepayment-coverage is-unknown">' + (percent === null ? 'Not specified' : esc(value) + '% · Review percentage') + '</span>'; }
+    var label = percent === 100 ? 'Full payment' : percent === 0 ? 'No percentage allocated' : 'Partial payment';
+    return '<div class="prepayment-coverage ' + (percent === 100 ? 'is-full' : 'is-partial') + '" title="Percentage allocated to this prepayment; not payment completion"><div class="prepayment-coverage-heading"><strong>' + esc(percent) + '%</strong><span>' + label + '</span></div><span class="prepayment-coverage-track" aria-hidden="true"><span style="width:' + percent + '%"></span></span></div>';
+  }
+  function requestTypeCell(value) {
+    var type = String(value || "").trim();
+    var kind = type === "Full Payment" ? "is-full" : type === "Partial Payment" ? "is-partial" : "is-unknown";
+    return '<span class="prepayment-request-type ' + kind + '" title="Transaction type saved on the prepayment request">' + esc(!type || type === "-None-" ? "Not specified" : type) + '</span>';
+  }
   function money(value, currency) { return number(value) === null ? "—" : new Intl.NumberFormat("en-GB", { style: "currency", currency: currency || "EUR" }).format(Number(value)); }
   function today() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function overdue(payment, currentDay) { return isPending(payment) && Boolean(day(payment.Due_Date)) && day(payment.Due_Date) < currentDay; }
@@ -70,10 +81,17 @@
     if (value.missing) { parts.push(value.missing + " missing amount" + (value.missing === 1 ? "" : "s")); }
     return parts.join(" · ") || "—";
   }
-  function groupRecords(requests, payments) {
+  function groupRecords(requests, payments, invoiceAllocations) {
+    var invoiceNames = new Map();
+    (invoiceAllocations || []).forEach(function (allocation) {
+      var key = id(allocation.Prepayment);
+      if (!invoiceNames.has(key)) { invoiceNames.set(key, []); }
+      invoiceNames.get(key).push(name(allocation.Vendor_Invoice));
+    });
     var groups = requests.map(function (request) { return { key: id(request), request: request, payments: [] }; });
     var byId = new Map(groups.map(function (group) { return [group.key, group]; }));
     payments.forEach(function (payment) {
+      payment = Object.assign({}, payment, { associatedInvoiceNames: invoiceNames.get(id(payment)) || [] });
       var requestId = id(payment.Prepayment_Request), key = requestId || "unassigned";
       if (!byId.has(key)) {
         var group = { key: key, request: null, requestId: requestId, label: requestId ? (name(payment.Prepayment_Request) || "Request unavailable") : "No prepayment request", payments: [] };
@@ -87,13 +105,17 @@
   function filterGroups(groups, filters, currentDay) {
     var mfsp = String(filters.mfsp || "").trim().toLowerCase();
     var supplierCode = String(filters.supplierCode || "").trim().toLowerCase();
-    var paymentFilter = filters.dueToday || filters.from || filters.to || filters.paymentFrom || filters.paymentTo || filters.accountingStatus || filters.bankRequested || filters.bankReceipt || filters.statusView === "closed";
+    var invoiceNumber = String(filters.invoiceNumber || "").trim().toLowerCase();
+    var paymentReference = String(filters.paymentReference || "").trim().toLowerCase();
+    var paymentFilter = invoiceNumber || paymentReference || filters.dueToday || filters.from || filters.to || filters.paymentFrom || filters.paymentTo || filters.accountingStatus || filters.bankRequested || filters.bankReceipt || filters.statusView === "closed";
     return groups.map(function (group) {
       var r = group.request || {};
       var parentMatch = (!mfsp || String(r.MFSP_Reference || "").toLowerCase().indexOf(mfsp) !== -1) &&
         (!supplierCode || String(r.Supplier_Code || "").toLowerCase().indexOf(supplierCode) !== -1);
       var visible = group.payments.filter(function (p) {
         return parentMatch &&
+          (!invoiceNumber || (p.associatedInvoiceNames || []).some(function (value) { return value.toLowerCase().indexOf(invoiceNumber) !== -1; })) &&
+          (!paymentReference || name(p.Vendor_Payment).toLowerCase().indexOf(paymentReference) !== -1) &&
           (filters.statusView === "open" ? !isClosed(p) : filters.statusView === "closed" ? isClosed(p) : true) &&
           (filters.dueToday ? day(p.Due_Date) === currentDay :
             (!filters.from || (day(p.Due_Date) && day(p.Due_Date) >= filters.from)) &&
@@ -155,7 +177,7 @@
   }
   function actionsMenu(payment, showRequest) {
     var menuId = 'prepayment-actions-' + (showRequest ? 'all-' : 'request-') + id(payment);
-    return '<button class="card-purchase-review-button" type="button" data-prepayment-actions popovertarget="' + esc(menuId) + '" aria-label="Actions for ' + esc(payment.Name || id(payment)) + '" title="More actions"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button><div id="' + esc(menuId) + '" class="prepayment-actions-menu" popover="auto" aria-label="Prepayment actions">' + discardButton(payment) + deleteButton(payment) + '</div>';
+    return '<button class="card-purchase-review-button" type="button" data-prepayment-actions popovertarget="' + esc(menuId) + '" aria-label="Actions for ' + esc(payment.Name || id(payment)) + '" title="More actions"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button><div id="' + esc(menuId) + '" class="prepayment-actions-menu" popover="auto" aria-label="Prepayment actions">' + '<button type="button" class="button tertiary compact-action-button" data-prepayment-edit="' + esc(id(payment)) + '">Edit prepayment</button>' + discardButton(payment) + deleteButton(payment) + '</div>';
   }
   function paymentTable(rows, currentDay, showRequest, statusView, onColumnsChanged) {
     var definitions = [
@@ -163,7 +185,7 @@
       ["Name", "Prepayment"],
       ...(showRequest ? [["Request", "Request / supplier / booking"]] : []),
       ["Observations", "Observations"], ["Accounting_Status", "Accounting Status"], ["Due_Date", "Due date"],
-      ["Amount", "Amount"], ["Percent", "%"], ["Payment_Date", "Payment date"],
+      ["Amount", "Amount"], ["Percent", "Payment share (%)"], ["Transaction_Type", "Request payment type"], ["Payment_Date", "Payment date"],
       ["Payment_Proof", "Payment proof"], ["Proforma", "Proforma"], ["Reported_By", "Reported By"]
     ];
     var manager = ns.tableColumns, tableKey = showRequest ? "prepayments" : "prepaymentsByRequest";
@@ -173,7 +195,7 @@
     order = bankColumns.filter(function (key) { return order.indexOf(key) !== -1; }).concat(order.filter(function (key) { return bankColumns.indexOf(key) === -1; }));
     if (statusView === "open") { order = order.filter(function (key) { return key !== "Bank_Payment_Requested"; }); }
     var labels = Object.fromEntries(definitions);
-    var head = '<th aria-label="Actions"><input class="prepayment-select" type="checkbox" data-prepayment-select-all aria-label="Select all payments in this table" title="Select or deselect all payments in this table"></th>' + order.map(function (key) {
+    var head = '<th class="card-purchase-review-cell" data-fixed-column-width="128" aria-label="Actions"><input class="prepayment-select" type="checkbox" data-prepayment-select-all aria-label="Select all payments in this table" title="Select or deselect all payments in this table"></th>' + order.map(function (key) {
       var html = '<th>' + esc(labels[key]) + '</th>';
       return manager ? manager.resizableHeader(key, html) : html;
     }).join('') + (manager ? '<th class="table-columns-gear-cell">' + manager.button(tableKey) + '</th>' : '');
@@ -199,7 +221,8 @@
         Accounting_Status: '<span class="prepayment-status ' + accountingStatusClass(p) + '">' + esc(accountingStatus(p)) + '</span>',
         Due_Date: (id(p) ? '<button type="button" class="prepayment-record-link prepayment-due-edit" data-prepayment-due-edit="' + esc(id(p)) + '" aria-label="Edit due date for ' + esc(p.Name || id(p)) + '" title="Edit due date">' + date(p.Due_Date) + ' <span aria-hidden="true">✎</span></button>' : date(p.Due_Date)) + (dueToday ? '<small class="prepayment-due-today-label">Due today</small>' : late ? '<small>Overdue</small>' : ''),
         Amount: esc(money(p.Amount, p.Currency)),
-        Percent: number(p.Percent) === null ? '?' : esc(p.Percent) + '%',
+        Percent: percentageCell(p.Percent),
+        Transaction_Type: requestTypeCell(r.Transaction_Type),
         Payment_Date: date(p.Payment_Date),
         Reported_By: esc(r.Requested_By_2 || '-'),
         Bank_Payment_Requested: bank,
@@ -232,6 +255,7 @@
     var find = function (key) { return panel.querySelector('[data-prepayments-' + key + ']'); };
     var message = find("message"), results = find("results"), summary = find("summary"), pager = find("pager"), refresh = find("refresh");
     var workflow = ns.createPrepaymentWorkflow(panel, zoho, load);
+    ns.openPendingPrepayment = function (recordId) { return workflow.open(recordId); };
     var bankActions = ns.createPrepaymentBankActions ? ns.createPrepaymentBankActions(panel, zoho, load, showError) : null;
     var proofDialog = ns.createPrepaymentProofDialog ? ns.createPrepaymentProofDialog(panel, zoho, function (updated) {
       groups.forEach(function (group) { group.payments.forEach(function (payment) { if (id(payment) === id(updated)) { Object.assign(payment, updated); } }); });
@@ -267,9 +291,12 @@
     });
     function showError(error) { message.textContent = error && error.message || String(error); message.classList.add("is-error"); }
     function render() {
+      results._bufferedTableToken = null;
       panel.querySelectorAll('[data-prepayments-status-view]').forEach(function (button) { var active = button.dataset.prepaymentsStatusView === statusView; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
       panel.querySelectorAll('[data-prepayments-view]').forEach(function (button) { var active = button.dataset.prepaymentsView === view; button.classList.toggle("is-active", active); button.setAttribute("aria-pressed", String(active)); });
       if (!loaded) { return; }
+      var oldScroll = (results.querySelector && results.querySelector(".table-wrap")) || results;
+      var scrollTop = page === 1 ? 0 : oldScroll.scrollTop, scrollLeft = oldScroll.scrollLeft;
       var currentDay = today(), filtered = filterGroups(groups, Object.assign({}, applied, { statusView: statusView, dueToday: dueTodayOnly }), currentDay);
       var rows = [];
       filtered.forEach(function (group) { group.visible.forEach(function (payment) { rows.push({ payment: payment, group: group }); }); });
@@ -282,9 +309,9 @@
         ['Pending registration', totalText(totals(payments, function (p) { return isPending(p); }))],
         ['Overdue', totalText(totals(payments, function (p) { return overdue(p, currentDay); }))]
       ].map(function (item) { return '<div><span>' + item[0] + '</span><strong>' + esc(item[1]) + '</strong></div>'; }).join("");
-      var items = view === "requests" ? filtered : rows, pages = Math.max(1, Math.ceil(items.length / 15));
+      var items = view === "requests" ? filtered : rows, pages = Math.max(1, Math.ceil(items.length / 50));
       page = Math.min(page, pages);
-      var visible = items.slice((page - 1) * 15, page * 15);
+      var visible = items.slice(0, page * 50);
       message.classList.remove("is-error");
       message.textContent = !items.length ? "No " + (view === "requests" ? "requests" : "prepayments") + " match these filters." : "";
       results.innerHTML = view === "payments" ? (visible.length ? paymentTable(visible, currentDay, true, statusView, render) : "") : visible.map(function (group) {
@@ -299,25 +326,30 @@
           (group.visible.length !== group.payments.length ? '<p>Showing ' + group.visible.length + ' of ' + group.payments.length + ' prepayments matching the filters. Request totals include all its prepayments.</p>' : '') +
           (group.visible.length ? paymentTable(group.visible.map(function (payment) { return { payment: payment, group: group }; }), currentDay, false, statusView, render) : '<p class="prepayment-no-payments">No prepayments have been added to this request.</p>') + '</div></details>';
       }).join("");
-      pager.hidden = items.length <= 15;
-      find("page-copy").textContent = 'Page ' + page + ' of ' + pages;
-      find("previous").disabled = page <= 1; find("next").disabled = page >= pages;
+      pager.hidden = true;
+      var scroller = view === "payments" ? (results.querySelector && results.querySelector(".table-wrap")) : results;
+      if (scroller) {
+        scroller.scrollTop = scrollTop; scroller.scrollLeft = scrollLeft;
+        if (ns.renderBufferedTable) { ns.renderBufferedTable(results, scroller, visible.length, items.length, function () { page += 1; render(); }); }
+      }
       if (bankActions) { bankActions.render(groups.reduce(function (all, group) { return all.concat(group.payments); }, []), statusView); }
     }
     async function load() {
       if (busy) { return; }
       var token = ++generation;
       busy = true; loaded = false; refresh.disabled = true; panel.setAttribute("aria-busy", "true");
+      refresh.classList.add("is-refreshing"); refresh.setAttribute("aria-label", "Refreshing prepayments"); refresh.title = "Refreshing prepayments";
       message.classList.remove("is-error"); message.textContent = "Loading requests and prepayments…";
+      message.classList.add("operations-loading");
       results.innerHTML = ""; summary.hidden = true; pager.hidden = true;
       try {
         if (!zoho || !zoho.CRM || !zoho.CRM.API) { throw new Error("CRM is not available. Open this widget in Zoho CRM and refresh."); }
-        var data = await Promise.all([loadModule(zoho.CRM.API, REQUESTS), loadModule(zoho.CRM.API, PAYMENTS)]);
+        var data = await Promise.all([loadModule(zoho.CRM.API, REQUESTS), loadModule(zoho.CRM.API, PAYMENTS), loadModule(zoho.CRM.API, "Prepayment_Invoice_Allocations")]);
         if (deletion) { deletion.pending().forEach(function (payment) { if (!data[1].some(function (p) { return id(p) === id(payment); })) { data[1].push(payment); } }); }
         if (token !== generation) { return; }
-        groups = groupRecords(data[0], data[1]); loaded = true; page = 1; render();
+        groups = groupRecords(data[0], data[1], data[2]); loaded = true; page = 1; render();
       } catch (error) { if (token === generation) { showError(error); } }
-      finally { if (token === generation) { busy = false; refresh.disabled = false; panel.setAttribute("aria-busy", "false"); } }
+      finally { if (token === generation) { busy = false; refresh.disabled = false; panel.setAttribute("aria-busy", "false"); message.classList.remove("operations-loading"); refresh.classList.remove("is-refreshing"); refresh.setAttribute("aria-label", "Refresh prepayments"); refresh.title = "Refresh prepayments"; } }
     }
     function applyFilters() {
       var from = find("from").value, to = find("date-mode").value === "single" ? from : find("to").value;
@@ -330,7 +362,12 @@
       if (!to) { find("to").value = ""; }
       if (!paymentFrom) { find("payment-from").value = ""; }
       if (!paymentTo) { find("payment-to").value = ""; }
-      applied = { mfsp: find("mfsp").value, supplierCode: find("supplier-code").value, accountingStatus: find("accounting-status").value, bankRequested: find("bank-requested").value, bankReceipt: find("bank-receipt").value, from: from, to: to, paymentFrom: paymentFrom, paymentTo: paymentTo };
+      var invoiceNumber = find("invoice-number").value.trim(), paymentReference = find("payment-reference").value.trim();
+      if ((invoiceNumber && invoiceNumber !== applied.invoiceNumber) || (paymentReference && paymentReference !== applied.paymentReference)) {
+        statusView = "all";
+        dueTodayOnly = false; find("due-today").checked = false; syncDueTodayControls();
+      }
+      applied = { invoiceNumber: invoiceNumber, paymentReference: paymentReference, mfsp: find("mfsp").value, supplierCode: find("supplier-code").value, accountingStatus: find("accounting-status").value, bankRequested: find("bank-requested").value, bankReceipt: find("bank-receipt").value, from: from, to: to, paymentFrom: paymentFrom, paymentTo: paymentTo };
       message.classList.remove("is-error"); message.textContent = "";
       page = 1; render();
       if (!loaded && !busy) { load(); }
@@ -372,8 +409,7 @@
     refresh.addEventListener("click", load);
     global.addEventListener("accounting-manager-payment-created", function () { loaded = false; });
     ["accounting-manager-invoice-deleted", "accounting-manager-operation-undone"].forEach(function (event) { global.addEventListener(event, function () { loaded = false; }); });
-    find("previous").addEventListener("click", function () { page -= 1; render(); });
-    find("next").addEventListener("click", function () { page += 1; render(); });
+
     results.addEventListener("toggle", function (event) { var key = event.target.getAttribute("data-prepayment-group"); if (key) { if (event.target.open) { expanded.add(key); if (ns.tableColumns) { ns.tableColumns.refreshWidths("prepaymentsByRequest"); } } else { expanded.delete(key); } } }, true);
     results.addEventListener("submit", async function (event) {
       var form = event.target.closest('[data-prepayment-due-form]');
@@ -408,7 +444,15 @@
         var menu = panel.querySelector('#' + actions.getAttribute('popovertarget'));
         var rect = actions.getBoundingClientRect();
         menu.style.left = Math.max(8, Math.min(rect.left, global.innerWidth - 176)) + 'px';
-        menu.style.top = Math.max(8, Math.min(rect.bottom + 6, global.innerHeight - 110)) + 'px';
+        menu.style.top = Math.max(8, Math.min(rect.bottom + 6, global.innerHeight - 170)) + 'px';
+        return;
+      }
+      var editAction = event.target.closest('[data-prepayment-edit]');
+      if (editAction) {
+        if (busy || discardBusy || dueDateSaves.size) { return; }
+        closeActionsMenus();
+        ns.operationEditor = ns.operationEditor || ns.createOperationEditor(zoho);
+        await ns.operationEditor.open('Prepayments', editAction.getAttribute('data-prepayment-edit'), editAction, load);
         return;
       }
       var deleteAction = event.target.closest('[data-prepayment-delete]');
@@ -420,6 +464,7 @@
         find("delete-name").textContent = deletePayment.Name || deleteId;
         find("delete-error").textContent = "";
         deleteDialog.showModal();
+        find("delete-cancel").focus({ preventScroll: true });
         return;
       }
       var dueCancel = event.target.closest('[data-prepayment-due-cancel]');

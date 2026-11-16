@@ -1,0 +1,17 @@
+{
+  "publishedAt": "2026-10-13T15:08:17.787Z",
+  "functions": {
+    "supplierinvoice_edit": "616617000174359025",
+    "supplierinvoiceedit_filedigest": "616617000174816048"
+  },
+  "issue": "Uploaded ZFS token differs from stored File_Id__s; compare content fingerprints when identifiers differ.",
+  "tests": 58,
+  "invoice_id": "616617000173365008",
+  "invoiceResumeExecuted": false,
+  "requiresWidgetUpload": false,
+  "requiresPublicFunctionAuth": false,
+  "verificationSources": [
+    "https://www.zoho.com/deluge/help/encryption-tasks/base-64-encode.html",
+    "https://www.zoho.com/crm/developer/docs/api/v8/download_field_attachments.html"
+  ]
+}

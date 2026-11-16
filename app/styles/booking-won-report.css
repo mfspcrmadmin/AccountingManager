@@ -1,3 +1,4 @@
+@layer widget-views {
 .booking-won-report { margin: 16px 0; padding: 18px; border: 1px solid var(--border, #d8e1ea); border-radius: 12px; background: var(--surface, #fff); min-width: 0; }
 .booking-won-report[hidden] { display: none !important; }
 .booking-won-report [hidden] { display: none !important; }
@@ -21,3 +22,5 @@
 @keyframes booking-won-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .booking-won-spinner { animation-duration: 2s; } }
 #booking-won-message:empty { display: none; }
+
+}

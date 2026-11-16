@@ -1,0 +1,19 @@
+string standalone.invoiceReminder_policy(String kind, String stage, String invoiceType, String serviceDate, String lastSentDate, String todayText)
+{
+result = {"eligible":false,"reason":"Not eligible"};
+if(kind != "service" && kind != "proforma") { throw "Invalid reminder kind"; }
+if(kind == "service" && stage != "Trip Accounting Closure") { result.put("reason","Booking is not in Trip Accounting Closure"); return result.toString(); }
+if(kind == "proforma" && invoiceType != "Proforma") { result.put("reason","Invoice is no longer a Proforma"); return result.toString(); }
+if(serviceDate == "") { result.put("reason","Service date is missing"); return result.toString(); }
+if(kind == "service" && lastSentDate != "") { result.put("reason","One-time request already sent"); return result.toString(); }
+due = serviceDate.toDate("yyyy-MM-dd").addDay(10);
+if(kind == "proforma" && lastSentDate != "")
+{
+    repeatDue = lastSentDate.toDate("yyyy-MM-dd").addDay(20);
+    if(repeatDue > due) { due = repeatDue; }
+}
+result.put("due_date",due.toString("yyyy-MM-dd"));
+result.put("eligible",todayText.toDate("yyyy-MM-dd") >= due);
+result.put("reason",if(result.get("eligible"),"Due","Not due yet"));
+return result.toString();
+}

@@ -4,16 +4,16 @@
   ns.createInlineFeedback = function (state) {
     var document = global.document;
     var anchors = {
-      'supplier-search': '#search-panel .search-bar',
-      'supplier-bootstrap': '#search-panel .search-bar',
-      suppliers: '.supplier-summary-header',
+      'supplier-search': '#supplier-search-feedback',
+      'supplier-bootstrap': '#supplier-search-feedback',
+      suppliers: '#supplier-feedback-rail',
       'supplier-activity': '#supplier-activity-panel',
       'invoice-detail': '#selected-invoice-panel',
       'payment-detail': '#payments-browser-workspace .sidebar-stack > .panel',
       invoices: '#invoices-filter-toolbar',
       payments: '#payments-filter-toolbar',
       bookings: '.bookings-filters-grid',
-      'invoice-create': '#invoice-create-panel',
+      'invoice-create': '#invoice-create-feedback',
       'payment-create': '#invoice-payment-panel',
       'payment-account-create': '#payment-account-create-panel',
       'accounting-account-create': '#accounting-account-create-panel'
@@ -35,8 +35,8 @@
       if (name.charAt(0) === '#') { selector = name; }
       var element = selector && document.querySelector(selector);
       // A completed form may already be closed. Keep its result in its owning tab.
-      if (element && (name === 'invoice-create' || name === 'payment-create') && element.hidden) {
-        element = document.querySelector(name === 'invoice-create' ? '.supplier-summary-header' : '#invoices-filter-toolbar');
+      if (element && (name === 'invoice-create' || name === 'payment-create') && (element.hidden || (name === 'invoice-create' && element.closest('#invoice-create-panel[hidden]')))) {
+        element = document.querySelector(name === 'invoice-create' ? '#supplier-feedback-rail' : '#invoices-filter-toolbar');
       }
       if (element && /-account-create$/.test(name) && element.hidden) {
         element = document.querySelector(name === 'payment-account-create' ? '#payments-accounts-workspace .panel' : '#accounting-accounts-workspace .panel');
@@ -80,11 +80,26 @@
       return box;
     }
 
+    var supplierLoading = {};
+    function updateSupplierLoading(scope, loading, label) {
+      if (scope !== 'supplier-search' && scope !== 'supplier-bootstrap') { return; }
+      supplierLoading[scope] = loading ? label || 'Loading suppliers' : '';
+      var message = supplierLoading['supplier-search'] || supplierLoading['supplier-bootstrap'];
+      var spinner = document.getElementById('supplier-search-spinner');
+      var button = document.getElementById('load-supplier');
+      if (spinner) { spinner.hidden = !message; spinner.setAttribute('aria-label', message || 'Loading suppliers'); }
+      if (button) { button.classList.toggle('is-searching', Boolean(message)); button.setAttribute('aria-busy', String(Boolean(message))); }
+    }
+
     function show(message, options, scope) {
       var settings = options || {};
+      if ((scope === 'supplier-search' || scope === 'supplier-bootstrap') && settings.isLoading) {
+        updateSupplierLoading(scope, true, message);
+        return;
+      }
       var box = slot(scope);
       if (!box) { return; }
-      if (scope === 'supplier-bootstrap' && !box.hidden && box.classList.contains('is-loading') && box._feedbackScope === 'supplier-search') { return; }
+      if (scope === 'supplier-bootstrap' && supplierLoading['supplier-search']) { return; }
       if (!message) {
         if (!settings.clearTone || box.dataset.tone === settings.clearTone || (settings.clearTone === 'notice' && box.dataset.tone !== 'error')) { box.hidden = true; }
         return;
@@ -100,6 +115,7 @@
     }
 
     function finish(scope) {
+      updateSupplierLoading(scope, false);
       var box = slot(scope);
       if (box && box._feedbackScope === scope && box.classList.contains('is-loading')) {
         box.hidden = true;

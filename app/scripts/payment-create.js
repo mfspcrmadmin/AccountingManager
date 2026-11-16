@@ -82,7 +82,46 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function renderPaymentCreateFeedback() {
       var feedback = state.paymentCreation.feedback || {};
-      if (elements.paymentCreateFeedbackPopup) { elements.paymentCreateFeedbackPopup.hidden = true; }
+      var popup = elements.paymentCreateFeedbackPopup;
+      var modal = Boolean(state.paymentCreation.progressDialog && feedback.isOpen);
+      if (popup) {
+        var wasHidden = popup.hidden;
+        popup.hidden = !modal;
+        if (modal) {
+          elements.invoicePaymentPanel.hidden = true;
+          var loading = feedback.status === "loading";
+          popup.classList.toggle("is-error", !loading);
+          popup.setAttribute("aria-busy", String(loading));
+          elements.paymentCreateFeedbackSpinner.hidden = !loading;
+          elements.paymentCreateFeedbackEyebrow.textContent = state.paymentCreation.form.name || "Supplier payment";
+          elements.paymentCreateFeedbackTitle.textContent = loading ? "Saving your payment" : "Payment needs your attention";
+          elements.paymentCreateFeedbackMessage.textContent = feedback.message;
+          elements.paymentCreateFeedbackClose.hidden = loading;
+          elements.paymentCreateFeedbackClose.textContent = "Back to payment";
+          var note = popup.querySelector('.payment-progress-note');
+          if (note) note.textContent = loading ? "Keep this window open. Large remittances can take several minutes." : "Review the message before continuing. Any saved records will be reused.";
+          var phases = ['connection', 'validation', 'payment', 'allocation-validation', 'allocations', 'balances', 'operations', 'complete', 'refresh'];
+          var position = phases.indexOf(state.paymentCreation.progressPhase || 'connection');
+          popup.querySelectorAll('[data-payment-step]').forEach(function (step) {
+            var start = Number(step.dataset.paymentStep), next = Number(step.dataset.paymentNext);
+            step.classList.toggle('is-complete', position >= next);
+            step.classList.toggle('is-current', position >= start && position < next);
+            if (position >= start && position < next) step.setAttribute('aria-current', 'step');
+            else step.removeAttribute('aria-current');
+          });
+          if (!popup._paymentFocusBound) {
+            popup.addEventListener('keydown', function (event) {
+              if (event.key === 'Tab') { event.preventDefault(); (elements.paymentCreateFeedbackClose.hidden ? popup : elements.paymentCreateFeedbackClose).focus(); }
+              if (event.key === 'Escape' && !state.paymentCreation.isBusy) closePaymentCreateFeedback();
+            });
+            popup._paymentFocusBound = true;
+          }
+          if (wasHidden) popup.focus();
+          if (ns.inlineFeedback) ns.inlineFeedback.finish('payment-create');
+          return;
+        }
+        popup.removeAttribute('aria-busy');
+      }
       if (!feedback.isOpen) {
         if (ns.inlineFeedback) { ns.inlineFeedback.finish('payment-create'); }
         return;
@@ -96,7 +135,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
       state.paymentCreation.feedback = { isOpen: false, status: "", message: "" };
-      renderPaymentCreateFeedback();
+      state.paymentCreation.progressDialog = false;
+      renderAll();
+      if (elements.invoicePaymentSubmit) elements.invoicePaymentSubmit.focus();
     }
 
     function buildInvoicePaymentContext(selectedInvoices) {
@@ -152,6 +193,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         var supplierContextKey = supplierId || (supplierName ? "supplier-name:" + supplierName : "invoice:" + invoice.id);
         var supplierContext;
 
+        if (invoice.Edit_Status === "Pending") { blockedStatuses.push(invoiceNumber + " (invoice correction pending)"); }
+        if (invoice.Registration_Key && invoice.Registration_Status !== "Complete") { blockedStatuses.push(invoiceNumber + " (unfinished invoice registration; resume invoice registration before paying)"); }
+        if (invoice.Locked__s) { blockedStatuses.push(invoiceNumber + " (locked in CRM)"); }
         if (isBlockedInvoicePaymentStatus(status)) {
           blockedStatuses.push(invoiceNumber + " (" + helpers.textValue(status) + ")");
         }
@@ -573,7 +617,18 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function getAllowedPaymentAccountsForSupplier(supplierId) {
       var normalizedSupplierId = String(supplierId || "").trim();
-      var allowedAccounts = state.records.paymentAccounts.filter(isSelectablePaymentAccount);
+      var supplier = getSupplierRecordById(supplierId);
+      var invoices = (state.paymentCreation.context && state.paymentCreation.context.invoices || []).filter(function (invoice) { return String(invoice.supplierId || '') === normalizedSupplierId; });
+      var commissionOnly = invoices.length > 0 && invoices.every(function (invoice) { return invoice.invoiceType === 'Commission'; });
+      var allowedAccounts = state.records.paymentAccounts.filter(function (account) {
+        if (account.Method_Type === 'SION' || String(account.id) === '616617000166884362') {
+          return commissionOnly && supplier && supplier.Vendor_Type === 'Agency' && supplier.Agency &&
+            String(getSupplierDefaultPaymentAccountId(supplier)) === '616617000166884362' &&
+            String(account.id) === '616617000166884362' && account.Owner_Type === 'Agency' && account.Method_Type === 'SION' &&
+            account.Status === 'Active' && account.Locked__s !== true && !getPaymentAccountOwnerSupplierId(account);
+        }
+        return isSelectablePaymentAccount(account);
+      });
 
       return allowedAccounts.filter(function (account) {
         var ownerSupplierId = getPaymentAccountOwnerSupplierId(account);
@@ -638,14 +693,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (supplierAccounts.length) {
-        return "Auto-assign supplier payment account";
+        return "Use default or unique active supplier account";
       }
 
       if ((accounts || []).length) {
-        return "Auto-create or choose shared account";
+        return "Create or select a separate payment account";
       }
 
-      return "Auto-create supplier payment account";
+      return "Create a separate supplier payment account";
     }
 
     function getSupplierPaymentAccountLabel(account) {
@@ -761,7 +816,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var selectedHeaderPaymentAccountIsValid;
       var headerPaymentAccountDropdownMarkup = "";
 
-      elements.invoicePaymentPanel.hidden = !isOpen;
+      elements.invoicePaymentPanel.hidden = !isOpen || Boolean(state.paymentCreation.progressDialog);
       renderPaymentCreateFeedback();
 
       if (!isOpen) {
@@ -866,7 +921,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         var accountOptions = [
           '<button class="settlement-option payment-supplier-account-auto" type="button" role="option" data-payment-account-supplier="' + helpers.escapeHtml(supplierContext.id || "") + '" data-payment-supplier-account-option="">',
           '  <span class="settlement-option-title">Automatic</span>',
-          '  <span class="settlement-option-meta">Auto-create supplier payment account</span>',
+          '  <span class="settlement-option-meta">Use default or unique active supplier account</span>',
           '</button>'
         ];
         var contextParts = [supplierContext.mfspDisplay, supplierContext.bookingDisplay, supplierContext.settlementDisplay].filter(function (value) {
@@ -934,26 +989,43 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           input.disabled = state.paymentCreation.isBusy;
         }
       );
+      var savedPayment;
+      try { savedPayment = context && paymentSaver().pending(); }
+      catch (error) {
+        elements.invoicePaymentSubmit.disabled = true;
+        renderer.showError(error.message);
+      }
+      if (savedPayment || context && context.invoiceCorrection && state.paymentCreation.correctionRecovery) {
+        elements.invoicePaymentForm.querySelectorAll("input,select,textarea").forEach(function (input) { input.disabled = true; });
+        elements.invoicePaymentAccountToggle.disabled = true;
+        elements.invoicePaymentSubmit.textContent = state.paymentCreation.isBusy
+          ? "Checking saved payment..."
+          : savedPayment && savedPayment.phase === "complete" ? "Finish confirmation" : "Resume payment";
+      }
     }
 
     function closeCreatePaymentPanel() {
       state.paymentCreation.isOpen = false;
       state.paymentCreation.isBusy = false;
+      state.paymentCreation.progressDialog = false;
+      state.paymentCreation.feedback = { isOpen: false, status: "", message: "" };
       resetInvoicePaymentForm();
       renderer.showError("");
       renderAll();
     }
 
-    async function openCreatePaymentPanel() {
+    async function openCreatePaymentPanel(invoiceOverride, options) {
       var invoicesView = buildInvoicesView();
-      var selectedInvoices = invoicesView.selectedFilteredRecords;
+      var selectedInvoices = Array.isArray(invoiceOverride) ? invoiceOverride : invoicesView.selectedFilteredRecords;
       var paymentContext;
 
       renderer.showError("");
-      paymentContext = buildInvoicePaymentContext(selectedInvoices);
+      var recovery = paymentSaver().pending();
+      paymentContext = recovery ? { context: recovery.plan.context } : buildInvoicePaymentContext(selectedInvoices);
 
       if (paymentContext.error) {
         renderer.showError(paymentContext.error);
+        if (Array.isArray(invoiceOverride)) { throw new Error(paymentContext.error); }
         return;
       }
 
@@ -968,7 +1040,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       try {
         await ensurePaymentAccountsLoaded();
         state.paymentCreation.context = paymentContext.context;
-        state.paymentCreation.form = buildDefaultInvoicePaymentForm(paymentContext.context);
+        state.paymentCreation.context.invoiceCorrection = Boolean(options && options.invoiceCorrection);
+        state.paymentCreation.context.correctionInvoice = state.paymentCreation.context.invoiceCorrection ? invoiceOverride[0] : null;
+        state.paymentCreation.correctionRecovery = null;
+        state.paymentCreation.form = recovery ? recovery.plan.form : buildDefaultInvoicePaymentForm(paymentContext.context);
+        if (recovery) {
+          state.paymentCreation.feedback = { isOpen: true, status: "error", message: recovery.phase === "complete"
+            ? 'Payment saved and verified. Select "Finish confirmation" to close this pending operation.'
+            : (recovery.lastError ? "Last attempt: " + recovery.lastError + " " : "The previous save was not fully confirmed in this browser. ") + 'Select "Resume payment" to check and finish saving this payment using its existing records and original amounts.' };
+        }
         state.paymentCreation.isBusy = false;
         renderAll();
 
@@ -983,6 +1063,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         state.paymentCreation.isBusy = false;
         renderer.showError(error.message || "Could not prepare the supplier payment form.");
         renderAll();
+        if (Array.isArray(invoiceOverride)) { throw error; }
       } finally {
         renderer.showNotice("");
       }
@@ -1035,9 +1116,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return String(account && account.id || "");
       });
       var totalAmount = 0;
-      var currentSelectionIds = buildInvoicesView().selectedFilteredRecords.map(function (invoice) {
-        return String(invoice.id);
-      }).sort();
       var contextIds = (context && context.invoices ? context.invoices : []).map(function (invoice) {
         return String(invoice.id);
       }).sort();
@@ -1048,7 +1126,17 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         };
       }
 
-      if (currentSelectionIds.join("|") !== contextIds.join("|")) {
+      // Correction payments are opened explicitly for the freshly saved invoice,
+      // independently of the table's checkboxes (which a refresh may clear).
+      // submitCorrectionPayment still sends its Modified_Time for server checks.
+      if (context.invoiceCorrection) {
+        if (contextIds.length !== 1 || !context.correctionInvoice ||
+            String(context.correctionInvoice.id || "") !== contextIds[0]) {
+          return { error: "The additional payment does not match the corrected invoice. Reopen the payment form from that invoice." };
+        }
+      } else if (buildInvoicesView().selectedFilteredRecords.map(function (invoice) {
+        return String(invoice.id);
+      }).sort().join("|") !== contextIds.join("|")) {
         return {
           error: "The selected invoices changed while the payment form was open. Close it and open it again from the current selection."
         };
@@ -1413,6 +1501,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function buildSupplierPaymentPayload(paymentData, createEntriesResult) {
       var payload = {
         Name: paymentData.Name,
+        Currency: paymentData.Currency || "EUR",
         Payment_Amount: roundCurrency(paymentData.Payment_Amount),
         Payment_Date: paymentData.Payment_Date,
         Status: paymentData.Status,
@@ -1440,14 +1529,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function buildSupplierPaymentAllocationPayload(paymentId, paymentReference, paymentData, entry) {
       var payload = {
-        Name: paymentReference + " - " + entry.invoiceNumber,
+        Name: (paymentReference + " - " + entry.invoiceNumber).slice(0, 120),
         Supplier_Payment: { id: paymentId },
         Supplier_Invoice: { id: entry.invoiceId },
+        Currency: paymentData.Currency || entry.invoiceRecord.Currency || "EUR",
         Allocated_Amount: entry.allocatedAmount,
         Allocation_Date: paymentData.Payment_Date,
         Payment_Date: paymentData.Payment_Date,
-        Payment_Status: paymentData.Status,
-        Payment_Accounting_Status: paymentData.Accounting_Status
+        Payment_Status: paymentData.Status
       };
 
       payload.Movement_Type = entry.isCreditNote ? PAYMENT_MOVEMENT_TYPES.supplierRefund : PAYMENT_MOVEMENT_TYPES.outbound;
@@ -1483,62 +1572,121 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return payload;
     }
 
-    async function updateInvoiceAfterAllocation(entry) {
-      var invoice = entry.invoiceRecord;
-      var currentPaid = roundCurrency(getInvoicePaidAmount(invoice));
-      var nextPaid = roundCurrency(currentPaid + entry.allocatedAmount);
-      var totalPayable = roundCurrency(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES));
-      var payload = {
-        Amount_Paid: nextPaid
-      };
-
-      if (totalPayable > 0 && nextPaid >= totalPayable) {
-        payload.Status = "Paid";
-      } else if (nextPaid > 0) {
-        payload.Status = "Partially Paid";
+    var reliablePaymentSave;
+    function paymentSaver() {
+      if (!reliablePaymentSave) {
+        reliablePaymentSave = ns.createReliablePaymentSave({
+          storage: global.localStorage, crm: crm, randomUUID: function () { return global.crypto.randomUUID(); },
+          ready: async function () {
+            var response = await crm.executeFunction("managesupplierpaymentallocations", { supplierPaymentId: "capabilities", allocationsDataString: "{}" });
+            var result = getFunctionOutputObject(response);
+            if (!result || result.consistency_version !== 2) { throw new Error("The payment consistency update must be deployed in CRM before saving payments."); }
+            if (result.reconcile_batch_version !== 1) { throw new Error("The remittance batch update must be deployed in CRM before saving payments."); }
+          },
+          withLock: global.navigator && global.navigator.locks ? function (key, task) {
+            return global.navigator.locks.request(key, { ifAvailable: true }, function (lock) {
+              if (!lock) { throw new Error("This payment is already being processed in another tab. Return to that tab to follow its progress."); }
+              return task();
+            });
+          } : null,
+          progress: function (progress) {
+            state.paymentCreation.progressPhase = progress.phase;
+            var messages = {
+              connection: "Checking CRM connection...",
+              validation: "Checking invoice balances",
+              payment: "Checking the saved payment...",
+              "allocation-validation": "CRM is validating the remittance allocations...",
+              allocations: "Checking invoice allocations",
+              balances: "CRM is updating invoice and settlement balances... Large remittances can take several minutes.",
+              operations: "Checking linked prepayments and card purchases...",
+              complete: "Payment verified. Finishing confirmation...",
+              refresh: "Payment saved and verified. Refreshing the view..."
+            };
+            state.paymentCreation.progressMessage = (messages[progress.phase] || "Checking payment...") +
+              (progress.total ? " (" + progress.current + " of " + progress.total + ")" : "");
+            state.paymentCreation.feedback = { isOpen: true, status: "loading", message: state.paymentCreation.progressMessage };
+            renderPaymentCreateFeedback();
+          },
+          allocationPayload: function (paymentId, plan, entry) { return buildSupplierPaymentAllocationPayload(paymentId, plan.data.Name, plan.data, entry); },
+          reconcile: async function (paymentId, plan, validateOnly) {
+            if (!validateOnly) {
+              return ns.reconcileSavedPayment({
+                execute: async function (name, args) { return getFunctionOutputObject(await crm.executeFunction(name, args)); },
+                progress: function (phase, current, total) {
+                  state.paymentCreation.progressPhase = "balances";
+                  state.paymentCreation.progressMessage = (phase === "invoices" ? "Checking paid invoices" : "Updating settlement balances") + " (" + current + " of " + total + ")";
+                  state.paymentCreation.feedback = { isOpen: true, status: "loading", message: state.paymentCreation.progressMessage };
+                  renderPaymentCreateFeedback();
+                }
+              }, paymentId, plan.data.allocations);
+            }
+            var response = await crm.executeFunction("managesupplierpaymentallocations", {
+              supplierPaymentId: paymentId,
+              allocationsDataString: JSON.stringify({ allocations: plan.data.allocations, validate_only: validateOnly, reconcile_only: !validateOnly })
+            });
+            var result = getFunctionOutputObject(response);
+            if (!result || result.success !== true || result.error !== false) { throw new Error(result && result.message || "CRM did not confirm the complete payment reconciliation. Resume the same payment."); }
+          },
+          sync: async function (paymentId, plan) {
+            var result = await syncPaymentOperations(paymentId, plan.data, plan.entries);
+            if (result.errors.length) { throw new Error("Payment saved; linked operations remain pending: " + result.errors.join(" ")); }
+          },
+          refresh: async function (paymentId, plan) {
+            plan.entries.forEach(function (entry) { delete state.invoiceAllocationsByInvoiceId[entry.invoiceId]; });
+            invalidateInvoiceCreateSettlementCache();
+            await refreshInvoicesAndPaymentsAfterSupplierPayment();
+            state.views.payments.selectedId = paymentId;
+            if (state.views.invoices.selectedDetailId) { await ensureInvoiceAllocationsLoaded(state.views.invoices.selectedDetailId, true); }
+          }
+        });
       }
-
-      assertCrmMutationSucceeded(
-        await crm.updateRecord(MODULES.invoices, entry.invoiceId, payload),
-        "Zoho CRM did not confirm the invoice update after payment allocation."
-      );
+      return reliablePaymentSave;
     }
 
-    async function createSupplierPaymentAllocations(paymentId, paymentData, createEntriesResult) {
-      var allocationIds = [];
-      var successfulEntries = [];
-      var errors = [];
-      var index;
-      var entry;
-      var response;
-      var created;
-
-      for (index = 0; index < createEntriesResult.entries.length; index += 1) {
-        entry = createEntriesResult.entries[index];
-
-        try {
-          response = await crm.insertRecord(
-            MODULES.payAllocations,
-            buildSupplierPaymentAllocationPayload(paymentId, paymentData.Name, paymentData, entry)
-          );
-          created = assertCrmMutationSucceeded(response, "Zoho CRM did not confirm one payment allocation.");
-
-          if (created.details && created.details.id) {
-            allocationIds.push(created.details.id);
-          }
-
-          await updateInvoiceAfterAllocation(entry);
-          successfulEntries.push(entry);
-        } catch (error) {
-          errors.push(entry.invoiceNumber + ": " + (error.message || "Unknown allocation error"));
+    async function submitReliablePayment(paymentData, validation) {
+      state.paymentCreation.isBusy = true;
+      state.paymentCreation.progressDialog = true;
+      state.paymentCreation.progressPhase = "connection";
+      state.paymentCreation.feedback = { isOpen: true, status: "loading", message: "Saving payment and checking all related balances..." };
+      state.paymentCreation.progressMessage = state.paymentCreation.feedback.message;
+      var startedAt = Date.now();
+      // An advisory only: a slow response must never release the save lock or
+      // start another financial request while the original may still be running.
+      var progressTimer = global.setInterval(function () {
+        if (!state.paymentCreation.isBusy) { return; }
+        var elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        state.paymentCreation.feedback.message = state.paymentCreation.progressMessage +
+          " Elapsed: " + Math.floor(elapsed / 60) + "m " + (elapsed % 60) + "s. Waiting for CRM; keep this tab open and do not submit another payment.";
+        renderPaymentCreateFeedback();
+      }, 30000);
+      renderAll();
+      try {
+        var plan;
+        if (!paymentSaver().pending()) {
+          var accounts = await resolvePaymentAccountsForPaymentCreate(state.paymentCreation.context, validation.paymentAccountsBySupplier, validation.allocations);
+          paymentData.Payment_Accounts_By_Supplier = accounts.paymentAccountsBySupplier;
+          var entries = buildSupplierPaymentCreateEntries(state.paymentCreation.context, validation.allocations, paymentData.Payment_Accounts_By_Supplier);
+          if (!entries.entries.length) { throw new Error("Select at least one positive allocation."); }
+          var currencies = helpers.uniqueNonEmpty(entries.entries.map(function (entry) { return entry.invoiceRecord.Currency || "EUR"; }));
+          if (currencies.length !== 1) { throw new Error("All invoices in a payment must use the same currency."); }
+          paymentData.Currency = currencies[0];
+          plan = { data: paymentData, payment: buildSupplierPaymentPayload(paymentData, entries), entries: entries.entries, context: state.paymentCreation.context, form: state.paymentCreation.form };
         }
-      }
-
-      return {
-        allocationIds: allocationIds,
-        successfulEntries: successfulEntries,
-        errors: errors
-      };
+        var result = await paymentSaver().run(plan);
+        if (result.busy) { return; }
+        state.views.invoices.selectedIds = {}; state.views.invoices.selectedRecordsById = {};
+        state.paymentCreation.isBusy = false;
+        closeCreatePaymentPanel();
+        global.dispatchEvent(new global.CustomEvent("accounting-manager-payment-created"));
+        renderer.showNotice(result.refreshRequired
+          ? "Payment saved. Allocations and related balances verified. Reload the view to see the latest figures."
+          : "Payment saved. Allocations and related balances verified.", { tone: result.refreshRequired ? "warning" : "success" });
+      } catch (error) {
+        var resumeMessage = "";
+        try { if (paymentSaver().pending()) { resumeMessage = " After resolving this issue, resume the same payment; saved records will be reused."; } }
+        catch (_) { resumeMessage = " Keep the recovery information and contact support before trying another payment."; }
+        state.paymentCreation.feedback = { isOpen: true, status: "error", message: error.message + resumeMessage };
+      } finally { global.clearInterval(progressTimer); state.paymentCreation.isBusy = false; renderAll(); }
     }
 
     async function refreshInvoicesAndPaymentsAfterSupplierPayment() {
@@ -1574,29 +1722,72 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (state.supplierId) {
-        state.supplierInvoices = await loadInvoicesForSupplier(state.supplierId);
-        state.supplierPayments = await loadPaymentsForSupplier(state.supplierId);
+        var refreshSupplierId = state.supplierId;
+        var supplierResults = await Promise.allSettled([
+          loadInvoicesForSupplier(refreshSupplierId), loadPaymentsForSupplier(refreshSupplierId)
+        ]);
+        var supplierFailure = supplierResults.find(function (result) { return result.status === "rejected"; });
+        if (supplierFailure) { throw supplierFailure.reason; }
+        if (state.supplierId === refreshSupplierId) {
+          state.supplierInvoices = supplierResults[0].value;
+          state.supplierPayments = supplierResults[1].value;
+        }
       }
     }
 
+    async function submitCorrectionPayment(paymentData) {
+      var context = state.paymentCreation.context, invoice = context.correctionInvoice;
+      var storageKey = "accounting-manager:invoice-edit:v1:" + invoice.id;
+      state.paymentCreation.isBusy = true;
+      state.paymentCreation.progressDialog = true;
+      state.paymentCreation.progressPhase = "validation";
+      state.paymentCreation.feedback = { isOpen: true, status: "loading", message: "Checking and saving the invoice payment and its related balances..." };
+      renderAll();
+      try {
+        var recovery = state.paymentCreation.correctionRecovery;
+        if (!recovery) {
+          global.localStorage.setItem(storageKey + ":probe", "1"); global.localStorage.removeItem(storageKey + ":probe");
+          var accounts = await resolvePaymentAccountsForPaymentCreate(context, paymentData.Payment_Accounts_By_Supplier, paymentData.allocations);
+          paymentData.Payment_Accounts_By_Supplier = accounts.paymentAccountsBySupplier;
+          recovery = { operationKey: global.crypto.randomUUID(), request: { action: "add_payment", modified_time: invoice.Modified_Time, payment_details: paymentData } };
+          var serialized = JSON.stringify(recovery);
+          global.localStorage.setItem(storageKey, serialized);
+          if (global.localStorage.getItem(storageKey) !== serialized) { throw new Error("Recovery information could not be stored. No payment was submitted."); }
+          state.paymentCreation.correctionRecovery = recovery;
+        }
+        var response = await crm.executeFunction("supplierinvoice_register", { operationKey: recovery.operationKey, requestJson: JSON.stringify(Object.assign({ operation: "edit", invoice_id: String(invoice.id) }, recovery.request)) });
+        var result = response && response.details && response.details.output;
+        if (typeof result === "string") { result = JSON.parse(result); }
+        if (!result || !result.success) {
+          if (result && !result.retryable && !result.saved) {
+            var check = await crm.executeFunction("supplierinvoice_register", { operationKey: global.crypto.randomUUID(), requestJson: JSON.stringify({ operation: "edit", invoice_id: String(invoice.id), action: "preview" }) });
+            var preview = check && check.details && check.details.output;
+            if (typeof preview === "string") { preview = JSON.parse(preview); }
+            if (preview && preview.success && !preview.pending) { global.localStorage.removeItem(storageKey); state.paymentCreation.correctionRecovery = null; }
+          }
+          throw new Error(result && result.message || "CRM did not confirm the payment result. Resume this payment; do not create another one.");
+        }
+        global.localStorage.removeItem(storageKey); state.paymentCreation.correctionRecovery = null;
+        closeCreatePaymentPanel();
+        state.views.payments.selectedId = result.payment_id || "";
+        invalidateInvoiceCreateSettlementCache();
+        try { await refreshInvoicesAndPaymentsAfterSupplierPayment(); }
+        catch (_) { renderer.showNotice("Payment saved and balances updated. Reload the view to see the latest figures.", { tone: "warning" }); return; }
+        global.dispatchEvent(new global.CustomEvent("accounting-manager-payment-created"));
+        renderer.showNotice("Additional payment saved. Invoice and settlement balances updated.", { tone: "success" });
+      } catch (error) {
+        state.paymentCreation.feedback = { isOpen: true, status: "error", message: error.message + (state.paymentCreation.correctionRecovery ? " Use Resume payment, or reopen Edit on this invoice to resume the same operation." : "") };
+      } finally { state.paymentCreation.isBusy = false; renderAll(); }
+    }
     async function onCreateSupplierPaymentSubmit(event) {
       var validation;
       var context = state.paymentCreation.context;
       var paymentData = {};
-      var response;
-      var selectedDetailId = state.views.invoices.selectedDetailId;
-      var created = false;
-      var paymentRecord;
-      var paymentId = "";
-      var settlementUpdateMessage = "";
-      var resolvedPaymentAccountsResult;
-      var createEntriesResult;
-      var allocationResult;
-      var allocationWarning = "";
-      var paymentAccountsRefreshNeeded = false;
-      var operationWarning = "";
 
       event.preventDefault();
+      if (state.paymentCreation.isBusy) { return; }
+      if (paymentSaver().pending()) { await submitReliablePayment(null, null); return; }
+      if (context && context.invoiceCorrection && state.paymentCreation.correctionRecovery) { await submitCorrectionPayment(null); return; }
       renderer.showError("");
 
       validation = validateInvoicePaymentSubmission();
@@ -1618,128 +1809,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       if (!paymentData.Name) {
         paymentData.Name = buildDefaultPaymentReference(paymentData.Payment_Date);
       }
+      if (context && context.invoiceCorrection) { paymentData.Payment_Accounts_By_Supplier = validation.paymentAccountsBySupplier; await submitCorrectionPayment(paymentData); return; }
 
-      state.paymentCreation.isBusy = true;
-      state.paymentCreation.feedback = {
-        isOpen: true,
-        status: "loading",
-        message: context && context.hasMixedInvoiceTypes
-          ? "Creating the settlement, allocations and related accounts..."
-          : "Creating the payment, allocations and related accounts..."
-      };
-      renderAll();
-      renderer.showNotice("");
-
-      try {
-        resolvedPaymentAccountsResult = await resolvePaymentAccountsForPaymentCreate(context, validation.paymentAccountsBySupplier, validation.allocations);
-        paymentData.Payment_Accounts_By_Supplier = resolvedPaymentAccountsResult.paymentAccountsBySupplier;
-        paymentAccountsRefreshNeeded = resolvedPaymentAccountsResult.hasChanges;
-        createEntriesResult = buildSupplierPaymentCreateEntries(context, validation.allocations, paymentData.Payment_Accounts_By_Supplier);
-
-        if (!createEntriesResult.entries.length) {
-          throw new Error("No positive invoice allocations were found to create the payment.");
-        }
-
-        response = await crm.insertRecord(MODULES.payments, buildSupplierPaymentPayload(paymentData, createEntriesResult));
-        paymentRecord = assertCrmMutationSucceeded(response, "Zoho CRM did not confirm the supplier payment creation.");
-        paymentId = paymentRecord.details && paymentRecord.details.id ? String(paymentRecord.details.id) : "";
-
-        if (!paymentId) {
-          throw new Error("Zoho CRM did not return the created payment ID.");
-        }
-
-        allocationResult = await createSupplierPaymentAllocations(paymentId, paymentData, createEntriesResult);
-
-        if (!allocationResult.successfulEntries.length) {
-          try {
-            await crm.deleteRecord(MODULES.payments, paymentId);
-          } catch (paymentDeleteError) {
-            debugError("rollback payment delete failed", paymentDeleteError, { paymentId: paymentId });
-          }
-          throw new Error("The payment was not kept because none of its allocations could be created. " + allocationResult.errors.join(" "));
-        }
-
-        if (allocationResult.successfulEntries.length !== createEntriesResult.entries.length) {
-          var successfulNetAmount = roundCurrency(allocationResult.successfulEntries.reduce(function (sum, entry) {
-            return sum + (entry.isCreditNote ? -entry.allocatedAmount : entry.allocatedAmount);
-          }, 0));
-          paymentData.Payment_Amount = Math.abs(successfulNetAmount);
-          paymentData.Movement_Type = successfulNetAmount < 0 ? PAYMENT_MOVEMENT_TYPES.supplierRefund : PAYMENT_MOVEMENT_TYPES.outbound;
-          assertCrmMutationSucceeded(
-            await crm.updateRecord(MODULES.payments, paymentId, buildSupplierPaymentPayload(paymentData, buildSupplierPaymentCreateEntries(
-              { invoices: allocationResult.successfulEntries.map(function (entry) { return { id: entry.invoiceId }; }) },
-              allocationResult.successfulEntries.reduce(function (map, entry) { map[entry.invoiceId] = entry.allocatedAmount; return map; }, {}),
-              paymentData.Payment_Accounts_By_Supplier
-            ))),
-            "Zoho CRM did not confirm the supplier payment update after partial allocation creation."
-          );
-          allocationWarning = " Some allocations could not be created: " + allocationResult.errors.join(" ");
-        }
-
-        var operationResult = await syncPaymentOperations(paymentId, paymentData, allocationResult.successfulEntries);
-        if (operationResult.errors.length) {
-          operationWarning = " The payment was created, but some linked prepayments or card requests could not be updated: " + operationResult.errors.join(" ");
-          debugError("payment operation sync incomplete", operationResult.errors, { paymentId: paymentId });
-        }
-        global.dispatchEvent(new global.CustomEvent("accounting-manager-payment-created"));
-
-        context.invoices.forEach(function (invoice) {
-          delete state.invoiceAllocationsByInvoiceId[invoice.id];
-        });
-
-        state.views.invoices.selectedIds = {};
-        state.views.invoices.selectedRecordsById = {};
-        closeCreatePaymentPanel();
-        await refreshInvoicesAndPaymentsAfterSupplierPayment();
-        if (paymentAccountsRefreshNeeded) {
-          state.loaded.paymentAccounts = false;
-          state.records.paymentAccounts = [];
-          await ensurePaymentAccountsLoaded();
-        }
-        state.views.payments.selectedId = paymentId;
-        invalidateInvoiceCreateSettlementCache();
-
-        try {
-          await recalculateSettlementTotalsForSettlementIds(getUniqueSettlementIdsFromInvoices(context.invoices));
-        } catch (settlementUpdateError) {
-          debugError("recalculate settlement totals after payment create failed", settlementUpdateError, {
-            paymentId: paymentId,
-            settlementIds: getUniqueSettlementIdsFromInvoices(context.invoices)
-          });
-          settlementUpdateMessage = " The related settlement totals could not be updated automatically.";
-        }
-
-        renderAll();
-
-        if (selectedDetailId) {
-          await ensureInvoiceAllocationsLoaded(selectedDetailId, true);
-        }
-
-        created = true;
-        state.paymentCreation.feedback = { isOpen: false, status: "", message: "" };
-        renderPaymentCreateFeedback();
-        if (operationWarning || allocationWarning || settlementUpdateMessage) {
-          renderer.showNotice("Payment created." + operationWarning + allocationWarning + settlementUpdateMessage, { tone: "warning" });
-        }
-      } catch (error) {
-        debugError("onCreateSupplierPaymentSubmit failed", error);
-        state.paymentCreation.isBusy = false;
-        renderer.showNotice("");
-        state.paymentCreation.feedback = {
-          isOpen: true,
-          status: "error",
-          message: error.message || (
-            paymentData.Movement_Type === PAYMENT_MOVEMENT_TYPES.supplierRefund
-              ? "Could not create the supplier refund."
-              : "Could not create the supplier payment."
-          )
-        };
-        renderAll();
-      } finally {
-        if (!created && state.paymentCreation.isBusy) {
-          renderer.showNotice("");
-        }
-      }
+      await submitReliablePayment(paymentData, validation);
     }
 
     return {

@@ -2,7 +2,7 @@
   "use strict";
   var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
   function id(record) { return String(record && record.id || ""); }
-  function matches(record, purchase) { return id(record.Supplier) === id(purchase.Supplier) && id(record.Booking) === id(purchase.Booking); }
+  function matches(record, purchase) { return id(record.Supplier) === id(purchase.Supplier) && id(record.Booking) === id(purchase.Booking) && record.Locked__s !== true && record.Admin_Status !== "Cancelled" && (record.Currency || "EUR") === (purchase.Currency || "EUR"); }
   function context(purchase) {
     if (!/^\d+$/.test(id(purchase.Supplier)) || !/^\d+$/.test(id(purchase.Booking))) { throw new Error("A supplier and booking are required to select a settlement."); }
   }

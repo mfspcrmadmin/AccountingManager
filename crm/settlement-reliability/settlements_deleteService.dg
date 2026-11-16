@@ -1,0 +1,19 @@
+string standalone.settlements_deleteService(String serviceId)
+{
+if(!serviceId.matches("[0-9]+")) { throw "Invalid Booking Service id"; }
+response = invokeurl
+[
+ url :"https://www.zohoapis.eu/crm/v8/Booking_Services/" + serviceId
+ type :DELETE
+ connection:"crm_oauth_connection"
+];
+result = Map();
+result.put("error",true);
+result.put("response",response);
+if(!isnull(response.get("data")) && response.get("data").size() == 1)
+{
+ row = response.get("data").get(0);
+ if(row.get("code") == "SUCCESS" && row.get("status") == "success") { result.put("error",false); }
+}
+return result;
+}

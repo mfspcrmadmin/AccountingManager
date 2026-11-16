@@ -1,3 +1,4 @@
+@layer widget-views {
 #accounting-entries-workspace .bookings-load-action,
 #accounting-entry-lines-workspace .bookings-load-action {
   margin-top: 16px;
@@ -15,7 +16,7 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  font-family: "Trebuchet MS", Arial, sans-serif;
+  font-family: var(--font-ui);
 }
 
 .accounting-status.present {
@@ -72,4 +73,6 @@
 #accounting-entry-lines-workspace .table-wrap {
   border-color: rgba(19, 32, 25, 0.10);
   border-radius: 14px;
+}
+
 }

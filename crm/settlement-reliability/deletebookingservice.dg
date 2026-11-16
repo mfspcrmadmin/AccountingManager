@@ -1,0 +1,59 @@
+string standalone.deleteBookingService(int serviceId)
+{
+service = zoho.crm.getRecordById("Booking_Services",serviceId);
+//
+info "Delete?: " + service.get("Delete");
+info "Status: " + service.get("Status");
+//
+if(service.get("Delete") != true)
+{
+	info "Service not flagged to be deleted";
+	return "";
+}
+bookingId = ifnull(ifnull(service.get("Booking"),Map()).get("id"),"").toString();
+if(bookingId == "") { throw "Cannot delete service without identifying its booking for recalculation"; }
+// Persist recovery work before deleting anything. If deletion fails, the recalculation is harmless.
+jobInput = Map();
+jobInput.put("job_type","Supplier Settlement Recalc");
+jobInput.put("booking_id",bookingId);
+jobInput.put("dedup_key","SUPPLIER_SETTLEMENT_RECALC:" + bookingId);
+jobInput.put("source_function","deleteBookingService");
+jobInput.put("trigger_reason","Booking Service deletion requested");
+jobInput.put("next_run_at",zoho.currenttime.addMinutes(2));
+queued = standalone.jobs_enqueueAdminProcessJob(jobInput);
+if(queued.get("error") != false) { throw "Deletion aborted: settlement recovery job was not queued"; }
+//delete record from creator database
+if(service.get("Status") == "OK - Confirmed")
+{
+	appOwner = "madeforspainandportugal";
+	appName = "supplier-availability";
+	reportName = "Supplier_Availability_Report";
+	record = zoho.creator.getRecords(appOwner,appName,reportName,"Booking_Service_Id==\"" + serviceId + "\"",1,1,"creator_oauth_connection");
+	if(record.get("data").size() > 0)
+	{
+		info "Deleting record in creator.";
+		//
+		record = record.get("data").get(0);
+		res = invokeurl
+		[
+			url :"https://creator.zoho.eu/api/v2/" + appOwner + "/" + appName + "/report/" + reportName + "/" + record.get("ID")
+			type :DELETE
+			connection:"creator_oauth_connection"
+		];
+		if(res.get("code") != 3000) { throw "Creator availability deletion was not confirmed: " + res; }
+		info res;
+	}
+}
+deleteServiceMap = Map();
+deleteServiceMap.put("module","Booking_Services");
+deleteServiceMap.put("id",serviceId);
+//
+info "Deleting case in crm.";
+//
+res = standalone.settlements_deleteService(serviceId.toString());
+if(res.get("error") != false) { throw "CRM service deletion was not confirmed: " + res; }
+followup = standalone.jobs_enqueueSupplierSettlementRecalcForBooking(bookingId,"Booking Service deleted","deleteBookingService");
+if(followup.get("error") != false) { throw "Service deleted; followup recalculation could not be confirmed: " + followup; }
+info res;
+return "";
+}

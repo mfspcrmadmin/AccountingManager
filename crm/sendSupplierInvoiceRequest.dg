@@ -1,0 +1,328 @@
+string standalone.sendSupplierInvoiceRequest(String settlementId, String recipientEmail, String emailSubject, String emailBody, String actingUserEmail)
+{
+res = Map();
+res.put("success",false);
+res.put("error",true);
+try 
+{
+	actingUserEmail = ifnull(actingUserEmail,"").trim().toLowerCase();
+	settlementId = ifnull(settlementId,"").trim();
+	recipientEmail = ifnull(recipientEmail,"").trim();
+	emailSubject = ifnull(emailSubject,"").trim();
+	emailBody = ifnull(emailBody,"").trim();
+	if(!settlementId.matches("^[0-9]+$"))
+	{
+		res.put("message","A valid settlement is required.");
+		return res.toString();
+	}
+	if(!recipientEmail.matches("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+([.][a-zA-Z0-9-]+)+$") || recipientEmail.contains("\n") || recipientEmail.contains("\r"))
+	{
+		res.put("message","A valid recipient email is required.");
+		return res.toString();
+	}
+	if(emailSubject == "" || emailSubject.contains("\n") || emailSubject.contains("\r") || emailBody == "")
+	{
+		res.put("message","A subject and message are required.");
+		return res.toString();
+	}
+	settlement = zoho.crm.getRecordById("Supplier_Settlements",settlementId.toLong());
+	if(settlement == null || !settlement.containKey("id") || settlement.get("Supplier") == null)
+	{
+		res.put("message","The settlement or its associated supplier could not be found.");
+		return res.toString();
+	}
+	if(actingUserEmail == "crmadmin@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"crmadmin@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "reservations@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"reservations@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "srodriguez@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"srodriguez@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "alba@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"alba@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "patricia@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"patricia@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "s.martin@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"s.martin@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "silvia@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"silvia@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "s.menendez@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"s.menendez@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "rebeca@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"rebeca@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "inmaculada@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"inmaculada@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "l.fuentes@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"l.fuentes@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "sandra@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"sandra@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "yaiza@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"yaiza@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "daniel@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"daniel@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "erika@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"erika@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "azahara@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"azahara@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "julia@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"julia@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "teo@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"teo@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "garcia@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"garcia@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "gema@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"gema@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "marta@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"marta@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "p.gonzalo@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"p.gonzalo@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "p.llorente@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"p.llorente@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "i.arce@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"i.arce@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "luciano@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"luciano@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "r.bautista@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"r.bautista@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "andersson@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"andersson@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else if(actingUserEmail == "gabi@madeforspainandportugal.com")
+	{
+		sendmail
+		[
+			from :"gabi@madeforspainandportugal.com"
+			to :recipientEmail
+			subject :emailSubject
+			message :emailBody
+		]
+	}
+	else
+	{
+		res.put("message","Your user email is not configured as an invoice request sender. Contact your CRM administrator.");
+		return res.toString();
+	}
+	res.put("success",true);
+	res.put("error",false);
+	res.put("message","Invoice request sent.");
+}
+catch (e)
+{
+	res.put("message","Could not send the invoice request: " + e.toString());
+}
+return res.toString();
+}

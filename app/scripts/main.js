@@ -15,9 +15,9 @@ var ns = global.AccountingManagerApp;
   var invoiceDeletionModule = ns.createInvoiceDeletionModule({
     crm: crm, modules: MODULES, helpers: helpers,
     storage: {
-      getItem: function (key) { return global.sessionStorage.getItem(key); },
-      setItem: function (key, value) { global.sessionStorage.setItem(key, value); },
-      removeItem: function (key) { global.sessionStorage.removeItem(key); }
+      getItem: function (key) { return global.localStorage.getItem(key) || global.sessionStorage.getItem(key); },
+      setItem: function (key, value) { global.localStorage.setItem(key, value); },
+      removeItem: function (key) { global.localStorage.removeItem(key); global.sessionStorage.removeItem(key); }
     }
   });
   var renderer = ns.createRenderer(elements, state, helpers, FIELD_CANDIDATES);
@@ -30,6 +30,7 @@ var ns = global.AccountingManagerApp;
     renderAll();
     renderer.withFeedbackTarget('suppliers').showNotice('Supplier accounting account saved.', { tone: 'success' });
   });
+  var setupModule = ns.createSetupModule({ crm: crm, helpers: helpers, getCurrentUserEmail: getCurrentUserEmail });
   var moduleFieldApiCache = {};
   var moduleFieldMetadataCache = {};
   var bookingsLoadPromise = null;
@@ -68,8 +69,6 @@ var ns = global.AccountingManagerApp;
   var CREATE_SUPPLIER_PAYMENT_FUNCTION = "createsupplierpaymentfrominvoices";
   var ENSURE_SUPPLIER_ACCOUNTING_ACCOUNT_FUNCTION = "ensuresupplieraccountingaccount";
   var ENSURE_SUPPLIER_PAYMENT_ACCOUNT_FUNCTION = "ensuresupplierpaymentaccount";
-  var RESOLVE_SUPPLIER_INVOICE_ACCOUNTING_ENTRY_FUNCTION = "accent_resolvesupplierinvoiceaccountingentry";
-  var RESOLVE_SUPPLIER_PAYMENT_ACCOUNTING_ENTRY_FUNCTION = "accent_resolvesupplierpaymentaccountingentry";
   var REBUILD_ACCOUNTING_ENTRY_TOTALS_FUNCTION = "accent_rebuildaccountingentrytotals";
   var REBUILD_SUPPLIER_SETTLEMENT_TOTALS_FUNCTION = "rebuildsuppliersettlementtotals";
   var MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION = "managesupplierpaymentallocations";
@@ -332,8 +331,7 @@ var ns = global.AccountingManagerApp;
     "Ezus_Supplier_Reference",
     "Booking",
     "Supplier_Settlement",
-    "Accounting_Status",
-    "Accounting_Posted_At"
+    "Edit_Status"
   ];
   var INVOICE_COQL_FIELDS = INVOICE_FIELDS.concat(["Supplier.Destination", "Supplier.Is_Self_Employed"]);
 
@@ -346,6 +344,7 @@ var ns = global.AccountingManagerApp;
     "Payment_Amount",
     "Movement_Type",
     "Payment_Account",
+    "Payment_Account.Name",
     "Accounting_Status",
     "Context_Mode",
     "Context_Summary",
@@ -432,16 +431,17 @@ var ns = global.AccountingManagerApp;
     "Allocation_Date",
     "Supplier_Payment",
     "Supplier_Invoice",
+    "Supplier_Invoice.Name",
     "Supplier",
     "Supplier_Name",
     "Booking",
     "Supplier_Settlement",
+    "Supplier_Settlement.Name",
     "Ezus_Supplier_Reference",
     "MFSP_Reference",
     "Payment_Date",
     "Payment_Account",
     "Payment_Status",
-    "Payment_Accounting_Status",
     "Movement_Type",
     "Invoice_Date",
     "Invoice_Status"
@@ -462,6 +462,7 @@ var ns = global.AccountingManagerApp;
     bankName: ["Bankinter", "Santander"]
   };
   var invoicesModule = ns.createInvoicesModule({
+    fetchRelatedPage: function (module, fields, query) { return loadCoqlPage(module, fields, query); },
     MODULES: MODULES,
     FIELD_CANDIDATES: FIELD_CANDIDATES,
     helpers: helpers,
@@ -492,11 +493,15 @@ var ns = global.AccountingManagerApp;
     sortRecordsByDateDesc: sortRecordsByDateDesc,
     INVOICE_LINE_RELATED_FIELDS: INVOICE_LINE_RELATED_FIELDS,
     INVOICE_LINE_FIELDS: INVOICE_LINE_FIELDS,
-    loadRecordsByCoql: loadRecordsByCoql,
-    buildCoqlOrEqualsClause: buildCoqlOrEqualsClause,
+    loadRecordsByCoql: function (module, fields, query) { return loadRecordsByCoql(module, fields, query); },
+    buildCoqlOrEqualsClause: function (field, values) { return buildCoqlOrEqualsClause(field, values); },
     buildZohoRecordViewUrl: buildZohoRecordViewUrl,
     getFriendlyLoadErrorMessage: getFriendlyLoadErrorMessage,
     ensureInvoicesLoaded: ensureInvoicesLoaded,
+    fetchInvoicePage: function (search) {
+      return remoteDataModule.loadInvoicePage(INVOICE_COQL_FIELDS, search);
+    },
+    resetInvoiceScroll: function () { elements.invoicesTableWrap.scrollTop = 0; },
     onInvoicesLoaded: function () {}
   });
   var buildInvoicesView = invoicesModule.buildView;
@@ -551,12 +556,24 @@ var ns = global.AccountingManagerApp;
   var canUseBookingSearchFallback = remoteDataModule.canUseBookingSearchFallback;
   var loadBookingSearchFallbackPage = remoteDataModule.loadBookingSearchFallbackPage;
   var bookingsModule = ns.createBookingsModule({
+    reviewClosure: function (load) { return closureReviewDialog.review(load); },
+    verifyClosureReview: function (load, evidence) { return closureReviewDialog.verify(load, evidence); },
+    onClosureRendered: function () { if (closureConsistency) closureConsistency.place(); },
+    onClosureContext: function (closure) { if (closureConsistency) closureConsistency.setContext(closure); },
     MODULES: MODULES,
     FIELD_CANDIDATES: FIELD_CANDIDATES,
     BOOKING_STAGE_FILTER_OPTIONS: BOOKING_STAGE_FILTER_OPTIONS,
     BOOKING_BROWSER_PAGE_FIELDS: BOOKING_BROWSER_PAGE_FIELDS,
     SYNC_PROJECT_FROM_EZUS_FUNCTION: SYNC_PROJECT_FROM_EZUS_FUNCTION,
     RECALCULATE_SUPPLIER_SETTLEMENTS_FOR_BOOKING_FUNCTION: RECALCULATE_SUPPLIER_SETTLEMENTS_FOR_BOOKING_FUNCTION,
+    refreshSettlementDataAfterBookingAction: async function () {
+      state.loaded.settlements = false;
+      invalidateInvoiceCreateSettlementCache();
+      if (state.supplierId) {
+        await reloadInvoiceCreateSettlements({ forceReload: true, throwOnError: true });
+      }
+      renderAll();
+    },
     state: state,
     elements: elements,
     helpers: helpers,
@@ -606,6 +623,14 @@ var ns = global.AccountingManagerApp;
   var loadBookingsBrowserData = bookingsModule.loadBrowserData;
   var buildBookingsView = bookingsModule.buildView;
   var supplierActivityModule = ns.createSupplierActivityModule({
+    document: document,
+    loadPaymentLetterAllocations: function (paymentId, supplierId) {
+      return loadRecordsByCoql(MODULES.payAllocations, PAY_ALLOCATION_FIELDS, {
+        whereClause: "(Supplier_Payment = '" + escapeCoqlValue(paymentId) + "' and Supplier = '" + escapeCoqlValue(supplierId) + "')",
+        orderByClause: "Invoice_Date asc, id asc",
+        requireComplete: true
+      });
+    },
     MODULES: MODULES,
     FIELD_CANDIDATES: FIELD_CANDIDATES,
     SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION: SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION,
@@ -643,7 +668,32 @@ var ns = global.AccountingManagerApp;
     functionName: SEND_SUPPLIER_PAYMENT_LETTER_FUNCTION,
     defaultRecipient: PAYMENT_LETTER_DEFAULT_RECIPIENT
   });
+  var tripInvoiceModule = ns.createTripInvoiceModule({
+    crm: crm, output: getFunctionOutputObject,
+    onCloseAfterInvoice: function (bookingId) {
+      var closure = state.bookingClosure;
+      if (closure && closure.isOpen && closure.booking && String(closure.booking.id) === String(bookingId)) {
+        closeBookingClosure();
+        if (elements.bookingShortcutMfsp && elements.bookingShortcutMfsp.focus) { elements.bookingShortcutMfsp.focus({preventScroll:true}); }
+        return true;
+      }
+      return false;
+    },
+    openRecord: async function (module, id) {
+      if (!(global.ZOHO && global.ZOHO.CRM.UI && global.ZOHO.CRM.UI.Record && global.ZOHO.CRM.UI.Record.open)) { throw new Error("Opening records is unavailable in this context."); }
+      if (await global.ZOHO.CRM.UI.Record.open({ Entity: module, RecordID: id }) === false) { throw new Error("CRM could not open the invoice."); }
+    },
+    onSaved: function (bookingId, result) {
+      var closure = state.bookingClosure;
+      if (closure && closure.booking && String(closure.booking.id) === String(bookingId)) {
+        Object.assign(closure.booking, { Sales_Invoice: { id: result.invoice_id }, Sales_Invoice_Number: result.invoice_number, Sales_Invoice_Date: result.invoice_date });
+        if (elements.bookingClosureInvoiceTrip) { elements.bookingClosureInvoiceTrip.textContent = "View sales invoice"; }
+        if (elements.bookingClosureInvoiceStatus) { elements.bookingClosureInvoiceStatus.textContent = result.invoice_number + " ? " + (result.invoice_date || ""); }
+      }
+    }
+  });
   var invoiceRequestModule = ns.createInvoiceRequestModule({
+    getCurrentUserEmail: getCurrentUserEmail,
     MODULES: MODULES,
     crm: crm,
     helpers: helpers,
@@ -666,6 +716,8 @@ var ns = global.AccountingManagerApp;
   var closeSelectedPaymentLetterPanel = supplierActivityModule.closeSelectedPaymentLetterPanel;
   var renderSelectedPaymentLetterPanel = supplierActivityModule.renderSelectedPaymentLetterPanel;
   var paymentsModule = ns.createPaymentsModule({
+    crm: crm,
+    MODULES: MODULES,
     FIELD_CANDIDATES: FIELD_CANDIDATES,
     helpers: helpers,
     state: state,
@@ -691,6 +743,31 @@ var ns = global.AccountingManagerApp;
     resetPaymentRelationshipIndexes: resetPaymentRelationshipIndexes,
     ensurePayAllocationsLoaded: ensurePayAllocationsLoaded,
     ensurePaymentsLoaded: ensurePaymentsLoaded,
+    fetchDetailAllocationPage: function (paymentId, query) { return loadCoqlPage(MODULES.payAllocations, PAY_ALLOCATION_FIELDS, {
+      page: query.page, perPage: query.perPage, whereClause: "Supplier_Payment = '" + escapeCoqlValue(paymentId) + "'", orderByClause: "Allocation_Date desc, id asc"
+    }); },
+    resetDetailScroll: function () { elements.selectedPaymentAllocationsTableWrap.scrollTop = 0; },
+    loadAccountMetadata: async function (accountId) {
+      var rows = await loadRecordsByCoql(MODULES.payAllocations, ["id", "Supplier", "Supplier_Name", "MFSP_Reference"], { whereClause: "Payment_Account = '" + escapeCoqlValue(accountId) + "'", orderByClause: "id asc", requireComplete: true });
+      return { relatedPayments: [], supplierIds: helpers.uniqueNonEmpty(rows.map(function (r) { return helpers.getLookupId(r.Supplier); })),
+        suppliers: helpers.sortStrings(helpers.uniqueNonEmpty(rows.map(function (r) { return r.Supplier_Name || helpers.getLookupName(r.Supplier); }))),
+        mfsps: helpers.sortStrings(helpers.uniqueNonEmpty(rows.map(function (r) { return r.MFSP_Reference; }))) };
+    },
+    fetchAuxPage: function (key, query) { return remoteDataModule.loadPaymentAuxPage(key, key === "paymentAccounts" ? PAYMENT_ACCOUNT_FIELDS : PAY_ALLOCATION_FIELDS, query); },
+    resetAuxScroll: function (key) { elements[key + "TableWrap"].scrollTop = 0; },
+    fetchPaymentPage: function (search) {
+      return remoteDataModule.loadPaymentPage(PAYMENT_FIELDS, PAY_ALLOCATION_FIELDS, search);
+    },
+    resetPaymentScroll: function () { elements.paymentsTableWrap.scrollTop = 0; },
+    onPaymentsLoaded: function (result) {
+      var ids = new Set(result.records.map(function (record) { return String(record.id); }));
+      state.records.payAllocations = state.records.payAllocations.filter(function (allocation) {
+        return !ids.has(String(helpers.getLookupId(allocation.Supplier_Payment)));
+      }).concat(result.allocations || []);
+      rebuildPaymentContextIndexes();
+      rebuildPaymentAccountIndex();
+      refreshPaymentAccountMetaIndex();
+    },
     ensurePaymentAccountsLoaded: ensurePaymentAccountsLoaded,
     requestPaymentAccountsContextLoad: requestPaymentAccountsContextLoad,
     ensureTabDataLoaded: ensureTabDataLoaded,
@@ -792,6 +869,13 @@ var ns = global.AccountingManagerApp;
   var closePaymentCreateFeedback = paymentCreateModule.closePaymentCreateFeedback;
   var refreshInvoicesAndPaymentsAfterSupplierPayment = paymentCreateModule.refreshInvoicesAndPaymentsAfterSupplierPayment;
   var accountingModule = ns.createAccountingModule({
+    elements: elements,
+    fetchPage: async function (key, query) {
+      var fields = { accountingEntries: ACCOUNTING_ENTRY_FIELDS, accountingEntryLines: ACCOUNTING_ENTRY_LINE_FIELDS, accountingAccounts: ACCOUNTING_ACCOUNT_FIELDS, accountingRules: ACCOUNTING_RULE_FIELDS };
+      var where = key === "accountingEntries" ? await buildAccountingEntriesRemoteWhereClause(query.filters) : key === "accountingEntryLines" ? await buildAccountingEntryLinesRemoteWhereClause(query.filters) : "id is not null";
+      var order = key === "accountingEntries" ? await buildAccountingEntriesRemoteOrderByClause(query.sort) : key === "accountingEntryLines" ? await buildAccountingEntryLinesRemoteOrderByClause(query.sort) : "Name asc, id asc";
+      return loadCoqlPage(MODULES[key], fields[key], { page: query.page, perPage: query.perPage, whereClause: where, orderByClause: order });
+    },
     state: state,
     renderer: renderer.withFeedbackTarget("accounting"),
     renderAll: renderAll,
@@ -830,8 +914,8 @@ var ns = global.AccountingManagerApp;
     renderAll: renderAll,
     debugError: debugError,
     renderInvoiceCreateSelect: renderInvoiceCreateSelect,
-    ensurePaymentAccountsLoaded: ensurePaymentAccountsLoaded,
-    ensureAccountingAccountsLoaded: ensureAccountingAccountsLoaded,
+    ensurePaymentAccountsLoaded: refreshPaymentAccountsTabData,
+    ensureAccountingAccountsLoaded: refreshAccountingAccountsTabData,
     ensureSupplierDefaultPaymentAccountAssigned: ensureSupplierDefaultPaymentAccountAssigned
   });
   var refreshPaymentAccountCreateActionState = accountCreateModule.refreshPaymentAccountCreateActionState;
@@ -1052,13 +1136,37 @@ var ns = global.AccountingManagerApp;
     if (elements.bookingActionsTripClosure) {
       elements.bookingActionsTripClosure.addEventListener("click", onBookingTripClosureClick);
     }
+    if (elements.bookingClosureInvoiceTrip) {
+      elements.bookingClosureInvoiceTrip.addEventListener("click", function () {
+        var closure = state.bookingClosure;
+        if (!elements.bookingClosureInvoiceTrip.disabled && closure && closure.booking) {
+          tripInvoiceModule.open(closure.booking, elements.bookingClosureInvoiceTrip);
+        }
+      });
+    }
     if (elements.bookingClosureClose) {
       elements.bookingClosureClose.addEventListener("click", closeBookingClosure);
+    }
+    if (elements.bookingClosureOpenBooking) {
+      elements.bookingClosureOpenBooking.addEventListener("click", async function () {
+        var booking = state.bookingClosure && state.bookingClosure.booking;
+        if (!booking || !booking.id || state.bookingClosure.isLoading) { return; }
+        try {
+          if (!(global.ZOHO && global.ZOHO.CRM.UI && global.ZOHO.CRM.UI.Record && global.ZOHO.CRM.UI.Record.open)) {
+            throw new Error("Opening records is unavailable in this context.");
+          }
+          var opened = await global.ZOHO.CRM.UI.Record.open({ Entity: MODULES.bookings, RecordID: String(booking.id) });
+          if (opened === false) { throw new Error("CRM could not open the Booking."); }
+        } catch (error) {
+          renderer.showError(error.message || "Could not open the Booking.");
+        }
+      });
     }
     if (elements.bookingClosureRefresh) {
       elements.bookingClosureRefresh.addEventListener("click", onBookingClosureRefreshClick);
     }
     if (elements.bookingClosurePopup) {
+      elements.bookingClosurePopup.addEventListener("click", bookingsModule.onClosureRebuildClick);
       elements.bookingClosurePopup.addEventListener("click", function (event) {
         if (event.target === elements.bookingClosurePopup) {
           closeBookingClosure();
@@ -1073,7 +1181,13 @@ var ns = global.AccountingManagerApp;
           }
         });
       }, true);
+      elements.bookingClosureContent.addEventListener("click", bookingsModule.onClosureCopyClick);
       elements.bookingClosureContent.addEventListener("click", onBookingClosureTableControlClick);
+      elements.bookingClosureContent.addEventListener("change", onBookingClosureTableControlClick);
+      elements.bookingClosureContent.addEventListener("click", bookingsModule.onClosureStatusClick);
+      elements.bookingClosureContent.addEventListener("input", function (event) {
+        if (event.target.matches('[data-closure-exception-reason]')) { state.bookingClosure.exceptionReason = event.target.value; }
+      });
       elements.bookingClosureContent.addEventListener("click", onBookingClosureReviewClick);
       elements.bookingClosureControls.addEventListener("click", bookingsModule.onClosureStatusClick);
       elements.bookingClosureControls.addEventListener("keydown", bookingsModule.onClosurePopoverDismiss);
@@ -1116,6 +1230,9 @@ var ns = global.AccountingManagerApp;
     }
     if (elements.bookingClosureDetailClose) {
       elements.bookingClosureDetailClose.addEventListener("click", closeBookingClosureDetail);
+    }
+    if (elements.bookingClosureDetailContent) {
+      elements.bookingClosureDetailContent.addEventListener("click", bookingsModule.onClosureCopyClick);
     }
     if (elements.bookingClosureDetailPopup) {
       elements.bookingClosureDetailPopup.addEventListener("click", function (event) {
@@ -1216,6 +1333,12 @@ var ns = global.AccountingManagerApp;
     }
     if (elements.supplierPaymentsTableBody) {
       elements.supplierPaymentsTableBody.addEventListener("click", function (event) {
+        var preview = event.target && event.target.closest("[data-supplier-payment-letter]");
+        if (preview) {
+          event.preventDefault();
+          supplierActivityModule.openSupplierPaymentLetterPreview(preview.getAttribute("data-supplier-payment-letter"));
+          return;
+        }
         var row = event.target && event.target.closest("[data-supplier-activity-payment-id]");
         if (row) {
           openSupplierActivityDetail("payment", row.getAttribute("data-supplier-activity-payment-id"));
@@ -1250,22 +1373,6 @@ var ns = global.AccountingManagerApp;
     elements.bookingsFilterStageMenu.addEventListener("click", onBookingsStageMenuActionClick);
     global.document.addEventListener("click", onDocumentClickCloseBookingsStageDropdown);
     elements.bookingsLoad.addEventListener("click", loadBookingsBrowserData);
-    elements.bookingsPrevPage.addEventListener("click", function () {
-      if (state.views.bookings.hasLoaded && state.views.bookings.page > 1) {
-        loadBookingsBrowserData({
-          page: state.views.bookings.page - 1,
-          filters: state.views.bookings.appliedFilters
-        });
-      }
-    });
-    elements.bookingsNextPage.addEventListener("click", function () {
-      if (state.views.bookings.hasLoaded && state.views.bookings.hasMore) {
-        loadBookingsBrowserData({
-          page: state.views.bookings.page + 1,
-          filters: state.views.bookings.appliedFilters
-        });
-      }
-    });
 
     bindInvoicesLoadFilterControl(elements.invoiceFilterDateFrom, "dateFrom");
     bindInvoicesLoadFilterControl(elements.invoiceFilterDateTo, "dateTo");
@@ -1278,7 +1385,7 @@ var ns = global.AccountingManagerApp;
     bindInvoicesLoadFilterControl(elements.invoiceFilterSelfEmployed, "selfEmployed");
     elements.invoicesGroupBy.addEventListener("change", function () {
       state.views.invoices.groupBy = elements.invoicesGroupBy.value;
-      renderAll();
+      refreshInvoicesTabData();
     });
     elements.invoiceFilterDestinationToggle.addEventListener("click", function () {
       state.views.invoices.destinationDropdownOpen = !state.views.invoices.destinationDropdownOpen;
@@ -1327,8 +1434,6 @@ var ns = global.AccountingManagerApp;
       button.addEventListener("click", function () {
         var view = button.getAttribute("data-invoice-view") || "open";
         state.views.invoices.view = view;
-        state.views.invoices.filters.statusValues = getStatusFilterOptionsForView("invoices").map(function (option) { return option.value; });
-        state.views.invoices.appliedFilters.statusValues = state.views.invoices.filters.statusValues.slice();
         elements.invoiceViewButtons.forEach(function (item) {
           var isActive = item === button;
           item.classList.toggle("is-active", isActive);
@@ -1347,8 +1452,6 @@ var ns = global.AccountingManagerApp;
       button.addEventListener("click", function () {
         var view = button.getAttribute("data-payment-view") || "open";
         state.views.payments.view = view;
-        state.views.payments.filters.statusValues = getStatusFilterOptionsForView("payments").map(function (option) { return option.value; });
-        state.views.payments.appliedFilters.statusValues = state.views.payments.filters.statusValues.slice();
         elements.paymentViewButtons.forEach(function (item) {
           var isActive = item === button;
           item.classList.toggle("is-active", isActive);
@@ -1400,19 +1503,7 @@ var ns = global.AccountingManagerApp;
     bindFilterControl(elements.paymentAccountFilterMfsp, "paymentAccounts", "mfsp");
     bindFilterControl(elements.paymentAccountFilterMappingStatus, "paymentAccounts", "status");
 
-    elements.invoicesPrevPage.addEventListener("click", function () {
-      if (state.views.invoices.hasLoaded && state.views.invoices.page > 1) {
-        state.views.invoices.page -= 1;
-        renderAll();
-      }
-    });
 
-    elements.invoicesNextPage.addEventListener("click", function () {
-      if (state.views.invoices.hasLoaded && state.views.invoices.hasMore) {
-        state.views.invoices.page += 1;
-        renderAll();
-      }
-    });
     if (elements.invoicesLoad) {
       elements.invoicesLoad.addEventListener("click", loadInvoicesTabData);
     }
@@ -1481,26 +1572,22 @@ var ns = global.AccountingManagerApp;
     elements.invoicePaymentSupplierAccountsList.addEventListener("pointerdown", onInvoicePaymentSupplierAccountOptionPointerDown);
     elements.invoicePaymentAllocationsList.addEventListener("change", onInvoicePaymentAllocationChange);
 
-    elements.paymentsPrevPage.addEventListener("click", function () {
-      if (state.views.payments.hasLoaded && state.views.payments.page > 1) {
-        state.views.payments.page -= 1;
-        ensurePaymentsLoaded();
-      }
-    });
 
-    elements.paymentsNextPage.addEventListener("click", function () {
-      if (state.views.payments.hasLoaded && state.views.payments.hasMore) {
-        state.views.payments.page += 1;
-        ensurePaymentsLoaded();
-      }
-    });
+    ns.bindPaymentAllocationExports({ state: state, fetchPage: function (paymentId, filters, query) {
+      var fields = PAY_ALLOCATION_FIELDS.concat(["Currency"]);
+      return paymentId ? loadCoqlPage(MODULES.payAllocations, fields, {
+        page: query.page, perPage: query.perPage, whereClause: "Supplier_Payment = '" + escapeCoqlValue(paymentId) + "'", orderByClause: "Allocation_Date desc, id asc"
+      }) : remoteDataModule.loadPaymentAuxPage("paymentAllocations", fields, Object.assign({}, query, { filters: filters }));
+    }});
+
     if (elements.paymentsLoad) {
       elements.paymentsLoad.addEventListener("click", loadPaymentsTabData);
     }
     if (elements.paymentsApplyFilters) {
       elements.paymentsApplyFilters.addEventListener("click", function () {
         loadPaymentsTabData();
-        global.document.querySelector(".payments-table-filters").removeAttribute("open");
+        var popover = global.document.querySelector(".payments-table-filters");
+        if (popover) { popover.removeAttribute("open"); }
       });
     }
     if (elements.paymentsRefresh) {
@@ -1528,19 +1615,23 @@ var ns = global.AccountingManagerApp;
     ].forEach(function (entry) {
       entry[0].addEventListener(entry[0].tagName === "SELECT" ? "change" : "input", function () {
         state.views.paymentAllocations.filters[entry[1]] = entry[0].value;
-        state.views.paymentAllocations.page = 1;
-        renderAll();
+
       });
     });
-    elements.paymentAllocationsPrevPage.addEventListener("click", function () {
-      if (state.views.paymentAllocations.page > 1) {
-        state.views.paymentAllocations.page -= 1;
-        renderAll();
-      }
-    });
-    elements.paymentAllocationsNextPage.addEventListener("click", function () {
-      state.views.paymentAllocations.page += 1;
-      renderAll();
+    ["paymentAccounts", "paymentAllocations"].forEach(function (key) {
+      var wrap = elements[key + "TableWrap"], container = wrap.parentElement;
+      var apply = global.document.createElement("button"); apply.type = "button"; apply.className = "button primary"; apply.textContent = "Search"; apply.setAttribute("aria-label", "Apply filters");
+      apply.id = key === "paymentAccounts" ? "payment-accounts-apply-filters" : "payment-allocations-apply-filters";
+      if (key === "paymentAllocations") {
+        apply.classList.add("payments-apply-icon-button");
+        apply.title = "Apply allocation filters";
+        apply.setAttribute("aria-label", "Apply allocation filters");
+        apply.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>';
+        var actions = global.document.getElementById("payment-allocations-toolbar-actions");
+        actions.insertBefore(apply, actions.firstChild);
+      } else { container.insertBefore(apply, wrap); }
+      apply.addEventListener("click", function () { paymentsModule.loadAuxiliary(key, true); });
+      container.addEventListener("keydown", function (event) { if (event.key === "Enter" && /INPUT|SELECT/.test(event.target.tagName)) { event.preventDefault(); paymentsModule.loadAuxiliary(key, true); } });
     });
     elements.selectedPaymentDelete.addEventListener("click", openPaymentUndoConfirmation);
     elements.selectedPaymentManageAllocations.addEventListener("click", openPaymentAllocationManager);
@@ -1548,9 +1639,12 @@ var ns = global.AccountingManagerApp;
     elements.paymentAllocationManagerSave.addEventListener("click", savePaymentAllocationManager);
     elements.paymentAllocationManagerList.addEventListener("change", onPaymentAllocationManagerAmountChange);
     elements.paymentAllocationManagerList.addEventListener("click", onPaymentAllocationManagerRemoveClick);
-    elements.paymentAllocationManagerFilter.addEventListener("input", filterPaymentAllocationManagerTable);
+    elements.paymentAllocationManagerFilter.addEventListener("keydown", function (event) { if (event.key === "Enter") { event.preventDefault(); filterPaymentAllocationManagerTable(); } });
     elements.paymentAllocationManagerAdd.addEventListener("click", openPaymentAllocationInvoicePicker);
-    elements.paymentAllocationManagerSearch.addEventListener("input", searchPaymentAllocationManagerInvoices);
+    elements.paymentAllocationManagerSearch.addEventListener("keydown", function (event) { if (event.key === "Enter") { event.preventDefault(); searchPaymentAllocationManagerInvoices(); } });
+    [[elements.paymentAllocationManagerFilter, filterPaymentAllocationManagerTable], [elements.paymentAllocationManagerSearch, searchPaymentAllocationManagerInvoices]].forEach(function (entry) {
+      var button = global.document.createElement("button"); button.type = "button"; button.className = "button secondary"; button.textContent = "Search"; entry[0].parentElement.appendChild(button); button.addEventListener("click", entry[1]);
+    });
     elements.paymentAllocationManagerResults.addEventListener("click", addPaymentAllocationManagerInvoice);
     elements.paymentAllocationInvoicePickerClose.addEventListener("click", closePaymentAllocationInvoicePicker);
     elements.paymentAllocationFeedbackClose.addEventListener("click", closePaymentAllocationFeedback);
@@ -1571,17 +1665,7 @@ var ns = global.AccountingManagerApp;
       renderAll();
     });
 
-    elements.paymentAccountsPrevPage.addEventListener("click", function () {
-      if (state.views.paymentAccounts.page > 1) {
-        state.views.paymentAccounts.page -= 1;
-        renderAll();
-      }
-    });
 
-    elements.paymentAccountsNextPage.addEventListener("click", function () {
-      state.views.paymentAccounts.page += 1;
-      renderAll();
-    });
     elements.paymentAccountsRefresh.addEventListener("click", refreshPaymentAccountsTabData);
     elements.accountingTabEntries.addEventListener("click", function () {
       setAccountingTab("entries");
@@ -1594,58 +1678,6 @@ var ns = global.AccountingManagerApp;
     });
     elements.accountingTabRules.addEventListener("click", function () {
       setAccountingTab("rules");
-    });
-    elements.accountingEntriesPrevPage.addEventListener("click", function () {
-      if (state.views.accountingEntries.hasLoaded && state.views.accountingEntries.page > 1) {
-        state.views.accountingEntries.page -= 1;
-        loadAccountingEntriesTabData({
-          preservePage: true
-        });
-      }
-    });
-    elements.accountingEntriesNextPage.addEventListener("click", function () {
-      if (state.views.accountingEntries.hasLoaded && state.views.accountingEntries.hasMore) {
-        state.views.accountingEntries.page += 1;
-        loadAccountingEntriesTabData({
-          preservePage: true
-        });
-      }
-    });
-    elements.accountingEntryLinesPrevPage.addEventListener("click", function () {
-      if (state.views.accountingEntryLines.hasLoaded && state.views.accountingEntryLines.page > 1) {
-        state.views.accountingEntryLines.page -= 1;
-        loadAccountingEntryLinesTabData({
-          preservePage: true
-        });
-      }
-    });
-    elements.accountingEntryLinesNextPage.addEventListener("click", function () {
-      if (state.views.accountingEntryLines.hasLoaded && state.views.accountingEntryLines.hasMore) {
-        state.views.accountingEntryLines.page += 1;
-        loadAccountingEntryLinesTabData({
-          preservePage: true
-        });
-      }
-    });
-    elements.accountingAccountsPrevPage.addEventListener("click", function () {
-      if (state.views.accountingAccounts.page > 1) {
-        state.views.accountingAccounts.page -= 1;
-        renderAll();
-      }
-    });
-    elements.accountingAccountsNextPage.addEventListener("click", function () {
-      state.views.accountingAccounts.page += 1;
-      renderAll();
-    });
-    elements.accountingRulesPrevPage.addEventListener("click", function () {
-      if (state.views.accountingRules.page > 1) {
-        state.views.accountingRules.page -= 1;
-        renderAll();
-      }
-    });
-    elements.accountingRulesNextPage.addEventListener("click", function () {
-      state.views.accountingRules.page += 1;
-      renderAll();
     });
     if (elements.accountingEntriesLoad) {
       elements.accountingEntriesLoad.addEventListener("click", loadAccountingEntriesTabData);
@@ -1702,6 +1734,7 @@ var ns = global.AccountingManagerApp;
       });
     }
     elements.selectedInvoiceEdit.addEventListener("click", onSelectedInvoiceEditClick);
+    elements.selectedInvoiceFinalize.addEventListener("click", function () { onSelectedInvoiceEditClick(null, true); });
     elements.selectedInvoiceDelete.addEventListener("click", onSelectedInvoiceDeleteClick);
     if (elements.selectedInvoiceSyncAccounting) {
       elements.selectedInvoiceSyncAccounting.addEventListener("click", onSelectedInvoiceSyncAccountingClick);
@@ -1746,6 +1779,7 @@ var ns = global.AccountingManagerApp;
   function bindFilterControl(element, viewKey, filterKey) {
     function updateValue() {
       state.views[viewKey].filters[filterKey] = element.value;
+      if (viewKey === "paymentAccounts") { return; }
       if (viewKey !== "invoices" && viewKey !== "payments") {
         state.views[viewKey].page = 1;
       }
@@ -1837,30 +1871,10 @@ var ns = global.AccountingManagerApp;
         state.views.invoices.filters.datePreset = "specific";
         elements.invoiceFilterDatePreset.value = "specific";
       }
-      state.views.invoices.page = 1;
-      renderAll();
-
-      if (filterKey === "supplierCode" || filterKey === "invoiceNumber") {
-        var invoiceSearchLength = String(nextValue || "").trim().length;
-
-        if (invoiceSearchLength === 0 || invoiceSearchLength >= 3) {
-          scheduleRemoteViewReload("invoices");
-        }
-      }
     }
 
     element.addEventListener("input", updateValue);
     element.addEventListener("change", updateValue);
-    element.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (invoicesFilterReloadTimer) {
-          global.clearTimeout(invoicesFilterReloadTimer);
-          invoicesFilterReloadTimer = null;
-        }
-        loadInvoicesTabData();
-      }
-    });
   }
 
   function bindPaymentsLoadFilterControl(element, filterKey) {
@@ -1877,30 +1891,10 @@ var ns = global.AccountingManagerApp;
         state.views.payments.filters.datePreset = "specific";
         elements.paymentFilterDatePreset.value = "specific";
       }
-      state.views.payments.page = 1;
-      renderAll();
-
-      if (filterKey === "paymentName" || filterKey === "supplierCode") {
-        var paymentSearchLength = String(nextValue || "").trim().length;
-
-        if (paymentSearchLength === 0 || paymentSearchLength >= 3) {
-          scheduleRemoteViewReload("payments");
-        }
-      }
     }
 
     element.addEventListener("input", updateValue);
     element.addEventListener("change", updateValue);
-    element.addEventListener("keydown", function (event) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (paymentsFilterReloadTimer) {
-          global.clearTimeout(paymentsFilterReloadTimer);
-          paymentsFilterReloadTimer = null;
-        }
-        loadPaymentsTabData();
-      }
-    });
   }
 
   function bindAccountingEntriesLoadFilterControl(element, filterKey) {
@@ -2274,7 +2268,7 @@ var ns = global.AccountingManagerApp;
 
   function initFallbackState() {
     applyDefaultPaymentsFilters();
-    elements.invoiceCreateDate.value = getLocalIsoDate();
+    elements.invoiceCreateDate.value = "";
     elements.invoiceCreateIrpfPercent.value = "0";
     elements.invoiceCreateReimbursableExpense.value = "0";
     if (elements.invoiceCreateAdditionalVatEnabled) {
@@ -4002,17 +3996,17 @@ var ns = global.AccountingManagerApp;
 
   var zohoPageLoadReceived = false;
   var zohoSdkInitialized = false;
-  var initialInvoicesLoadPromise = null;
+  var initialTabLoadPromise = null;
 
-  function loadInitialOpenInvoices() {
-    if (initialInvoicesLoadPromise || !zohoSdkInitialized || !zohoPageLoadReceived) {
-      return initialInvoicesLoadPromise;
+  function loadInitialTab() {
+    if (initialTabLoadPromise || !zohoSdkInitialized || !zohoPageLoadReceived) {
+      return initialTabLoadPromise;
     }
 
     // PageLoad marks the point at which Zoho has finished creating the
     // widget context. Loading before it can complete without returning CRM
     // records, while clicking Open later works as expected.
-    initialInvoicesLoadPromise = (async function () {
+    initialTabLoadPromise = (async function () {
       var supplierId = helpers.getSupplierIdFromPayload(state.clientPayload) || state.selectedIds[0];
       if (supplierId) {
         await setCurrentTab("suppliers");
@@ -4022,17 +4016,10 @@ var ns = global.AccountingManagerApp;
         }
         return;
       }
-      state.currentTab = "invoices";
-      state.views.invoices.view = "open";
-      state.views.invoices.page = 1;
-      await refreshInvoicesTabData({
-        loadingLabel: "Loading invoices...",
-        errorMessage: "Could not load invoices.",
-        loadedFlag: true
-      });
+      await setCurrentTab("suppliers");
     }());
 
-    return initialInvoicesLoadPromise;
+    return initialTabLoadPromise;
   }
 
   async function bootstrap() {
@@ -4049,7 +4036,7 @@ var ns = global.AccountingManagerApp;
 
       // Keep the context assignment ahead of the initial query.  The loader
       // itself is guarded until both PageLoad and embeddedApp.init have run.
-      loadInitialOpenInvoices();
+      loadInitialTab();
     });
 
     try {
@@ -4059,12 +4046,15 @@ var ns = global.AccountingManagerApp;
       // Supplier suggestions are unrelated to the invoice query.  Starting
       // this here prevents a slow supplier bootstrap from leaving the Open
       // view selected but empty.
-      loadInitialOpenInvoices();
+      loadInitialTab();
 
-      if (ZOHO.CRM && ZOHO.CRM.UI && ZOHO.CRM.UI.Resize) {
-        await ZOHO.CRM.UI.Resize({
-          width: "1480",
-          height: "920"
+      if (ZOHO.CRM && ZOHO.CRM.UI && typeof ZOHO.CRM.UI.Resize === "function") {
+        // Host panel sizing is optional: a rejected or unanswered SDK request
+        // must not block CRM initialization or supplier loading.
+        Promise.resolve().then(function () {
+          return ZOHO.CRM.UI.Resize({ width: "1480", height: "920" });
+        }).catch(function (error) {
+          debugWarn("Zoho panel resize failed; continuing with the current size", error);
         });
       }
 
@@ -4144,6 +4134,12 @@ var ns = global.AccountingManagerApp;
       if (moduleName === MODULES.invoices && /^Supplier\.(Destination|Is_Self_Employed)$/.test(fieldApi)) {
         return Boolean(availableFields.Supplier);
       }
+      if (moduleName === MODULES.payments && fieldApi === "Payment_Account.Name") {
+        return Boolean(availableFields.Payment_Account);
+      }
+      if (moduleName === MODULES.payAllocations && /^(Supplier_Invoice|Supplier_Settlement)\.Name$/.test(fieldApi)) {
+        return Boolean(availableFields[fieldApi.split(".")[0]]);
+      }
       return fieldApi === "id" || availableFields[fieldApi];
     });
 
@@ -4151,6 +4147,9 @@ var ns = global.AccountingManagerApp;
   }
 
   async function setCurrentTab(tabName) {
+    if (state.currentTab !== tabName) { bookingsModule.cancelBrowser(); accountingModule.cancel(); invoicesModule.cancel(); paymentsModule.cancel(); }
+
+    if (state.currentTab !== tabName || tabName === "payments") { paymentsModule.closeDetail(false); }
     if (tabName === "paymentAccounts") {
       state.currentTab = "payments";
       state.views.payments.section = "accounts";
@@ -4159,14 +4158,11 @@ var ns = global.AccountingManagerApp;
 
       if (tabName === "payments") {
         state.views.payments.section = "payments";
-        state.views.payments.view = "closed";
-        state.views.payments.filters.statusValues = ["Paid", "Cancelled"];
-        state.views.payments.appliedFilters.statusValues = ["Paid", "Cancelled"];
-        state.views.payments.page = 1;
       }
     }
 
     renderAll();
+    if (state.currentTab === "setup") { await setupModule.open(); }
     await ensureTabDataLoaded(state.currentTab);
     renderAll();
   }
@@ -4530,170 +4526,12 @@ var ns = global.AccountingManagerApp;
     }
   }
 
-  async function syncAccountingEntryForPayment(paymentId, options) {
-    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
-    var settings = options || {};
-    var response;
-    var result;
-    var rebuildResult = null;
-
-    if (!paymentId) {
-      throw new Error("Select a payment first.");
-    }
-
-    if (!settings.silent) {
-      feedbackRenderer.showError("");
-      state.paymentAccounting.isBusy = true;
-      state.paymentAccounting.action = "sync";
-      renderer.refreshActionState();
-      feedbackRenderer.showNotice("Syncing accounting entry...", {
-        isLoading: true
-      });
-    }
-
-    try {
-      response = await crm.executeFunction(RESOLVE_SUPPLIER_PAYMENT_ACCOUNTING_ENTRY_FUNCTION, {
-        supplierPaymentId: paymentId,
-        replaceExisting: "true"
-      });
-      result = getInvoiceAccountingFunctionResult(response);
-
-      if (!result.success) {
-        throw new Error(result.message || "Accounting entry could not be generated.");
-      }
-
-      if (result.accountingEntryId) {
-        rebuildResult = await rebuildAccountingEntryTotalsForPayment(paymentId, result.accountingEntryId);
-        state.paymentAccounting.lastEntryId = rebuildResult.accountingEntryId || result.accountingEntryId;
-      } else {
-        state.paymentAccounting.lastEntryId = "";
-      }
-
-      await refreshPaymentAfterAccountingAction(paymentId);
-
-      if (!settings.skipRender) {
-        renderAll();
-      }
-
-      return {
-        result: result,
-        rebuildResult: rebuildResult,
-        message: buildInvoiceAccountingSuccessMessage(result, rebuildResult)
-      };
-    } catch (error) {
-      if (!settings.skipRender) {
-        renderAll();
-      }
-      throw error;
-    } finally {
-      if (!settings.silent) {
-        state.paymentAccounting.isBusy = false;
-        state.paymentAccounting.action = "";
-        renderer.refreshActionState();
-      }
-    }
+  async function syncAccountingEntryForPayment() {
+    throw new Error("Accounting entry generation has been removed. Existing entries and links are preserved.");
   }
 
-  async function syncAccountingEntryForInvoice(invoiceId, options) {
-    var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
-    var settings = options || {};
-    var response;
-    var result;
-    var rebuildResult = null;
-
-    if (!invoiceId) {
-      throw new Error("Select an invoice first.");
-    }
-
-    if (!settings.silent) {
-      feedbackRenderer.showError("");
-      state.invoiceAccounting.isBusy = true;
-      state.invoiceAccounting.action = "sync";
-      renderer.refreshActionState();
-      feedbackRenderer.showNotice("Syncing accounting entry...", {
-        isLoading: true
-      });
-    }
-
-    try {
-      response = await crm.executeFunction(RESOLVE_SUPPLIER_INVOICE_ACCOUNTING_ENTRY_FUNCTION, {
-        supplierInvoiceId: invoiceId,
-        replaceExisting: "true"
-      });
-      result = getInvoiceAccountingFunctionResult(response);
-
-      if (!result.success) {
-        throw new Error(result.message || "Accounting entry could not be generated.");
-      }
-
-      if (result.accountingEntryId) {
-        rebuildResult = await rebuildAccountingEntryTotalsForInvoice(invoiceId, result.accountingEntryId);
-        state.invoiceAccounting.lastEntryId = rebuildResult.accountingEntryId || result.accountingEntryId;
-      } else {
-        state.invoiceAccounting.lastEntryId = "";
-      }
-
-      await refreshInvoiceAfterAccountingAction(invoiceId);
-
-      if (!settings.skipRender) {
-        renderAll();
-      }
-
-      return {
-        result: result,
-        rebuildResult: rebuildResult,
-        message: buildInvoiceAccountingSuccessMessage(result, rebuildResult)
-      };
-    } catch (error) {
-      if (!settings.skipRender) {
-        renderAll();
-      }
-      throw error;
-    } finally {
-      if (!settings.silent) {
-        state.invoiceAccounting.isBusy = false;
-        state.invoiceAccounting.action = "";
-        renderer.refreshActionState();
-      }
-    }
-  }
-
-  async function syncAccountingEntriesForInvoices(invoiceIds, options) {
-    var settings = options || {};
-    var uniqueInvoiceIds = helpers.uniqueNonEmpty(invoiceIds || []);
-    var syncedInvoiceIds = [];
-    var failures = [];
-    var index;
-    var invoiceId;
-    var errorMessage;
-
-    for (index = 0; index < uniqueInvoiceIds.length; index += 1) {
-      invoiceId = uniqueInvoiceIds[index];
-
-      try {
-        await syncAccountingEntryForInvoice(invoiceId, {
-          silent: true,
-          skipRender: true
-        });
-        syncedInvoiceIds.push(invoiceId);
-      } catch (error) {
-        errorMessage = error && error.message ? error.message : "Unknown accounting sync error.";
-        failures.push({
-          invoiceId: invoiceId,
-          message: errorMessage
-        });
-
-        if (!settings.continueOnError) {
-          throw error;
-        }
-      }
-    }
-
-    return {
-      invoiceIds: uniqueInvoiceIds,
-      syncedInvoiceIds: syncedInvoiceIds,
-      failures: failures
-    };
+  async function syncAccountingEntryForInvoice() {
+    throw new Error("Accounting entry generation has been removed. Existing entries and links are preserved.");
   }
 
   async function rebuildAccountingEntryTotalsForInvoice(invoiceId, knownEntryId) {
@@ -4792,7 +4630,7 @@ var ns = global.AccountingManagerApp;
     }
 
     if (allocations.length) {
-      warnings.push("Linked allocations will be removed. Payments without remaining allocations will be deleted; shared payment totals will be recalculated and their accounting reset to Pending.");
+      warnings.push("Linked allocations will be removed. Payments without remaining allocations will be deleted; shared payment totals will be recalculated. Existing accounting links must be reviewed before deletion.");
     }
 
     return {
@@ -4950,7 +4788,8 @@ var ns = global.AccountingManagerApp;
     }
   }
 
-  async function onSelectedInvoiceEditClick() {
+  var invoiceEditor;
+  async function onSelectedInvoiceEditClick(event, finalizeProforma) {
     var feedbackRenderer = renderer.withFeedbackTarget("invoice-detail");
     var invoiceId = state.views.invoices.selectedDetailId;
 
@@ -4959,9 +4798,32 @@ var ns = global.AccountingManagerApp;
       return;
     }
 
-    await openNativeEditForModule(MODULES.invoices, invoiceId, "invoice", null, {
-      preferNewTab: true
-    });
+    if (!invoiceEditor) {
+      invoiceEditor = ns.createInvoiceEditor({ crm: crm, helpers: helpers,
+        notify: function (message) { feedbackRenderer.showNotice(message, { tone: "success" }); },
+        openAdditionalPayment: async function (id) {
+          var invoice = await crm.getRecord(MODULES.invoices, id);
+          await setCurrentTab("invoices");
+          await openCreatePaymentPanel([invoice], { invoiceCorrection: true });
+        },
+        refresh: async function (id) {
+          invalidateInvoiceCreateSettlementCache();
+          state.invoiceLinesByInvoiceId = {};
+          state.invoiceAllocationsByInvoiceId = {};
+          ["accountingEntries", "accountingEntryLines"].forEach(function (key) {
+            state.loaded[key] = false; state.records[key] = []; state.views[key].hasLoaded = false;
+          });
+          await refreshInvoicesAndPaymentsAfterSupplierPayment();
+          await refreshInvoiceAfterAccountingAction(id);
+          if (state.views.invoices.selectedRecordsById[id]) {
+            var refreshed = state.records.invoices.find(function (record) { return String(record.id) === String(id); });
+            if (refreshed) { state.views.invoices.selectedRecordsById[id] = refreshed; }
+          }
+          renderAll();
+        }
+      });
+    }
+    await invoiceEditor.open(invoiceId, { finalizeProforma: finalizeProforma === true });
   }
 
   function onSelectedInvoiceDeleteClick() {
@@ -5021,7 +4883,7 @@ var ns = global.AccountingManagerApp;
     var paymentStatus = String(payment && payment.Status || "").trim().toLowerCase();
     var accountingStatus = String(payment && payment.Accounting_Status || "").trim().toLowerCase();
 
-    return paymentStatus === "reconciled" || paymentStatus === "cancelled" || paymentStatus === "canceled" ||
+    return Boolean(payment && (payment.Locked__s || payment.Zoho_Books_Payment_ID)) || accountingStatus === "sent to books" || paymentStatus === "reconciled" || paymentStatus === "cancelled" || paymentStatus === "canceled" ||
       accountingStatus === "posted" || accountingStatus === "synced" || accountingStatus === "exported" || accountingStatus === "reconciled";
   }
 
@@ -5048,6 +4910,7 @@ var ns = global.AccountingManagerApp;
     var allocations;
     var invoices;
     if (!paymentId || !payment) { feedbackRenderer.showError("Select a payment first."); return; }
+    if (getReliablePaymentDeletion().pending(paymentId)) { feedbackRenderer.showError("Finish the pending payment deletion before editing allocations."); return; }
     if (isPaymentAllocationEditingLocked(payment) || isPostedAccountingEntry(await getPaymentAccountingEntryForAllocationEdit(paymentId))) { feedbackRenderer.showError("This payment is locked. Create a reversal instead."); return; }
     state.paymentAllocationManager.isOpen = true;
     state.paymentAllocationManager.isLoading = true;
@@ -5056,11 +4919,32 @@ var ns = global.AccountingManagerApp;
     state.paymentAllocationManager.error = "";
     renderAll();
     try {
-      allocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
+      allocations = [];
+      for (var allocationPage = 1; allocationPage <= 25; allocationPage++) {
+        var batch = await crm.searchRecordPage(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")", allocationPage, 200);
+        allocations = allocations.concat(batch);
+        if (batch.length < 200) { break; }
+        if (allocationPage === 25) { throw new Error("Too many allocations; a partial list cannot be edited."); }
+      }
+      var seenInvoices = {};
+      allocations.forEach(function (row) { var id = helpers.getLookupId(row.Supplier_Invoice); if (!id || seenInvoices[id]) { throw new Error("Missing or duplicate invoice allocations require review."); } seenInvoices[id] = true; });
       invoices = await Promise.all(allocations.map(function (allocation) { return crm.getRecord(MODULES.invoices, helpers.getLookupId(allocation.Supplier_Invoice)); }));
       state.paymentAllocationManager.invoices = invoices.filter(Boolean);
       state.paymentAllocationManager.amounts = {};
       allocations.forEach(function (allocation) { state.paymentAllocationManager.amounts[String(helpers.getLookupId(allocation.Supplier_Invoice))] = roundCurrency(Number(allocation.Allocated_Amount) || 0); });
+      var pendingEdit = globalThis.localStorage.getItem("accounting-manager:payment-allocation-edit:v1:" + paymentId);
+      if (pendingEdit) {
+        var pendingAmounts = JSON.parse(pendingEdit).allocations;
+        for (var pendingId of Object.keys(pendingAmounts)) {
+          if (!state.paymentAllocationManager.invoices.some(function (invoice) { return String(invoice.id) === pendingId; })) {
+            var pendingInvoice = await crm.getRecord(MODULES.invoices, pendingId);
+            if (!pendingInvoice) { throw new Error("An invoice from the pending edit could not be read."); }
+            state.paymentAllocationManager.invoices.push(pendingInvoice);
+          }
+        }
+        state.paymentAllocationManager.amounts = pendingAmounts;
+        state.paymentAllocationManager.error = "An allocation save is unfinished. Save again to resume the original changes shown here.";
+      }
     } catch (error) { state.paymentAllocationManager.error = error.message || "Could not load payment allocations."; }
     state.paymentAllocationManager.isLoading = false;
     renderAll();
@@ -5079,26 +4963,46 @@ var ns = global.AccountingManagerApp;
     elements.paymentAllocationManagerError.textContent = manager.error || "";
     elements.paymentAllocationInvoicePickerError.hidden = !manager.pickerError;
     elements.paymentAllocationInvoicePickerError.textContent = manager.pickerError || "";
-    manager.invoices.forEach(function (invoice) { var id = String(invoice.id); var amount = roundCurrency(Number(manager.amounts[id]) || 0); if (!Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id)) { applied += amount; } if (Object.prototype.hasOwnProperty.call(manager.newInvoiceIds, id) && amount > 0) { addedInvoiceCount += 1; } });
+    manager.invoices.forEach(function (invoice) { var id = String(invoice.id); var amount = roundCurrency(Number(manager.amounts[id]) || 0); if (!Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id)) { applied += isCreditNoteInvoice(invoice) ? -amount : amount; } if (Object.prototype.hasOwnProperty.call(manager.newInvoiceIds, id) && amount > 0) { addedInvoiceCount += 1; } });
     visibleInvoices = manager.invoices.filter(function (invoice) { return invoiceMatchesPaymentAllocationQuery(invoice, manager.tableQuery); });
     elements.paymentAllocationManagerList.innerHTML = manager.isLoading ? '<tr><td colspan="3">Loading allocations...</td></tr>' : visibleInvoices.map(function (invoice) {
       var id = String(invoice.id); var amount = roundCurrency(Number(manager.amounts[id]) || 0); var isPendingUnlink = Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id); var isNewInvoice = Object.prototype.hasOwnProperty.call(manager.newInvoiceIds, id); var rowClass = isPendingUnlink ? 'is-pending-unlink' : isNewInvoice ? 'is-new-allocation' : '';
       return '<tr class="' + rowClass + '"><td>' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '</td><td class="numeric-cell"><input type="number" min="0" step="0.01" data-payment-manager-amount="' + helpers.escapeHtml(id) + '" value="' + helpers.escapeHtml(String(amount)) + '"' + (isPendingUnlink ? ' disabled' : '') + '></td><td class="payment-allocation-manager-action"><button class="button compact-action-button payment-allocation-manager-unlink' + (isPendingUnlink ? ' is-restore' : isNewInvoice ? ' is-remove-new' : '') + '" type="button" ' + (isPendingUnlink ? 'data-payment-manager-restore' : isNewInvoice ? 'data-payment-manager-remove-new' : 'data-payment-manager-unlink') + '="' + helpers.escapeHtml(id) + '">' + (isPendingUnlink ? 'Restore' : isNewInvoice ? 'Remove' : 'Unlink') + '</button></td></tr>';
     }).join("") || '<tr><td colspan="3">' + (manager.tableQuery ? 'No allocated invoices match this search.' : 'No invoices allocated. Use Add invoice to add one.') + '</td></tr>';
-    elements.paymentAllocationManagerResults.innerHTML = manager.searchResults.map(function (invoice) { return '<div class="payment-allocation-manager-result"><span title="' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '</span><button class="button secondary compact-action-button" type="button" data-payment-manager-add="' + helpers.escapeHtml(invoice.id) + '">Add</button></div>'; }).join("") || (elements.paymentAllocationManagerSearch.value.trim() ? '<p class="empty-state">No invoices found.</p>' : '<p class="empty-state">Start typing to find an invoice.</p>');
+    elements.paymentAllocationManagerResults.innerHTML = manager.searchResults.filter(function (invoice) { return !manager.invoices.some(function (item) { return String(item.id) === String(invoice.id); }); }).map(function (invoice) { return '<div class="payment-allocation-manager-result"><span title="' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '">' + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES)) + '</span><button class="button secondary compact-action-button" type="button" data-payment-manager-add="' + helpers.escapeHtml(invoice.id) + '">Add</button></div>'; }).join("") || (elements.paymentAllocationManagerSearch.value.trim() ? '<p class="empty-state">No invoices found.</p>' : '<p class="empty-state">Start typing to find an invoice.</p>');
+    if (manager.isPickerOpen && allocationInvoiceView) { ns.renderProgressiveTable(elements.paymentAllocationManagerResults, elements.paymentAllocationManagerResults.querySelector(".empty-state"), allocationInvoiceView, allocationInvoiceQuery.more); }
     elements.paymentAllocationManagerTotal.textContent = "Applied: " + helpers.formatCurrency(applied);
-    elements.paymentAllocationManagerRemaining.textContent = "Unapplied: " + helpers.formatCurrency(Math.max(0, manager.paymentAmount - applied));
+    elements.paymentAllocationManagerRemaining.textContent = "Payment total after saving: " + helpers.formatCurrency(Math.abs(applied));
     elements.paymentAllocationManagerAddedCount.textContent = "Invoices to add: " + String(addedInvoiceCount);
     elements.paymentAllocationManagerSave.disabled = manager.isLoading || manager.isSaving;
   }
 
-  function onPaymentAllocationManagerAmountChange(event) { var id = event.target.getAttribute("data-payment-manager-amount"); if (id) { state.paymentAllocationManager.amounts[id] = Math.max(0, roundCurrency(Number(event.target.value) || 0)); renderPaymentAllocationManager(); } }
+  function onPaymentAllocationManagerAmountChange(event) { var id = event.target.getAttribute("data-payment-manager-amount"); if (id && !state.paymentAllocationManager.isSaving) { state.paymentAllocationManager.amounts[id] = event.target.value; } }
+
   function onPaymentAllocationManagerRemoveClick(event) { var id = event.target.getAttribute("data-payment-manager-unlink"); var restoreId = event.target.getAttribute("data-payment-manager-restore"); var removeNewId = event.target.getAttribute("data-payment-manager-remove-new"); var manager = state.paymentAllocationManager; if (id) { manager.unlinkedAmounts[id] = manager.amounts[id]; renderPaymentAllocationManager(); } else if (restoreId) { delete manager.unlinkedAmounts[restoreId]; renderPaymentAllocationManager(); } else if (removeNewId) { manager.invoices = manager.invoices.filter(function (invoice) { return String(invoice.id) !== String(removeNewId); }); delete manager.amounts[removeNewId]; delete manager.newInvoiceIds[removeNewId]; renderPaymentAllocationManager(); } }
   function invoiceMatchesPaymentAllocationQuery(invoice, query) { var text = [helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES), helpers.getCandidateValue(invoice, FIELD_CANDIDATES.invoice.number), invoice.Name, invoice.Invoice_Number].join(" "); return !String(query || "").trim() || helpers.matchesText(text, query); }
   function filterPaymentAllocationManagerTable() { state.paymentAllocationManager.tableQuery = String(elements.paymentAllocationManagerFilter.value || "").trim(); renderPaymentAllocationManager(); }
-  function openPaymentAllocationInvoicePicker() { state.paymentAllocationManager.isPickerOpen = true; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; renderPaymentAllocationManager(); window.setTimeout(function () { elements.paymentAllocationManagerSearch.focus(); }, 0); }
-  function closePaymentAllocationInvoicePicker() { state.paymentAllocationManager.isPickerOpen = false; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); }
-  async function searchPaymentAllocationManagerInvoices() { var manager = state.paymentAllocationManager; var query = String(elements.paymentAllocationManagerSearch.value || "").trim(); var localMatches; var remoteBatches; var searchError = null; var requestId = manager.searchRequestId + 1; manager.searchRequestId = requestId; manager.pickerError = ""; if (!query) { manager.searchResults = []; renderPaymentAllocationManager(); return; } localMatches = state.records.invoices.filter(function (invoice) { return invoiceMatchesPaymentAllocationQuery(invoice, query); }); remoteBatches = await Promise.all([crm.searchRecord(MODULES.invoices, "(Name:starts_with:" + helpers.escapeCriteriaValue(query) + ")").catch(function (error) { searchError = error; return []; }), crm.searchWord(MODULES.invoices, query).catch(function (error) { searchError = searchError || error; return []; })]); if (requestId !== manager.searchRequestId) { return; } manager.searchResults = localMatches.concat(remoteBatches[0], remoteBatches[1]).filter(function (invoice, index, records) { return records.findIndex(function (record) { return String(record.id) === String(invoice.id); }) === index; }).filter(function (invoice) { return !manager.invoices.some(function (allocated) { return String(allocated.id) === String(invoice.id); }); }); if (!manager.searchResults.length && searchError) { manager.pickerError = "Could not search invoices. Try a different invoice number or name."; } renderPaymentAllocationManager(); }
+  function openPaymentAllocationInvoicePicker() { state.paymentAllocationManager.isPickerOpen = true; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; searchPaymentAllocationManagerInvoices(); renderPaymentAllocationManager(); window.setTimeout(function () { elements.paymentAllocationManagerSearch.focus(); }, 0); }
+  function closePaymentAllocationInvoicePicker() { if (allocationInvoiceQuery) { allocationInvoiceQuery.cancel(); } allocationInvoiceView = null; state.paymentAllocationManager.isPickerOpen = false; state.paymentAllocationManager.searchResults = []; state.paymentAllocationManager.pickerError = ""; state.paymentAllocationManager.searchRequestId += 1; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); }
+  var allocationInvoiceQuery;
+  var allocationInvoiceView;
+  function searchPaymentAllocationManagerInvoices() {
+    if (allocationInvoiceQuery) { allocationInvoiceQuery.cancel(); }
+    var manager = state.paymentAllocationManager;
+    var query = String(elements.paymentAllocationManagerSearch.value || "").trim();
+    var view = allocationInvoiceView = {};
+    allocationInvoiceQuery = ns.createProgressiveQuery({ view: view,
+      getRecords: function () { return manager.searchResults; }, setRecords: function (rows) { manager.searchResults = rows; },
+      render: renderPaymentAllocationManager,
+      resetScroll: function () { elements.paymentAllocationManagerResults.scrollTop = 0; },
+      fetch: function (search) {
+        return loadCoqlPage(MODULES.invoices, INVOICE_FIELDS, { page: search.page, perPage: 50,
+          whereClause: search.query ? "Name like '%" + escapeCoqlValue(search.query) + "%'" : "id is not null", orderByClause: "Name asc, id asc" });
+      }
+    });
+    return allocationInvoiceQuery.reset({ query: query });
+  }
+
   function addPaymentAllocationManagerInvoice(event) { var id = event.target.getAttribute("data-payment-manager-add"); var manager = state.paymentAllocationManager; var invoice = manager.searchResults.find(function (record) { return String(record.id) === String(id); }); if (invoice && !manager.invoices.some(function (record) { return String(record.id) === String(id); })) { manager.invoices.push(invoice); manager.amounts[id] = Math.max(0, roundCurrency(helpers.getInvoicePendingAmount(invoice, FIELD_CANDIDATES))); manager.newInvoiceIds[id] = true; manager.searchResults = []; manager.isPickerOpen = false; elements.paymentAllocationManagerSearch.value = ""; renderPaymentAllocationManager(); } }
   function renderPaymentAllocationFeedback() {
     var feedback = state.paymentAllocationFeedback;
@@ -5110,7 +5014,49 @@ var ns = global.AccountingManagerApp;
   }
   function showPaymentAllocationFeedback(mode, message) { state.paymentAllocationFeedback.isOpen = true; state.paymentAllocationFeedback.mode = mode; state.paymentAllocationFeedback.message = message; renderPaymentAllocationFeedback(); }
   function closePaymentAllocationFeedback() { if (state.paymentAllocationFeedback.mode === "loading") { return; } state.paymentAllocationFeedback = { isOpen: false, mode: "loading", message: "" }; renderPaymentAllocationFeedback(); }
-  async function savePaymentAllocationManager() { var manager = state.paymentAllocationManager; var allocations = {}; var pendingUnlinkInvoiceIds = Object.keys(manager.unlinkedAmounts); var result; var liveAllocations; var stillLinkedInvoiceIds; if (manager.isSaving) { return; } manager.invoices.forEach(function (invoice) { var id = String(invoice.id); allocations[invoice.id] = Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id) ? 0 : roundCurrency(Number(manager.amounts[id]) || 0); }); manager.isSaving = true; manager.error = ""; showPaymentAllocationFeedback("loading", "Updating allocations and recalculating related invoices and settlements."); renderPaymentAllocationManager(); try { var response = await crm.executeFunction(MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION, { supplierPaymentId: manager.paymentId, allocationsDataString: JSON.stringify({ allocations: allocations }) }); result = getFunctionOutputObject(response) || getFunctionResponseResult(response); if (result && (result.error || result.success === false)) { throw new Error(result.message || "Could not update allocations."); } if (pendingUnlinkInvoiceIds.length) { liveAllocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + manager.paymentId + ")"); stillLinkedInvoiceIds = (liveAllocations || []).map(function (allocation) { return String(helpers.getLookupId(allocation.Supplier_Invoice) || ""); }).filter(function (invoiceId) { return pendingUnlinkInvoiceIds.indexOf(invoiceId) !== -1; }); if (stillLinkedInvoiceIds.length) { throw new Error("Zoho did not confirm removal of " + String(stillLinkedInvoiceIds.length) + " allocation(s). The changes were not treated as saved."); } } await refreshInvoicesAndPaymentsAfterSupplierPayment(); renderer.showNotice("Payment allocations and balances were recalculated.", { tone: "success" }); closePaymentAllocationManager(); showPaymentAllocationFeedback("success", result && result.message || "Allocations, invoice balances and settlement totals were updated successfully."); } catch (error) { debugError("savePaymentAllocationManager failed", error, { paymentId: manager.paymentId, requestedAllocations: allocations, pendingUnlinkInvoiceIds: pendingUnlinkInvoiceIds, functionResult: result || null }); manager.isSaving = false; manager.error = ""; renderPaymentAllocationManager(); showPaymentAllocationFeedback("error", error.message || "Could not update allocations."); } }
+  async function savePaymentAllocationManager() {
+    var manager = state.paymentAllocationManager;
+    if (manager.isSaving) { return; }
+    manager.isSaving = true;
+    var storageKey = "accounting-manager:payment-allocation-edit:v1:" + manager.paymentId;
+    showPaymentAllocationFeedback("loading", "Updating allocations and related balances..."); renderPaymentAllocationManager();
+    try {
+      if (getReliablePaymentDeletion().pending(manager.paymentId)) { throw new Error("Finish the pending payment deletion before editing allocations."); }
+      var capabilitiesResponse = await crm.executeFunction(MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION, { supplierPaymentId: "capabilities", allocationsDataString: "{}" });
+      var capabilities = getFunctionOutputObject(capabilitiesResponse);
+      if (!capabilities || capabilities.consistency_version !== 2) { throw new Error("The payment consistency update must be deployed in CRM before saving allocations."); }
+      var requestJson = globalThis.localStorage.getItem(storageKey);
+      if (!requestJson) {
+        var allocations = {};
+        manager.invoices.forEach(function (invoice) {
+          var id = String(invoice.id), value = Object.prototype.hasOwnProperty.call(manager.unlinkedAmounts, id) ? 0 : Number(manager.amounts[id]);
+          if (!Number.isFinite(value) || value < 0 || Math.abs(value * 100 - Math.round(value * 100)) > .000001) { throw new Error("Use non-negative allocations with at most two decimals."); }
+          allocations[id] = value;
+        });
+        requestJson = JSON.stringify({ allocations: allocations });
+        var previewResponse = await crm.executeFunction(MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION, { supplierPaymentId: manager.paymentId, allocationsDataString: JSON.stringify({ allocations: allocations, validate_only: true }) });
+        var preview = getFunctionOutputObject(previewResponse);
+        if (!preview || preview.success !== true || preview.error !== false) { throw new Error(preview && preview.message || "Could not validate the allocation changes."); }
+        globalThis.localStorage.setItem(storageKey, requestJson);
+        if (globalThis.localStorage.getItem(storageKey) !== requestJson) { throw new Error("Recovery information could not be stored."); }
+      }
+      var response = await crm.executeFunction(MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION, { supplierPaymentId: manager.paymentId, allocationsDataString: requestJson });
+      var result = getFunctionOutputObject(response);
+      if (!result || result.success !== true || result.error !== false) {
+        throw new Error(result && result.message || "CRM did not confirm the complete result.");
+      }
+      invalidateInvoiceCreateSettlementCache();
+      Object.keys(JSON.parse(requestJson).allocations).forEach(function (id) { delete state.invoiceAllocationsByInvoiceId[id]; });
+      await refreshInvoicesAndPaymentsAfterSupplierPayment();
+      if (state.views.invoices.selectedDetailId) { await ensureInvoiceAllocationsLoaded(state.views.invoices.selectedDetailId, true); }
+      globalThis.localStorage.removeItem(storageKey);
+      closePaymentAllocationManager();
+      showPaymentAllocationFeedback("success", "Allocations, invoice balances and settlement totals were updated.");
+    } catch (error) {
+      showPaymentAllocationFeedback("error", error.message + " Retry to resume the original changes.");
+    } finally { manager.isSaving = false; renderPaymentAllocationManager(); }
+  }
+
 
   function renderPaymentUndoConfirmation() {
     var undo = state.paymentUndo;
@@ -5154,7 +5100,7 @@ var ns = global.AccountingManagerApp;
       elements.paymentUndoConfirmationCopy.textContent = "Checking the payment allocations and affected invoices...";
       elements.paymentUndoConfirmationList.innerHTML = "";
     } else if (!undo.allocations.length) {
-      elements.paymentUndoConfirmationCopy.textContent = "No payment allocations are currently linked to this payment. Confirming will permanently remove only the payment record.";
+      elements.paymentUndoConfirmationCopy.textContent = "No invoice allocations are currently linked to this payment. Confirming will unlink any related prepayments or card purchases, update their states and permanently remove the payment record.";
       elements.paymentUndoConfirmationList.innerHTML = "";
     } else {
       invoiceNames = helpers.uniqueNonEmpty(undo.allocations.map(function (allocation) {
@@ -5209,7 +5155,8 @@ var ns = global.AccountingManagerApp;
     renderPaymentUndoConfirmation();
 
     try {
-      allocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
+      var savedDeletion = getReliablePaymentDeletion().pending(paymentId);
+      allocations = savedDeletion ? savedDeletion.links : await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
     } catch (error) {
       debugError("load payment allocations for undo confirmation failed", error, { paymentId: paymentId });
       allocations = getSelectedPaymentAllocations(paymentId);
@@ -5224,161 +5171,42 @@ var ns = global.AccountingManagerApp;
     renderPaymentUndoConfirmation();
   }
 
-  async function onSelectedPaymentDeleteClick() {
-    var feedbackRenderer = renderer.withFeedbackTarget("payment-detail");
-    var paymentId = state.views.payments.selectedId;
-    var relatedAllocations;
-    var liveAllocations;
-    var allocationsToDelete;
-    var relatedSettlementIds = [];
-    var relatedInvoiceIds = [];
-    var payment;
-    var accountingEntry;
-    var deletedAllocationCount = 0;
-    var undo = state.paymentUndo;
-
-    if (!paymentId || !undo.isOpen || undo.paymentId !== String(paymentId) || undo.isLoading || undo.isBusy) {
-      feedbackRenderer.showError("Select a payment first.");
-      return;
-    }
-
-    try {
-      payment = state.records.payments.find(function (record) {
-        return String(record.id) === String(paymentId);
-      }) || await crm.getRecord(MODULES.payments, paymentId);
-
-      if (isPaymentAllocationEditingLocked(payment)) {
-        throw new Error("This payment cannot be undone because it is reconciled, cancelled, or already exported to accounting. Create a reversal instead.");
-      }
-
-      accountingEntry = await getPaymentAccountingEntryForAllocationEdit(paymentId);
-      if (isPostedAccountingEntry(accountingEntry)) {
-        throw new Error("This payment cannot be undone because its accounting entry is posted or reconciled. Create a reversal instead.");
-      }
-
-      // Keep the allocation snapshot from when the warning was opened.  An
-      // earlier attempt can have removed allocations before failing later in
-      // the rollback; the snapshot is still needed to restore those invoices.
-      relatedAllocations = undo.allocations.slice();
-      try {
-        liveAllocations = await crm.searchRecord(MODULES.payAllocations, "(Supplier_Payment:equals:" + paymentId + ")");
-      } catch (allocationReloadError) {
-        debugError("reload payment allocations before undo failed", allocationReloadError, { paymentId: paymentId });
-        liveAllocations = getSelectedPaymentAllocations(paymentId);
-      }
-      liveAllocations = Array.isArray(liveAllocations) ? liveAllocations : [];
-      if (!relatedAllocations.length) {
-        relatedAllocations = liveAllocations.slice();
-      }
-      allocationsToDelete = liveAllocations;
-
-      relatedInvoiceIds = helpers.uniqueNonEmpty(relatedAllocations.map(function (allocation) {
-        return helpers.getLookupId(allocation.Supplier_Invoice);
-      }));
-      relatedSettlementIds = getUniqueSettlementIdsFromAllocations(relatedAllocations);
-      // Retain links across retries after CRM clears the original lookups.
-      if (!undo.operationRecords) { undo.operationRecords = await ns.preparePaymentOperationUndo(crm, paymentId); }
-      global.sessionStorage.setItem("accountingManager.paymentUndo.operations." + paymentId, JSON.stringify(undo.operationRecords));
-      undo.isBusy = true;
-      undo.mode = "loading";
-      renderPaymentUndoConfirmation();
-      feedbackRenderer.showError("");
-      renderAll();
-
-      for (var allocationIndex = 0; allocationIndex < allocationsToDelete.length; allocationIndex += 1) {
-        var allocation = allocationsToDelete[allocationIndex];
-        var allocationId = String(allocation && allocation.id || "");
-
-        if (!allocationId) {
-          throw new Error("A payment allocation did not include a Zoho record ID, so it could not be removed safely.");
+  var reliablePaymentDeletion;
+  function getReliablePaymentDeletion() {
+    if (!reliablePaymentDeletion) {
+      reliablePaymentDeletion = ns.createReliablePaymentDeletion({
+        crm: crm, storage: global.localStorage, locked: isPaymentAllocationEditingLocked,
+        manageFunction: MANAGE_SUPPLIER_PAYMENT_ALLOCATIONS_FUNCTION,
+        output: getFunctionOutputObject, assertSuccess: assertCrmMutationSucceeded,
+        accountingEntries: async function (id) {
+          if (!/^\d+$/.test(String(id))) { throw new Error("Invalid payment identifier."); }
+          var entries = await crm.coql("select id from Accounting_Entries where ((Name like '%-PAY-" + id + "' or Name like 'PAY-MULTI-%-" + id + "') or Name = 'Supplier_Payment_" + id + "') limit 0, 1", { strict: true });
+          if (!Array.isArray(entries)) { throw new Error("Could not verify payment accounting links."); }
+          return entries;
+        },
+        refresh: async function () {
+          invalidateInvoiceCreateSettlementCache();
+          state.invoiceAllocationsByInvoiceId = {};
+          await refreshInvoicesAndPaymentsAfterSupplierPayment();
+          global.dispatchEvent(new Event("accounting-manager-operation-undone"));
         }
-        assertCrmMutationSucceeded(
-          await crm.deleteRecord(MODULES.payAllocations, allocationId),
-          "Zoho CRM did not confirm removal of payment allocation " + (allocation.Name || allocationId) + "."
-        );
-        deletedAllocationCount += 1;
-      }
-
-      state.loaded.payAllocations = false;
-      state.records.payAllocations = [];
-      resetPaymentRelationshipIndexes();
-      await ensurePayAllocationsLoaded();
-
-      for (var invoiceIndex = 0; invoiceIndex < relatedInvoiceIds.length; invoiceIndex += 1) {
-        var invoiceId = String(relatedInvoiceIds[invoiceIndex]);
-        var invoice = await crm.getRecord(MODULES.invoices, invoiceId);
-        var previousStatus = relatedAllocations.map(function (allocation) {
-          return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === invoiceId
-            ? String(allocation.Invoice_Status || "").trim()
-            : "";
-        }).find(function (status) {
-          return status && status.toLowerCase() !== "paid" && status.toLowerCase() !== "partially paid";
-        }) || "Approved";
-        var remainingPaidAmount = roundCurrency(state.records.payAllocations.filter(function (allocation) {
-          return String(helpers.getLookupId(allocation.Supplier_Invoice) || "") === invoiceId;
-        }).reduce(function (total, allocation) {
-          return total + (Number(allocation.Allocated_Amount) || 0);
-        }, 0));
-        var invoiceTotal = roundCurrency(helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES));
-        var invoicePayload = {
-          Amount_Paid: remainingPaidAmount,
-          Unpaid_Invoiced_Amount: Math.max(0, roundCurrency(invoiceTotal - remainingPaidAmount))
-        };
-
-        if (remainingPaidAmount >= invoiceTotal && invoiceTotal > 0) {
-          invoicePayload.Status = "Paid";
-        } else if (remainingPaidAmount > 0) {
-          invoicePayload.Status = "Partially Paid";
-        } else {
-          invoicePayload.Status = previousStatus;
-        }
-
-        assertCrmMutationSucceeded(
-          await crm.updateRecord(MODULES.invoices, invoiceId, invoicePayload),
-          "Zoho CRM did not confirm the invoice balance rollback."
-        );
-        if (getInvoiceSettlementId(invoice)) {
-          relatedSettlementIds.push(getInvoiceSettlementId(invoice));
-        }
-        delete state.invoiceAllocationsByInvoiceId[invoiceId];
-      }
-
-      await ns.applyPaymentOperationUndo(crm, undo.operationRecords, assertCrmMutationSucceeded);
-      assertCrmMutationSucceeded(
-        await crm.deleteRecord(MODULES.payments, paymentId),
-        "Zoho CRM did not confirm deletion of payment " + paymentId + "."
-      );
-
-      invalidateInvoiceCreateSettlementCache();
-      global.sessionStorage.removeItem("accountingManager.paymentUndo.operations." + paymentId);
-      global.dispatchEvent(new Event("accounting-manager-operation-undone"));
-      await recalculateSettlementTotalsForSettlementIds(helpers.uniqueNonEmpty(relatedSettlementIds));
-      state.views.payments.selectedId = "";
-      await refreshInvoicesAndPaymentsAfterSupplierPayment();
-      undo.isBusy = false;
-      undo.mode = "success";
-      undo.resultMessage = "Payment undone successfully. " + String(deletedAllocationCount) + " allocation(s) were removed and the related invoice balances were restored.";
-      renderPaymentUndoConfirmation();
-      renderAll();
-    } catch (error) {
-      debugError("onSelectedPaymentDeleteClick failed", error, {
-        paymentId: paymentId,
-        settlementIds: relatedSettlementIds,
-        invoiceIds: relatedInvoiceIds,
-        deletedAllocationCount: deletedAllocationCount
       });
-      state.views.payments.selectedId = paymentId;
-      undo.isBusy = false;
-      undo.mode = "error";
-      undo.resultMessage = "The payment could not be fully undone" +
-        (deletedAllocationCount ? " after removing " + String(deletedAllocationCount) + " allocation(s)" : "") +
-        ". " + (error.message || "Review its allocations and related invoice balances before trying again.");
-      renderPaymentUndoConfirmation();
-      renderAll();
-      feedbackRenderer.showNotice("");
-    } finally {
-      feedbackRenderer.setLoading(false);
     }
+    return reliablePaymentDeletion;
+  }
+  async function onSelectedPaymentDeleteClick() {
+    var undo = state.paymentUndo, paymentId = String(undo.paymentId || "");
+    if (!paymentId || !undo.isOpen || undo.isLoading || undo.isBusy) { return; }
+    undo.isBusy = true; undo.mode = "loading"; renderPaymentUndoConfirmation();
+    try {
+      var result = await getReliablePaymentDeletion().execute(paymentId);
+      state.views.payments.selectedId = "";
+      undo.mode = "success";
+      undo.resultMessage = "Payment undone. " + result.deletedAllocationCount + " allocations removed; invoices, sources, settlements and service statuses updated.";
+    } catch (error) {
+      undo.mode = "error";
+      undo.resultMessage = "The payment undo is incomplete. " + error.message + " Retry to resume the same operation.";
+    } finally { undo.isBusy = false; renderPaymentUndoConfirmation(); renderAll(); }
   }
 
   function resolveBankExportSupplierPaymentAccount(allocation, supplierId) {
@@ -5464,7 +5292,7 @@ var ns = global.AccountingManagerApp;
         (invoiceRecord && getMfspFromInvoice(invoiceRecord)) ||
         ""
       ).trim();
-      amount = roundCurrency(Number(allocation.Allocated_Amount || 0) || 0);
+      amount = roundCurrency(helpers.getExportSignedAmount(allocation.Allocated_Amount, allocation, invoiceRecord));
 
       if (!iban || !beneficiaryName) {
         debugWarn("bank export invoice row missing bank data", {
@@ -5538,7 +5366,10 @@ var ns = global.AccountingManagerApp;
       }
 
       bucket = groupedBySupplierId[supplierId];
-      bucket.totalAmount = roundCurrency(bucket.totalAmount + (Number(allocation.Allocated_Amount || 0) || 0));
+      var invoiceRecord = state.records.invoices.find(function (invoice) {
+        return String(invoice.id) === helpers.getLookupId(allocation.Supplier_Invoice);
+      });
+      bucket.totalAmount = roundCurrency(bucket.totalAmount + helpers.getExportSignedAmount(allocation.Allocated_Amount, allocation, invoiceRecord));
     });
 
     return Object.keys(groupedBySupplierId).map(function (supplierId) {
@@ -5636,7 +5467,7 @@ var ns = global.AccountingManagerApp;
   function buildBankExportWorkbookXml(headers, rows) {
     return buildSpreadsheetWorkbookXml("Payments", headers, rows.map(function (row) {
       return row.map(function (cell, index) {
-        return index === 1 && cell !== ""
+        return headers[index] === "Importe" && cell !== ""
           ? { value: cell, type: "Number" }
           : { value: cell, type: "String" };
       });
@@ -5686,6 +5517,16 @@ var ns = global.AccountingManagerApp;
         throw new Error("This payment has no supplier totals available to export.");
       }
 
+      for (var supplierRow of supplierRows) {
+        var supplierRecord = getSupplierRecordById(supplierRow.supplierId);
+        var supplierCode = helpers.getCandidateValue(supplierRecord || {}, FIELD_CANDIDATES.supplier.connectionReference);
+        if (!supplierCode) {
+          supplierRecord = await crm.getRecord(MODULES.suppliers, supplierRow.supplierId);
+          supplierCode = helpers.getCandidateValue(supplierRecord || {}, FIELD_CANDIDATES.supplier.connectionReference);
+        }
+        supplierRow.supplierCode = String(supplierCode || "");
+      }
+
       conflictRows = supplierRows.filter(function (row) {
         return row.hasPaymentAccountConflict;
       });
@@ -5707,6 +5548,7 @@ var ns = global.AccountingManagerApp;
       }
 
       headers = [
+        "Supplier code",
         "Cuenta beneficiario",
         "Importe",
         "Nombre beneficiario",
@@ -5724,6 +5566,7 @@ var ns = global.AccountingManagerApp;
 
       workbookRows = supplierRows.map(function (row) {
         return [
+          row.supplierCode,
           row.iban,
           row.totalAmount.toFixed(2),
           row.beneficiaryName,
@@ -5896,8 +5739,8 @@ var ns = global.AccountingManagerApp;
     }
 
     state.views.invoices.page = 1;
-    if (state.currentTab === "invoices" && state.views.invoices.hasLoaded) {
-      ensureInvoicesLoaded();
+    if (state.currentTab === "invoices") {
+      refreshInvoicesTabData();
     } else {
       renderAll();
     }
@@ -5920,8 +5763,8 @@ var ns = global.AccountingManagerApp;
     state.views.accountingEntries.sort = currentSort;
     state.views.accountingEntries.page = 1;
 
-    if (state.currentTab === "accounting" && state.accountingTab === "entries" && state.views.accountingEntries.hasLoaded) {
-      loadAccountingEntriesTabData();
+    if (state.currentTab === "accounting" && state.accountingTab === "entries") {
+      refreshAccountingEntriesTabData();
     } else {
       renderAll();
     }
@@ -5944,8 +5787,8 @@ var ns = global.AccountingManagerApp;
     state.views.accountingEntryLines.sort = currentSort;
     state.views.accountingEntryLines.page = 1;
 
-    if (state.currentTab === "accounting" && state.accountingTab === "lines" && state.views.accountingEntryLines.hasLoaded) {
-      loadAccountingEntryLinesTabData();
+    if (state.currentTab === "accounting" && state.accountingTab === "lines") {
+      refreshAccountingEntryLinesTabData();
     } else {
       renderAll();
     }
@@ -6058,62 +5901,14 @@ var ns = global.AccountingManagerApp;
   }
 
   async function ensureTabDataLoaded(tabName) {
-    var feedbackRenderer = renderer.withFeedbackTarget(tabName);
-    var activePaymentsSection = normalizePaymentsSection(state.views.payments.section);
-    var labelByTab = {
-      payments: "Loading payments...",
-      invoices: "Loading invoices...",
-      accounting: "Loading accounting data..."
-    };
-    var shouldShowLoading = true;
-
-    if (tabName === "payments" && activePaymentsSection === "accounts") {
-      labelByTab.payments = "Loading payment accounts...";
-    }
-
-    if (!labelByTab[tabName]) {
-      return;
-    }
-
-    if (tabName === "accounting" && state.accountingTab !== "accounts" && state.accountingTab !== "rules") {
-      shouldShowLoading = false;
-    }
-
-    if (shouldShowLoading) {
-      feedbackRenderer.showNotice(labelByTab[tabName]);
-      feedbackRenderer.setLoading(true, labelByTab[tabName]);
-      renderAll();
-    }
-
-    try {
-      if (tabName === "invoices") {
-        await loadInvoicesTabData();
-      }
-
-      if (tabName === "payments" && activePaymentsSection === "accounts") {
-        await ensurePaymentAccountsLoaded();
-        requestPaymentAccountsContextLoad();
-      } else if (tabName === "payments" && !state.views.payments.hasLoaded) {
-        state.views.payments.appliedFilters = cloneFilterState(state.views.payments.filters);
-        await ensurePayAllocationsLoaded();
-        await ensurePaymentsLoaded();
-        state.views.payments.hasLoaded = true;
-      }
-
-      if (tabName === "accounting") {
-        if (state.accountingTab === "accounts") {
-          await ensureAccountingAccountsLoaded();
-        } else if (state.accountingTab === "rules") {
-          await ensureAccountingRulesLoaded();
-        }
-      }
-    } catch (error) {
-      feedbackRenderer.showError(error.message || "Could not load data for that tab.");
-    } finally {
-      if (shouldShowLoading) {
-        feedbackRenderer.setLoading(false);
-        feedbackRenderer.showNotice("");
-      }
+    if (tabName === "bookings") { return loadBookingsBrowserData({ filters: state.views.bookings.appliedFilters || state.views.bookings.filters }); }
+    if (tabName === "accounting") { return accountingModule.setTab(state.accountingTab); }
+    if (tabName === "invoices") { return refreshInvoicesTabData(); }
+    if (tabName === "payments") {
+      var section = normalizePaymentsSection(state.views.payments.section);
+      if (section === "accounts") { return paymentsModule.loadAuxiliary("paymentAccounts"); }
+      if (section === "allocations") { return paymentsModule.loadAuxiliary("paymentAllocations"); }
+      return refreshPaymentsTabData();
     }
   }
 
@@ -6157,86 +5952,11 @@ var ns = global.AccountingManagerApp;
   }
 
   async function ensureInvoicesLoaded() {
-    if (state.loaded.invoices) {
-      renderAll();
-      return;
-    }
-
-    if (invoicesLoadPromise) {
-      return invoicesLoadPromise;
-    }
-
-    invoicesLoadPromise = (async function () {
-      var appliedFilters = cloneFilterState(state.views.invoices.appliedFilters || state.views.invoices.filters);
-      var records;
-      var whereClause;
-      var orderByClause;
-
-      appliedFilters.invoiceView = state.views.invoices.view || "open";
-      whereClause = await buildInvoiceRemoteWhereClause(appliedFilters);
-      orderByClause = await buildInvoiceRemoteOrderByClause(state.views.invoices.sort || {
-        key: "date",
-        direction: "desc"
-      });
-
-      records = await loadModuleRecords(MODULES.invoices, INVOICE_COQL_FIELDS, {
-        whereClause: whereClause,
-        orderByClause: orderByClause
-      });
-      state.records.invoices = sortRecordsByDateDesc(records, "Invoice_Date");
-      state.views.invoices.hasMore = false;
-      state.loaded.invoices = true;
-      renderAll();
-    }()).finally(function () {
-      invoicesLoadPromise = null;
-    });
-
-    return invoicesLoadPromise;
+    if (!state.loaded.invoices) { return invoicesModule.refreshTabData(); }
   }
 
   async function ensurePaymentsLoaded() {
-    if (state.loaded.payments) {
-      renderAll();
-      return;
-    }
-
-    if (paymentsLoadPromise) {
-      return paymentsLoadPromise;
-    }
-
-    paymentsLoadPromise = (async function () {
-      var appliedFilters = cloneFilterState(state.views.payments.appliedFilters || state.views.payments.filters);
-      var records;
-
-      if (!hasAnyLoadFilterValue(appliedFilters)) {
-        state.records.payments = [];
-        state.views.payments.hasMore = false;
-        state.loaded.payments = true;
-        rebuildPaymentAccountIndex();
-        refreshPaymentAccountMetaIndex();
-        renderAll();
-        return;
-      }
-
-      await ensurePayAllocationsLoaded();
-      // The widget connector rejects COQL for Supplier_Payments in this CRM.
-      // Load the same complete dataset through the supported paginated endpoint;
-      // buildPaymentsView applies the active filters locally.
-      if (String(appliedFilters.supplierCode || "").trim()) {
-        await loadSuppliersByPaymentSupplierCode(appliedFilters.supplierCode);
-      }
-      records = await loadRecordsByPagination(MODULES.payments);
-      state.records.payments = sortRecordsByDateDesc(records, "Payment_Date");
-      state.views.payments.hasMore = false;
-      state.loaded.payments = true;
-      rebuildPaymentAccountIndex();
-      refreshPaymentAccountMetaIndex();
-      renderAll();
-    }()).finally(function () {
-      paymentsLoadPromise = null;
-    });
-
-    return paymentsLoadPromise;
+    if (!state.views.payments.hasLoaded) { return paymentsModule.refreshTabData(); }
   }
 
   async function ensurePaymentsDatasetLoaded() {
@@ -6661,10 +6381,18 @@ var ns = global.AccountingManagerApp;
         }));
       }
 
-      return sortRecordsByDateDesc(helpers.dedupeById(records), "Payment_Date");
+      records = sortRecordsByDateDesc(helpers.dedupeById(records), "Payment_Date");
     } catch (error) {
-      return getSupplierPaymentsFromLoadedRecords(supplierId);
+      await ensurePaymentsDatasetLoaded();
+      records = getSupplierPaymentsFromLoadedRecords(supplierId);
     }
+
+    await Promise.all(records.map(async function (payment) {
+      var detail = { record: payment, allocations: [] };
+      await ns.enrichSupplierPaymentActivity(detail, crm, MODULES, helpers);
+      payment._supplierAccountDisplay = detail.accountDisplay.text;
+    }));
+    return records;
   }
 
   function rebuildBookingIndexes() {
@@ -7439,65 +7167,49 @@ var ns = global.AccountingManagerApp;
   }
 
   function closeSupplierActivityDetail() {
+    if (state.supplierActivityDetail.query) { state.supplierActivityDetail.query.cancel(); }
     state.supplierActivityDetail.isOpen = false;
     renderAll();
   }
 
   async function openSupplierActivityDetail(type, recordId) {
     var isInvoice = type === "invoice";
-    var record = (isInvoice ? state.supplierInvoices : state.supplierPayments).find(function (item) {
-      return String(item && item.id || "") === String(recordId || "");
-    });
-
-    if (!record) {
-      return;
-    }
-
-    state.supplierActivityDetail = {
-      isOpen: true,
-      type: isInvoice ? "invoice" : "payment",
-      record: record,
-      lines: [],
-      allocations: [],
-      isLoading: true
-    };
-    renderAll();
-
-    try {
-      if (isInvoice) {
-        await Promise.all([
-          ensureInvoiceLinesLoaded(record.id),
-          ensureInvoiceAllocationsLoaded(record.id)
-        ]);
-        state.supplierActivityDetail.lines = state.invoiceLinesByInvoiceId[record.id] || [];
-        state.supplierActivityDetail.allocations = state.invoiceAllocationsByInvoiceId[record.id] || [];
-      } else {
-        try {
-          state.supplierActivityDetail.allocations = await crm.coql(
-            "select " + (await resolveCoqlFields(MODULES.payAllocations, PAY_ALLOCATION_FIELDS)).join(", ") +
-            " from " + MODULES.payAllocations +
-            " where Supplier_Payment = '" + String(record.id).replace(/'/g, "\\'") + "' limit 0, 200"
-          );
-        } catch (coqlError) {
-          state.supplierActivityDetail.allocations = await crm.searchRecord(
-            MODULES.payAllocations,
-            "(Supplier_Payment:equals:" + record.id + ")"
-          );
+    var record = (isInvoice ? state.supplierInvoices : state.supplierPayments).find(function (item) { return String(item.id) === String(recordId); });
+    if (!record) { return; }
+    if (state.supplierActivityDetail.query) { state.supplierActivityDetail.query.cancel(); }
+    var detail = state.supplierActivityDetail = { isOpen: true, type: type, record: record, lines: [], allocations: [], isLoading: true };
+    var view = detail.table = {};
+    detail.query = ns.createProgressiveQuery({ view: view,
+      getRecords: function () { return isInvoice ? detail.lines : detail.allocations; },
+      setRecords: function (rows) { if (isInvoice) { detail.lines = rows; } else { detail.allocations = rows; } },
+      render: function () { detail.isLoading = view.loadingInitial; if (state.supplierActivityDetail === detail && detail.isOpen) { renderAll(); } },
+      fetch: async function (query) {
+        var result = await loadCoqlPage(isInvoice ? MODULES.invoiceLines : MODULES.payAllocations, isInvoice ? INVOICE_LINE_RELATED_FIELDS : PAY_ALLOCATION_FIELDS, {
+          page: query.page, perPage: 50,
+          whereClause: (isInvoice ? INVOICE_LINE_FIELDS.invoiceLookup : "Supplier_Payment") + " = '" + escapeCoqlValue(record.id) + "'",
+          orderByClause: (isInvoice ? INVOICE_LINE_FIELDS.serviceDate : "Allocation_Date") + " desc, id asc"
+        });
+        if (isInvoice) { result.records = await invoicesModule.enrichLines(result.records); }
+        else {
+          var enrichment = { record: record, allocations: result.records };
+          await ns.enrichSupplierPaymentActivity(enrichment, crm, MODULES, helpers);
+          detail.accountDisplay = enrichment.accountDisplay;
         }
+        return result;
       }
-    } catch (error) {
-      debugError("openSupplierActivityDetail failed", error, {
-        type: type,
-        recordId: recordId
-      });
-      state.supplierActivityDetail.lines = [];
-      state.supplierActivityDetail.allocations = [];
-    } finally {
-      if (state.supplierActivityDetail.isOpen && String(state.supplierActivityDetail.record && state.supplierActivityDetail.record.id || "") === String(recordId)) {
-        state.supplierActivityDetail.isLoading = false;
-        renderAll();
+    });
+    view.onLoadMore = detail.query.more;
+    var loading = detail.query.reset({});
+    if (isInvoice) {
+      var booking = helpers.getLookupValue(record, FIELD_CANDIDATES.invoice.booking), bookingId = helpers.getLookupId(booking);
+      if (bookingId && !helpers.getLookupName(booking)) {
+        crm.getRecord(MODULES.bookings, bookingId).then(function (full) {
+          record.Booking = { id: bookingId, name: helpers.getLookupName(full) };
+          if (state.supplierActivityDetail === detail) { renderAll(); }
+        }).catch(function (error) { debugError("Supplier invoice booking lookup failed", error); });
       }
     }
+    return loading;
   }
 
   function renderAll() {
@@ -7556,11 +7268,14 @@ var ns = global.AccountingManagerApp;
     renderer.renderPaymentsWorkspace(paymentsView, selectPayment, paymentLetterBatch);
     renderer.renderPaymentAllocationsWorkspace(paymentAllocationsView, selectPaymentAllocation);
     renderer.renderSelectedPayment(paymentsView.selectedRecord, {
+      closeDetail: paymentsModule.closeDetail,
+      retryDetail: paymentsModule.retryDetail,
       getPaymentReference: paymentsView.getPaymentReference,
       getSupplierName: paymentsView.getSupplierName,
       getMfsp: paymentsView.getMfsp,
+      allocationTable: paymentsView.detailAllocationView,
       getAllocations: function () {
-        return paymentsView.selectedAllocations || [];
+        return paymentsView.detailAllocationView ? paymentsView.detailAllocationView.records : paymentsView.selectedAllocations || [];
       },
       getSettlementName: getPaymentSettlementName,
       getContextSummary: getPaymentContextSummary
@@ -7590,4 +7305,57 @@ var ns = global.AccountingManagerApp;
     refreshPaymentAccountCreateActionState();
     refreshAccountingAccountCreateActionState();
   }
+  var openPendingOperation = async function (item) {
+    if (document.querySelector('[aria-busy="true"]') || state.paymentCreation.isBusy || state.paymentAllocationManager.isSaving || state.paymentUndo.isBusy || state.invoiceDeletion.isBusy) {
+      throw new Error("An operation is still running. Wait for it to finish before opening recovery.");
+    }
+    if (item.type === "payment-create") { await setCurrentTab("invoices"); await openCreatePaymentPanel(); return; }
+    if (item.type === "invoice-create") {
+      await setCurrentTab("suppliers"); await loadSupplierWorkspace(item.id);
+      if (String(state.supplierId) !== item.id) throw new Error("The saved supplier could not be loaded.");
+      await openCreateInvoicePanel(INVOICE_CREATE_MODES.invoice); return;
+    }
+    if (item.type === "prepayment") {
+      await setCurrentTab("operations");
+      document.querySelector('[data-operation-type="prepayments"]').click();
+      if (!ns.openPendingPrepayment) throw new Error("Open Operations / Prepayments first, then retry.");
+      await ns.openPendingPrepayment(item.id); return;
+    }
+    if (item.type === "card-invoice" || item.type === "card-payment") {
+      await setCurrentTab("operations");
+      document.querySelector('[data-operation-type="card-purchases"]').click();
+      await ns.openPendingCardOperation(item.id, item.type === "card-invoice" ? "invoice" : "payment"); return;
+    }
+    if (item.type === "payment-edit" || item.type === "payment-delete") {
+      await setCurrentTab("payments");
+      if (item.type === "payment-edit") {
+        var payment = await crm.getRecord(MODULES.payments,item.id);
+        if (!payment || String(payment.id) !== item.id) throw new Error("The saved payment could not be read.");
+        state.records.payments = state.records.payments.filter(function (r) { return String(r.id) !== item.id; }).concat([payment]);
+      }
+      state.views.payments.selectedId = item.id;
+      if (item.type === "payment-delete") await openPaymentUndoConfirmation(); else await openPaymentAllocationManager();
+      return;
+    }
+    if (item.type === "invoice-edit" || item.type === "invoice-delete") {
+      await setCurrentTab("invoices");
+      var invoice = await crm.getRecord(MODULES.invoices,item.id);
+      if (!invoice || String(invoice.id) !== item.id) throw new Error("The invoice is unavailable. Its saved recovery has been preserved for review.");
+      state.records.invoices = state.records.invoices.filter(function (r) { return String(r.id) !== item.id; }).concat([invoice]);
+      state.views.invoices.selectedDetailId = item.id;
+      if (item.type === "invoice-delete") onSelectedInvoiceDeleteClick(); else await onSelectedInvoiceEditClick();
+      return;
+    }
+    throw new Error("This operation needs a manual review.");
+  };
+  if (ns.mountPendingOperations) {
+    ns.mountPendingOperations(document.getElementById("pending-operations"), openPendingOperation);
+  }
+  // All consistency review now lives in the completion dialog.
+  var closureConsistency = null;
+  var closureReviewDialog = ns.createClosureReviewDialog(crm, async function (module, id) {
+    if (!(global.ZOHO && global.ZOHO.CRM.UI && global.ZOHO.CRM.UI.Record && global.ZOHO.CRM.UI.Record.open)) throw new Error('Opening records is unavailable in this context.');
+    var opened = await global.ZOHO.CRM.UI.Record.open({Entity:module, RecordID:id});
+    if (opened === false) throw new Error('CRM could not open the record.');
+  });
 }(window));

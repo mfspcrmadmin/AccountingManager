@@ -1,0 +1,195 @@
+string standalone.recalculateSupplierSettlementsForBooking(String bookingId)
+{
+result = Map();
+result.put("error",true);
+result.put("booking_id",bookingId);
+bookingId = ifnull(bookingId,"").trim();
+// Preserve the existing OAuth entry point and its numeric-id contract for callers.
+// The widget explicitly requests recovery; scheduled calls remain ordinary recalculations.
+recoverQueue = bookingId.startsWith("recover:");
+if(recoverQueue)
+{
+	bookingId = bookingId.subString(8);
+}
+result.put("booking_id",bookingId);
+if(!bookingId.matches("[0-9]+"))
+{
+	result.put("message","Invalid booking id");
+	return result;
+}
+leaseId = "";
+queueSnapshot = List();
+try 
+{
+	if(recoverQueue)
+	{
+		queueRead = standalone.jobs_query("select id,Status,Source_Function,Modified_Time,Lock_Expires_At from Admin_Process_Jobs where ((Job_Type = 'Supplier Settlement Recalc' and Booking = '" + bookingId + "') and (Status in ('Pending','Retry','Processing','Error'))) order by id asc limit 200");
+		if(queueRead.get("more_records") == true)
+		{
+			throw "Too many jobs to recover safely. CRM review is required.";
+		}
+		for each  candidate in queueRead.get("data")
+		{
+			if(candidate.get("Source_Function") != "settlement_recalculation_lease")
+			{
+				if(candidate.get("Status") == "Processing")
+				{
+					modified = ifnull(candidate.get("Modified_Time"),"").toString();
+					expires = ifnull(candidate.get("Lock_Expires_At"),"").toString();
+					// CRM-managed time also protects legacy leases with incorrect timezone offsets.
+					if(modified == "" || modified.toTime("yyyy-MM-dd'T'HH:mm:ssXXX").addMinutes(30) >= zoho.currenttime)
+					{
+						result.put("message","A calculation job is still active. Refresh its status before recovering.");
+						return result;
+					}
+					if(expires != "" && expires.toTime("yyyy-MM-dd'T'HH:mm:ssXXX") >= zoho.currenttime)
+					{
+						result.put("message","A calculation job is still active. Refresh its status before recovering.");
+						return result;
+					}
+				}
+				queueSnapshot.add(candidate);
+			}
+		}
+	}
+	// A unique key serializes manual and scheduled recalculations for this booking.
+	// On Hold lease records are never business jobs and are not picked up by the runner.
+	leaseKey = "SETTLEMENT_LEASE:" + bookingId;
+	leaseRows = standalone.jobs_query("select id,Modified_Time,Lock_Expires_At from Admin_Process_Jobs where Active_Key = '" + leaseKey + "' limit 2").get("data");
+	for each  lease in leaseRows
+	{
+		expiry = ifnull(lease.get("Lock_Expires_At"),"").toString();
+		leaseModified = ifnull(lease.get("Modified_Time"),"").toString();
+		recentLease = leaseModified == "";
+		if(leaseModified != "")
+		{
+			recentLease = leaseModified.toTime("yyyy-MM-dd'T'HH:mm:ssXXX").addMinutes(30) >= zoho.currenttime;
+		}
+		futureExpiry = false;
+		if(expiry != "")
+		{
+			futureExpiry = expiry.toTime("yyyy-MM-dd'T'HH:mm:ssXXX") >= zoho.currenttime;
+		}
+		if(recentLease || futureExpiry)
+		{
+			result.put("retryable",true);
+			result.put("message","A settlement recalculation is already running for this booking. Retry later.");
+			return result;
+		}
+		releaseExpired = Map();
+		releaseExpired.put("Active_Key",null);
+		releaseExpired.put("Status","Cancelled");
+		releaseExpired.put("Last_Error","Expired recalculation lease recovered");
+		recovered = standalone.jobs_conditionalUpdate(lease.get("id"),lease.get("Modified_Time"),releaseExpired);
+		if(recovered.get("error") == true)
+		{
+			throw "Recalculation lease changed; retry later";
+		}
+	}
+	leaseMap = Map();
+	leaseMap.put("Job_Type","Supplier Settlement Recalc");
+	leaseMap.put("Booking",bookingId);
+	leaseMap.put("Status","On Hold");
+	leaseMap.put("Active_Key",leaseKey);
+	leaseMap.put("Source_Function","settlement_recalculation_lease");
+	leaseMap.put("Locked_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX"));
+	leaseMap.put("Lock_Expires_At",zoho.currenttime.addMinutes(30).toString("yyyy-MM-dd'T'HH:mm:ssXXX"));
+	leaseResponse = zoho.crm.createRecord("Admin_Process_Jobs",leaseMap);
+	leaseId = ifnull(leaseResponse.get("id"),"").toString();
+	if(leaseId == "")
+	{
+		throw "Recalculation lease could not be acquired; retry later: " + leaseResponse;
+	}
+	// Verify the stored instant, not merely the submitted timestamp string.
+	storedLease = zoho.crm.getRecordById("Admin_Process_Jobs",leaseId);
+	storedExpiry = ifnull(storedLease.get("Lock_Expires_At"),"").toString();
+	if(storedExpiry == "")
+	{
+		throw "CRM did not persist the calculation lock expiry";
+	}
+	storedExpiryTime = storedExpiry.toTime("yyyy-MM-dd'T'HH:mm:ssXXX");
+	if(storedExpiryTime < zoho.currenttime.addMinutes(29) || storedExpiryTime > zoho.currenttime.addMinutes(31))
+	{
+		throw "CRM stored an inconsistent calculation lock time. No recalculation was started; check CRM timezone configuration.";
+	}
+	result = standalone.settlements_recalculateCore(bookingId);
+	if(recoverQueue && result.get("error") == false)
+	{
+		reconciliationErrors = List();
+		for each  candidate in queueSnapshot
+		{
+			try 
+			{
+				superseded = Map();
+				superseded.put("Status","Cancelled");
+				superseded.put("Active_Key",null);
+				superseded.put("Locked_At",null);
+				superseded.put("Lock_Expires_At",null);
+				superseded.put("Completed_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX"));
+				superseded.put("Last_Error","Superseded by confirmed widget recovery " + leaseId);
+				// A new sync or scheduler claim changes Modified_Time: never discard that work.
+				reconciled = standalone.jobs_conditionalUpdate(candidate.get("id"),candidate.get("Modified_Time"),superseded);
+				if(reconciled.get("error") == true)
+				{
+					reconciliationErrors.add(candidate.get("id"));
+				}
+			}
+			catch (reconcileFailure)
+			{
+				reconciliationErrors.add(candidate.get("id"));
+			}
+		}
+		result.put("reconciliation_pending",reconciliationErrors);
+		if(reconciliationErrors.size() > 0)
+		{
+			result.put("error",true);
+			result.put("calculation_completed",true);
+			result.put("message","Settlements recalculated, but some jobs changed or could not be closed. Refresh the status before another recovery.");
+		}
+		else
+		{
+			result.put("message","Calculation recovered successfully. Refresh to check for newer queued work.");
+		}
+	}
+}
+catch (failure)
+{
+	result.put("error",true);
+	result.put("retryable",true);
+	result.put("message","Recalculation is incomplete: " + failure.toString());
+}
+if(leaseId != "")
+{
+	try 
+	{
+		release = Map();
+		release.put("Active_Key",null);
+		release.put("Status","Done");
+		if(result.get("error") != false)
+		{
+			release.put("Status","Error");
+		}
+		release.put("Completed_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX"));
+		release.put("Last_Error","");
+		if(result.get("error") != false)
+		{
+			release.put("Last_Error",ifnull(result.get("message"),"").toString().left(2000));
+		}
+		outcome = Map();
+		outcome.put("error",result.get("error") != false);
+		outcome.put("message",ifnull(result.get("message"),"").toString().left(2000));
+		release.put("Last_Result_JSON",outcome.toString());
+		released = zoho.crm.updateRecord("Admin_Process_Jobs",leaseId,release);
+		if(ifnull(released.get("id"),"").toString() != leaseId)
+		{
+			throw "Lease release not confirmed";
+		}
+	}
+	catch (releaseError)
+	{
+		result.put("error",true);
+		result.put("message","Recalculation returned but its lease could not be released. Retry after lease expiry. " + releaseError);
+	}
+}
+return result;
+}

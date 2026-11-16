@@ -1,0 +1,66 @@
+string standalone.supplierInvoiceEdit_read(String moduleName, String lookupField, String lookupValue)
+{
+result = {"success":false,"records":List()};
+try 
+{
+	allowed = {"Supplier_Invoices":"Original_Invoice","Inv_Set_Allocations":"Vendor_Invoice","Supplier_Pay_Allocations":"Supplier_Invoice","Accounting_Entries":"Supplier_Invoice","Accounting_Entry_Lines":"Accounting_Entry","Card_Purchases":"Vendor_Invoice","Prepayment_Invoice_Allocations":"Vendor_Invoice"};
+	if(!allowed.containKey(moduleName) || !allowed.get(moduleName).toList(",").contains(lookupField) || !lookupValue.matches("[A-Za-z0-9-]+"))
+	{
+		throw "Invalid registration query.";
+	}
+	records = List();
+	pages = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25".toList(",");
+	for each  page in pages
+	{
+		offset = (page.toLong() - 1) * 200;
+		query = {"select_query":"select id from " + moduleName + " where " + lookupField + " = '" + lookupValue + "' order by id asc limit " + offset + ", 200"};
+		response = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/coql"
+			type :POST
+			parameters:query.toString()
+			headers:{"Content-Type":"application/json"}
+			detailed:true
+			connection:"crm_oauth_connection"
+		];
+		if(response.get("responseCode") == 204)
+		{
+			break;
+		}
+		if(response.get("responseCode") != 200)
+		{
+			throw "Could not read registration records: " + response.get("responseText").toString();
+		}
+		body = response.get("responseText").toString().toMap();
+		if(body.get("data") == null)
+		{
+			throw "Incomplete registration query response.";
+		}
+		batch = body.get("data");
+		for each  row in batch
+		{
+			record = zoho.crm.getRecordById(moduleName,row.get("id").toLong());
+			if(record == null || record.get("id") == null)
+			{
+				throw "Could not read a registration record.";
+			}
+			records.add(record);
+		}
+		if(batch.size() < 200)
+		{
+			break;
+		}
+		if(page == "25")
+		{
+			throw "Registration query limit reached. No partial list was accepted.";
+		}
+	}
+	result.put("success",true);
+	result.put("records",records);
+}
+catch (e)
+{
+	result.put("message",e.toString());
+}
+return result.toString();
+}

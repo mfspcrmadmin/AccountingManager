@@ -1,0 +1,161 @@
+string standalone.suppliers_fillMissingBeneficiaryAccounts(bool dryRun)
+{
+// Reconcile separate Payment_Accounts from the user's 2026-11-10 list.
+// Never write Account_Number, create accounts, reactivate accounts, or change history.
+result = {"success":false,"dryRun":dryRun};
+details = List();
+if(dryRun == null) { result.put("error","dryRun es obligatorio."); return result.toString(); }
+rows = List();
+rows.add({"code":"ALG006","iban":"PT50001800032263138602066"});
+rows.add({"code":"ALLI4D","iban":"PT50001000005954113000162"});
+rows.add({"code":"ARLIND","iban":"PT50003503950000515493038"});
+rows.add({"code":"BIKEPA","iban":"PT50003605469910601776929"});
+rows.add({"code":"BINHOB","iban":"PT50001800004122225800105"});
+rows.add({"code":"BLUDRA","iban":"PT50001800031784270902005"});
+rows.add({"code":"BRUMCE","iban":"PT50004580504031980515441"});
+rows.add({"code":"CARDOS","iban":"PT50017039010304000003551"});
+rows.add({"code":"CBP006","iban":"PT50003603099910000113540"});
+rows.add({"code":"CHURCH","iban":""});
+rows.add({"code":"CLEVER","iban":"PT50001800031522701002026"});
+rows.add({"code":"COMEFO","iban":"PT50004513464040402730338"});
+rows.add({"code":"DOUROV","iban":"PT50001000004270454000196"});
+rows.add({"code":"EXELISBOA","iban":"PT50003300004545745813405"});
+rows.add({"code":"FEELDO","iban":"PT50001800034343090902018"});
+rows.add({"code":"FURNAS","iban":""});
+rows.add({"code":"FUTURI","iban":""});
+rows.add({"code":"GRAHAM","iban":"PT50001000006002123000394"});
+rows.add({"code":"INFSAG","iban":"PT50003506970063526443098"});
+rows.add({"code":"LIMOUT","iban":"PT50003300000588040495461"});
+rows.add({"code":"LIS003","iban":"PT50002300004526586004894"});
+rows.add({"code":"LIS051","iban":""});
+rows.add({"code":"LIS066","iban":""});
+rows.add({"code":"LIS108","iban":"PT50356000019209671830761"});
+rows.add({"code":"LIS156","iban":""});
+rows.add({"code":"LIS192","iban":"PT50001800032368453302095"});
+rows.add({"code":"LIS262","iban":"PT50002300004552984428794"});
+rows.add({"code":"LOULEH","iban":""});
+rows.add({"code":"LUDOVI","iban":"PT50000700000028501054223"});
+rows.add({"code":"MAFALD","iban":"PT50002300004571184470894"});
+rows.add({"code":"MDR006","iban":""});
+rows.add({"code":"MESAFR","iban":"PT50001800035256407702076"});
+rows.add({"code":"OPO003","iban":"PT50001900080020003021290"});
+rows.add({"code":"OPO048","iban":"PT50007900007657554210195"});
+rows.add({"code":"PANUNC","iban":"PT50001901960020000004486"});
+rows.add({"code":"POULIS","iban":"PT50001000002320858000104"});
+rows.add({"code":"REDEAR","iban":""});
+rows.add({"code":"SEAKEY","iban":"PT50003600519910036720360"});
+rows.add({"code":"SHUTTL","iban":""});
+rows.add({"code":"SIXSEN","iban":"PT50004595414039085725713"});
+rows.add({"code":"SKYVAL","iban":"PT50003300004545745813405"});
+rows.add({"code":"VINPOR","iban":"PT50001000002255518000145"});
+rows.add({"code":"WINSOU","iban":"PT50001000003202630000134"});
+rows.add({"code":"YEATMA","iban":"PT50003505740000450863036"});
+linked = 0;
+wouldLink = 0;
+errors = 0;
+stop = false;
+options = {"trigger":List()};
+for each row in rows
+{
+ code = row.get("code");
+ iban = row.get("iban");
+ item = {"code":code};
+ writeStarted = false;
+ try
+ {
+  if(iban == "")
+  {
+   item.put("status","skipped_no_source_iban");
+  }
+  else
+  {
+   if(!iban.matches("PT50[0-9]{21}")) { throw "IBAN de origen invalido."; }
+   suppliers = zoho.crm.searchRecords("Vendors","(TP_Reference:equals:" + code + ")",1,200);
+   // A failed search must not be interpreted as an empty result.
+   if(suppliers == null || suppliers.size() >= 200) { throw "Busqueda de suppliers incompleta."; }
+   exact = List();
+   for each candidate in suppliers
+   {
+    if(candidate.get("id") == null) { throw "Respuesta invalida al buscar supplier."; }
+    if(ifnull(candidate.get("TP_Reference"),"").toString() == code) { exact.add(candidate); }
+   }
+   if(exact.size() != 1) { throw "Codigo de supplier inexistente o duplicado."; }
+   supplierId = exact.get(0).get("id").toString();
+   item.put("supplierId",supplierId);
+   supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+   if(supplier.get("id") == null || !supplier.containKey("Default_Payment_Account") || supplier.get("TP_Reference") != code) { throw "Lectura de supplier incompleta o codigo cambiado."; }
+   currentDefault = ifnull(ifnull(supplier.get("Default_Payment_Account"),Map()).get("id"),"").toString();
+   if(currentDefault != "")
+   {
+    item.put("status","skipped_existing_default");
+    item.put("paymentAccountId",currentDefault);
+   }
+   else
+   {
+    accounts = zoho.crm.searchRecords("Payment_Accounts","(Owner_Supplier:equals:" + supplierId + ")",1,200);
+    if(accounts == null || accounts.size() >= 200) { throw "Busqueda de cuentas incompleta."; }
+    matching = List();
+    for each account in accounts
+    {
+     if(account.get("id") == null) { throw "Respuesta invalida al buscar cuentas."; }
+     ownerId = ifnull(ifnull(account.get("Owner_Supplier"),Map()).get("id"),"").toString();
+     accountIban = ifnull(account.get("IBAN"),"").toString().replaceAll("\\s","").toUpperCase();
+     if(ownerId == supplierId && accountIban == iban && account.get("Owner_Type") == "Supplier" && account.get("Status") == "Active" && account.get("Allowed_For_Supplier_Payments") == true && account.get("Locked__s") != true)
+     {
+      matching.add(account);
+     }
+    }
+    if(matching.size() != 1) { throw "Se requiere exactamente una cuenta activa del supplier con el IBAN de la tabla. Revisar sin crear ni reactivar cuentas."; }
+    accountId = matching.get(0).get("id").toString();
+    item.put("paymentAccountId",accountId);
+    // Re-read both records immediately before linking; preserve any new default.
+    account = zoho.crm.getRecordById("Payment_Accounts",accountId.toLong());
+    ownerId = ifnull(ifnull(account.get("Owner_Supplier"),Map()).get("id"),"").toString();
+    accountIban = ifnull(account.get("IBAN"),"").toString().replaceAll("\\s","").toUpperCase();
+    if(account.get("id") == null || ownerId != supplierId || accountIban != iban || account.get("Owner_Type") != "Supplier" || account.get("Status") != "Active" || account.get("Allowed_For_Supplier_Payments") != true || account.get("Locked__s") == true) { throw "La cuenta ha cambiado o no esta disponible."; }
+    supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+    if(supplier.get("id") == null || !supplier.containKey("Default_Payment_Account") || supplier.get("TP_Reference") != code || supplier.get("Locked__s") == true) { throw "Supplier no disponible para vincular."; }
+    currentDefault = ifnull(ifnull(supplier.get("Default_Payment_Account"),Map()).get("id"),"").toString();
+    if(currentDefault != "")
+    {
+     item.put("status","skipped_default_changed");
+    }
+    else if(dryRun)
+    {
+     item.put("status","would_link_existing_account");
+     wouldLink = wouldLink + 1;
+    }
+    else
+    {
+     writeStarted = true;
+     response = zoho.crm.updateRecord("Vendors",supplierId.toLong(),{"Default_Payment_Account":accountId},options);
+     if(response.get("id") == null) { throw "CRM no confirmo el enlace: " + response.toString(); }
+     saved = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+     savedDefault = ifnull(ifnull(saved.get("Default_Payment_Account"),Map()).get("id"),"").toString();
+     if(saved.get("id") == null || savedDefault != accountId) { throw "No se pudo verificar el enlace guardado."; }
+     item.put("status","linked_verified");
+     linked = linked + 1;
+     writeStarted = false;
+    }
+   }
+  }
+ }
+ catch(e)
+ {
+  item.put("status","error");
+  item.put("error",e.toString());
+  errors = errors + 1;
+  if(writeStarted) { item.put("requiresCrmReview",true); stop = true; }
+ }
+ details.add(item);
+ if(stop) { break; }
+}
+result.put("linked",linked);
+result.put("wouldLink",wouldLink);
+result.put("errors",errors);
+result.put("processed",details.size());
+result.put("sourceCount",rows.size());
+result.put("details",details);
+result.put("success",errors == 0 && details.size() == rows.size());
+return result.toString();
+}

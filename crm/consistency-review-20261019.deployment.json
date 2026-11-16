@@ -1,0 +1,48 @@
+{
+  "status": "local_pending_widget_publication",
+  "deployment": "Publish the complete widget; no Deluge function changes required",
+  "entry_point": "Bookings > Trip closure > Check consistency",
+  "files": [
+    "app/widget.html",
+    "app/scripts/main.js",
+    "app/scripts/consistency-review.js",
+    "app/scripts/consistency-review-ui.js",
+    "app/styles/consistency-review.css",
+    "app/scripts/bookings.js"
+  ],
+  "dependencies": "Previously implemented pending-operations.js and pending-operations.css must be included",
+  "behavior": [
+    "Read-only consistency checks use the booking already open in Trip closure. The standalone tab is removed; browser-local pending operations remain in the global header.",
+    "Checks remain read-only. The explicit Sync status copies action re-reads and updates only reported allocation status-copy fields in the current booking, suppresses workflows and verifies the writes. No amount changes or accounting entry generation.",
+    "Loads all allocations for shared payments, including invoices from other bookings, before comparing payment totals and counters.",
+    "Checks invoice paid amounts and overallocations, payment amounts/movement/counters, duplicate or orphan relationships, copied financial statuses, settlement aggregates and source payment links/statuses.",
+    "Uses existing two-decimal rules, credit note signs, Paid/Reconciled payment criteria and active invoice/settlement allocation rules. Empty aggregate fields follow the existing zero default.",
+    "Pending invoice operations, invalid values and currency conflicts prevent unreliable aggregate comparisons and produce review findings.",
+    "Strict paginated reads fail the review on errors, repeated/missing IDs or a 5000-record per-query limit. Scope changes and failed scans clear previous results.",
+    "Results show recorded versus calculated values, category filters and CRM record opening through the existing SDK. Manual administrative states are not derived or modified.",
+    "Closing, refreshing or switching the trip invalidates results and ignores late responses. Findings do not change existing closure rules or manual review statuses.",
+    "Compact bar after financial indicators, internal results view with preserved settlement DOM, tabular findings and explicit allocation status-copy labels. Checked records explains inclusion of No services settlements and shared payments.",
+    "Individual allocation and settlement-split findings are scoped to the current booking. External records remain inputs for full shared-payment totals, counters and completeness checks.",
+    "Status-copy synchronization prevents duplicate clicks, rejects pending or cross-booking records, reports per-allocation failures and reruns the full check. Retries are idempotent."
+  ],
+  "verification": {
+    "focused_tests": "35 passed for consistency, pending recovery, widget bootstrap and trip closure workflow",
+    "browser_tests": "Redesigned UI verified with all widget styles: initial/loading/clean/issues/error, categories, long names, external bookings, preserved filter/scroll, low-height/mobile layouts and late response invalidation.",
+    "javascript_syntax": "Passed",
+    "live_metadata": "All selected fields verified against 8 CRM modules; payments have no Booking lookup, so payment discovery follows invoice/source relationships",
+    "live_read_queries": "Verified selected query fields in CRM for test booking 616617000157853376",
+    "live_sample_analysis": "Read-only snapshots reproduce the known TEST-ACC amount discrepancy and stale allocation status plus three settlement aggregate differences",
+    "production_records_modified": false,
+    "published_widget_end_to_end": false,
+    "unavailable_tests": "booking-closure-transition and closure-backfill tests could not run: their pre-existing _local/crm/crm_functions source files are missing",
+    "booking_scope_regression_tests": "15 consistency tests passed, including external status copies, genuine shared payment mismatches and incomplete shared payments",
+    "status_copy_sync": "19 unit tests and browser checks passed; new sync action not yet verified in the published widget."
+  },
+  "limits": [
+    "A review is scoped to one booking and its linked payments; it is not an organisation-wide audit and cannot discover wholly unlinked payments with no booking context.",
+    "Pending operations remain browser-local, not shared across users.",
+    "CRM reads are not an atomic snapshot. Results are dated and users must rerun after changes.",
+    "Does not audit tax/base calculations, documents, service statuses, manual states, or background workflows. Does not infer currency conversions.",
+    "No historical repair or test financial mutation was performed."
+  ]
+}

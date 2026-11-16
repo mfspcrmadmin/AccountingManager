@@ -1,0 +1,43 @@
+string standalone.supplierInvoiceEdit_fileDigest(String fileId, String invoiceId, String attachmentId)
+{
+// Compare file bytes, not the temporary upload token with CRM's stored file id.
+if(attachmentId == "")
+{
+ if(!fileId.matches("[A-Za-z0-9_-]+")) { throw "Invalid uploaded invoice document identifier."; }
+ url = "https://www.zohoapis.eu/crm/v8/files?id=" + fileId;
+}
+else
+{
+ if(!invoiceId.matches("[0-9]+") || !attachmentId.matches("[0-9]+")) { throw "Invalid saved invoice document identifier."; }
+ url = "https://www.zohoapis.eu/crm/v8/Supplier_Invoices/" + invoiceId + "/actions/download_fields_attachment?fields_attachment_id=" + attachmentId;
+}
+download = invokeurl
+[
+ url :url
+ type :GET
+ connection:"crm_oauth_connection"
+ detailed:true
+];
+document = download.get("responseText");
+httpStatus = ifnull(download.get("responseCode"),0).toLong();
+sourceLabel = "saved invoice document";
+requiredScope = "ZohoCRM.modules.custom.READ";
+if(attachmentId == "") { sourceLabel = "original uploaded document"; requiredScope = "ZohoCRM.Files.READ"; }
+if(httpStatus != 200 || document == null || !document.isFile())
+{
+ errorCode = "UNEXPECTED_RESPONSE";
+ if(document != null && !document.isFile())
+ {
+  try { errorCode = ifnull(document.toString().toMap().get("code"),"UNEXPECTED_RESPONSE"); }
+  catch(parseError) { errorCode = "UNEXPECTED_RESPONSE"; }
+ }
+ help = "Retry verification. The saved invoice and its document have not been removed.";
+ if(httpStatus == 204 || errorCode == "NO_CONTENT") { help = "The original upload is no longer available for comparison. The saved invoice document is preserved; this correction needs document recovery before it can continue."; }
+ if(errorCode == "OAUTH_SCOPE_MISMATCH") { help = "Reauthorize crm_oauth_connection with " + requiredScope + " and resume the correction. Enabling function authentication does not grant this permission."; }
+ if(errorCode == "NO_PERMISSION" || errorCode == "AUTHORIZATION_FAILED") { help = "Check the download permissions of the user behind crm_oauth_connection, then resume the correction."; }
+ if(errorCode == "INVALID_TOKEN" || errorCode == "AUTHENTICATION_FAILURE") { help = "Reconnect crm_oauth_connection, then resume the correction."; }
+ throw "Cannot verify the " + sourceLabel + " (HTTP " + httpStatus + ", " + errorCode + "). " + help;
+}
+if(document.getFileSize() <= 0) { throw "The invoice document is empty and cannot be verified."; }
+return zoho.encryption.sha256(zoho.encryption.base64Encode(document));
+}

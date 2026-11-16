@@ -1,0 +1,307 @@
+string standalone.recalculateSupplierSettlementsForBooking(String bookingId)
+{
+result = Map();
+result.put("error",true);
+result.put("booking_id",bookingId);
+bookingId = ifnull(bookingId,"").trim();
+// Preserve the existing OAuth entry point and its numeric-id contract for callers.
+// The widget explicitly requests recovery; scheduled calls remain ordinary recalculations.
+recoverQueue = bookingId.startsWith("recover:");
+if(recoverQueue)
+{
+	bookingId = bookingId.subString(8);
+}
+result.put("booking_id",bookingId);
+if(!bookingId.matches("[0-9]+"))
+{
+	result.put("message","Invalid booking id");
+	return result;
+}
+leaseId = "";
+queueSnapshot = List();
+try 
+{
+	if(recoverQueue)
+	{
+		queueRead = standalone.jobs_query("select id,Status,Source_Function,Modified_Time,Lock_Expires_At from Admin_Process_Jobs where ((Job_Type = 'Supplier Settlement Recalc' and Booking = '" + bookingId + "') and (Status in ('Pending','Retry','Processing','Error'))) order by id asc limit 200");
+		if(queueRead.get("more_records") == true)
+		{
+			throw "Too many jobs to recover safely. CRM review is required.";
+		}
+		for each  candidate in queueRead.get("data")
+		{
+			if(candidate.get("Source_Function") != "settlement_recalculation_lease")
+			{
+				if(candidate.get("Status") == "Processing")
+				{
+					modified = ifnull(candidate.get("Modified_Time"),"").toString();
+					// Parse the wall clock in UTC and apply the ISO offset explicitly; do not use XXX parsing.
+					modifiedInstant = zoho.currenttime;
+					if(modified != "")
+					{
+						if(!modified.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})"))
+						{
+							throw "Invalid CRM timestamp: " + modified;
+						}
+						modifiedInstant = modified.subString(0,19).toTime("yyyy-MM-dd'T'HH:mm:ss","UTC");
+						if(modified.length() == 25)
+						{
+							modifiedOffset = modified.subString(20,22).toLong() * 60 + modified.subString(23,25).toLong();
+							if(modified.subString(19,20) == "+")
+							{
+								modifiedOffset = 0 - modifiedOffset;
+							}
+							modifiedInstant = modifiedInstant.addMinutes(modifiedOffset);
+						}
+					}
+					expires = ifnull(candidate.get("Lock_Expires_At"),"").toString();
+					// Parse the wall clock in UTC and apply the ISO offset explicitly; do not use XXX parsing.
+					expiresInstant = zoho.currenttime;
+					if(expires != "")
+					{
+						if(!expires.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})"))
+						{
+							throw "Invalid CRM timestamp: " + expires;
+						}
+						expiresInstant = expires.subString(0,19).toTime("yyyy-MM-dd'T'HH:mm:ss","UTC");
+						if(expires.length() == 25)
+						{
+							expiresOffset = expires.subString(20,22).toLong() * 60 + expires.subString(23,25).toLong();
+							if(expires.subString(19,20) == "+")
+							{
+								expiresOffset = 0 - expiresOffset;
+							}
+							expiresInstant = expiresInstant.addMinutes(expiresOffset);
+						}
+					}
+					parsedModifiedUTC = "unavailable";
+					if(modified != "")
+					{
+						parsedModifiedUTC = modifiedInstant.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC");
+					}
+					// CRM-managed time also protects legacy leases with incorrect timezone offsets.
+					if(modified == "" || modifiedInstant.addMinutes(30) >= zoho.currenttime)
+					{
+						result.put("message","Recovery blocked by recent modification. Job: " + candidate.get("id") + "; CRM modified: " + modified + "; parsed modified UTC: " + parsedModifiedUTC + "; runtime now UTC: " + zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC") + "; lock expires: " + expires);
+						return result;
+					}
+					if(expires != "" && expiresInstant >= zoho.currenttime)
+					{
+						result.put("message","Recovery blocked by lock expiry. Job: " + candidate.get("id") + "; CRM expiry: " + expires + "; parsed expiry UTC: " + expiresInstant.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC") + "; runtime now UTC: " + zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC"));
+						return result;
+					}
+				}
+				queueSnapshot.add(candidate);
+			}
+		}
+	}
+	// A unique key serializes manual and scheduled recalculations for this booking.
+	// On Hold lease records are never business jobs and are not picked up by the runner.
+	leaseKey = "SETTLEMENT_LEASE:" + bookingId;
+	leaseRows = standalone.jobs_query("select id,Modified_Time,Lock_Expires_At from Admin_Process_Jobs where Active_Key = '" + leaseKey + "' limit 2").get("data");
+	for each  lease in leaseRows
+	{
+		expiry = ifnull(lease.get("Lock_Expires_At"),"").toString();
+		// Parse the wall clock in UTC and apply the ISO offset explicitly; do not use XXX parsing.
+		expiryInstant = zoho.currenttime;
+		if(expiry != "")
+		{
+			if(!expiry.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})"))
+			{
+				throw "Invalid CRM timestamp: " + expiry;
+			}
+			expiryInstant = expiry.subString(0,19).toTime("yyyy-MM-dd'T'HH:mm:ss","UTC");
+			if(expiry.length() == 25)
+			{
+				expiryOffset = expiry.subString(20,22).toLong() * 60 + expiry.subString(23,25).toLong();
+				if(expiry.subString(19,20) == "+")
+				{
+					expiryOffset = 0 - expiryOffset;
+				}
+				expiryInstant = expiryInstant.addMinutes(expiryOffset);
+			}
+		}
+		leaseModified = ifnull(lease.get("Modified_Time"),"").toString();
+		// Parse the wall clock in UTC and apply the ISO offset explicitly; do not use XXX parsing.
+		leaseModifiedInstant = zoho.currenttime;
+		if(leaseModified != "")
+		{
+			if(!leaseModified.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})"))
+			{
+				throw "Invalid CRM timestamp: " + leaseModified;
+			}
+			leaseModifiedInstant = leaseModified.subString(0,19).toTime("yyyy-MM-dd'T'HH:mm:ss","UTC");
+			if(leaseModified.length() == 25)
+			{
+				leaseModifiedOffset = leaseModified.subString(20,22).toLong() * 60 + leaseModified.subString(23,25).toLong();
+				if(leaseModified.subString(19,20) == "+")
+				{
+					leaseModifiedOffset = 0 - leaseModifiedOffset;
+				}
+				leaseModifiedInstant = leaseModifiedInstant.addMinutes(leaseModifiedOffset);
+			}
+		}
+		recentLease = leaseModified == "";
+		if(leaseModified != "")
+		{
+			recentLease = leaseModifiedInstant.addMinutes(30) >= zoho.currenttime;
+		}
+		futureExpiry = false;
+		if(expiry != "")
+		{
+			futureExpiry = expiryInstant >= zoho.currenttime;
+		}
+		if(recentLease || futureExpiry)
+		{
+			result.put("retryable",true);
+			result.put("message","A settlement recalculation is already running for this booking. Retry later.");
+			return result;
+		}
+		releaseExpired = Map();
+		releaseExpired.put("Active_Key",null);
+		releaseExpired.put("Status","Cancelled");
+		releaseExpired.put("Last_Error","Expired recalculation lease recovered");
+		recovered = standalone.jobs_conditionalUpdate(lease.get("id"),lease.get("Modified_Time"),releaseExpired);
+		if(recovered.get("error") == true)
+		{
+			throw "Recalculation lease changed; retry later";
+		}
+	}
+	leaseMap = Map();
+	leaseMap.put("Job_Type","Supplier Settlement Recalc");
+	leaseMap.put("Booking",bookingId);
+	leaseMap.put("Status","On Hold");
+	leaseMap.put("Active_Key",leaseKey);
+	leaseMap.put("Source_Function","settlement_recalculation_lease");
+	leaseMap.put("Locked_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC"));
+	leaseMap.put("Lock_Expires_At",zoho.currenttime.addMinutes(30).toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC"));
+	leaseResponse = zoho.crm.createRecord("Admin_Process_Jobs",leaseMap);
+	leaseId = ifnull(leaseResponse.get("id"),"").toString();
+	if(leaseId == "")
+	{
+		throw "Recalculation lease could not be acquired; retry later: " + leaseResponse;
+	}
+	// Verify the stored instant, not merely the submitted timestamp string.
+	storedLease = zoho.crm.getRecordById("Admin_Process_Jobs",leaseId);
+	storedExpiry = ifnull(storedLease.get("Lock_Expires_At"),"").toString();
+	// Parse the wall clock in UTC and apply the ISO offset explicitly; do not use XXX parsing.
+	storedExpiryInstant = zoho.currenttime;
+	if(storedExpiry != "")
+	{
+		if(!storedExpiry.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})"))
+		{
+			throw "Invalid CRM timestamp: " + storedExpiry;
+		}
+		storedExpiryInstant = storedExpiry.subString(0,19).toTime("yyyy-MM-dd'T'HH:mm:ss","UTC");
+		if(storedExpiry.length() == 25)
+		{
+			storedExpiryOffset = storedExpiry.subString(20,22).toLong() * 60 + storedExpiry.subString(23,25).toLong();
+			if(storedExpiry.subString(19,20) == "+")
+			{
+				storedExpiryOffset = 0 - storedExpiryOffset;
+			}
+			storedExpiryInstant = storedExpiryInstant.addMinutes(storedExpiryOffset);
+		}
+	}
+	if(storedExpiry == "")
+	{
+		throw "CRM did not persist the calculation lock expiry";
+	}
+	storedExpiryTime = storedExpiryInstant;
+	if(storedExpiryTime < zoho.currenttime.addMinutes(29) || storedExpiryTime > zoho.currenttime.addMinutes(31))
+	{
+		throw "CRM stored an inconsistent calculation lock time. No recalculation was started; check CRM timezone configuration.";
+	}
+	result = standalone.settlements_recalculateCore(bookingId);
+	if(recoverQueue && result.get("error") == false)
+	{
+		reconciliationErrors = List();
+		for each  candidate in queueSnapshot
+		{
+			try 
+			{
+				superseded = Map();
+				superseded.put("Status","Done");
+				superseded.put("Active_Key",null);
+				superseded.put("Locked_At",null);
+				superseded.put("Lock_Expires_At",null);
+				superseded.put("Completed_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC"));
+				superseded.put("Last_Error","");
+				superseded.put("Next_Run_At",null);
+				completedResult = Map();
+				completedResult.put("error",false);
+				completedResult.put("message","Supplier settlements recalculated immediately by widget");
+				completedResult.put("booking_id",bookingId);
+				completedResult.put("recalculation_lease_id",leaseId);
+				superseded.put("Last_Result_JSON",completedResult.toString());
+				// A new sync or scheduler claim changes Modified_Time: never discard that work.
+				reconciled = standalone.jobs_conditionalUpdate(candidate.get("id"),candidate.get("Modified_Time"),superseded);
+				if(reconciled.get("error") == true)
+				{
+					reconciliationErrors.add(candidate.get("id"));
+				}
+			}
+			catch (reconcileFailure)
+			{
+				reconciliationErrors.add(candidate.get("id"));
+			}
+		}
+		result.put("reconciliation_pending",reconciliationErrors);
+		if(reconciliationErrors.size() > 0)
+		{
+			result.put("error",true);
+			result.put("calculation_completed",true);
+			result.put("message","Settlements recalculated, but some jobs changed or could not be closed. Refresh the status before another recovery.");
+		}
+		else
+		{
+			result.put("message","Calculation recovered successfully. Refresh to check for newer queued work.");
+		}
+	}
+}
+catch (failure)
+{
+	result.put("error",true);
+	result.put("retryable",true);
+	result.put("message","Recalculation is incomplete: " + failure.toString());
+}
+if(leaseId != "")
+{
+	try 
+	{
+		release = Map();
+		release.put("Active_Key",null);
+		release.put("Status","Done");
+		if(result.get("error") != false)
+		{
+			release.put("Status","Error");
+		}
+		release.put("Completed_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss'+00:00'","UTC"));
+		releaseMessage = ifnull(result.get("message"),"").toString();
+		if(releaseMessage.length() > 2000)
+		{
+			releaseMessage = releaseMessage.subString(0,2000);
+		}
+		release.put("Last_Error","");
+		if(result.get("error") != false)
+		{
+			release.put("Last_Error",releaseMessage);
+		}
+		outcome = Map();
+		outcome.put("error",result.get("error") != false);
+		outcome.put("message",releaseMessage);
+		release.put("Last_Result_JSON",outcome.toString());
+		released = zoho.crm.updateRecord("Admin_Process_Jobs",leaseId,release);
+		if(ifnull(released.get("id"),"").toString() != leaseId)
+		{
+			throw "Lease release not confirmed";
+		}
+	}
+	catch (releaseError)
+	{
+		result.put("error",true);
+		result.put("message","Recalculation returned but its lease could not be released. Retry after lease expiry. " + releaseError);
+	}
+}
+return result;
+}

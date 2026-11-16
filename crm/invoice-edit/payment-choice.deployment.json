@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-13",
+  "status": "production_functions_published_and_read_back_widget_upload_pending",
+  "scope": "Edit supplier invoice: keep payments, explicitly correct an existing paid payment, or save then confirm a separate additional payment.",
+  "functions": {
+    "supplierinvoice_edit": "616617000174359025",
+    "supplierinvoiceedit_read": "616617000174317017",
+    "supplierinvoiceedit_write": "616617000174313025",
+    "supplierinvoiceedit_applyaccounting": "616617000174330023",
+    "supplierinvoiceedit_paymentaccountingplan": "616617000174579068",
+    "supplierinvoiceedit_payments": "616617000174613062",
+    "supplierinvoiceedit_addpayment": "616617000174610052"
+  },
+  "unique_fields_verified": [
+    {"module": "Supplier_Payments", "api_name": "Invoice_Edit_Key", "id": "616617000174635029", "unique": {"case_sensitive": false}},
+    {"module": "Supplier_Pay_Allocations", "api_name": "Invoice_Edit_Key", "id": "616617000174637061", "unique": {"case_sensitive": false}}
+  ],
+  "public_entrypoint": "supplierinvoice_register (existing OAuth entrypoint, operation=edit)",
+  "auth": "New functions are private standalone helpers; no additional public authentication setup.",
+  "behavior": [
+    "A payable change with existing allocations requires an explicit payment choice.",
+    "Correct payment requires actual-payment confirmation and a selected related Paid payment. It adjusts this invoice allocation and the payment total to fully settle this invoice, preserving unrelated allocations.",
+    "Keep payment derives invoice Status from paid amount and new payable; never marks an unpaid increase as paid.",
+    "Additional opens the existing payment form for date, Own account, supplier account and amount confirmation; only that flow uses the new server-side add_payment action.",
+    "Invoice Edit_Request stores the immutable payment/accounting plans and a lease. Applied corrections resume; unsaved Prepared corrections remain discardable.",
+    "New payments and allocations have unique operation keys; lost create responses resume without duplicate amounts.",
+    "Existing unposted payment entries retain their identity and regenerate lines using the production payment accounting calculation, including reimbursable proration and rounding.",
+    "Payment/Invoice_Status and Invoice_Date allocation copies are refreshed for the edited invoice. Unrelated invoice allocations are preserved.",
+    "Rebuild all invoice settlement allocations after verified payment updates. Unpaid_Invoiced_Amount is a formula and is not written.",
+    "Posted/exported accounting, reconciled or locked payment corrections, ambiguous duplicate entries, mismatched totals and concurrent changes fail closed."
+  ],
+  "validation": [
+    "34 invoice editor/server/accounting regression tests pass with real Deluge source transpiled against an in-memory CRM.",
+    "2 additional-payment form recovery and duplicate-submit tests pass.",
+    "Related invoice registration and payment account/filter/date/operation tests pass.",
+    "Playwright Edge verifies the real editor and styles with mocked CRM, including all three payment choices, cancellation before writes, explicit actual-payment confirmation and 320/390/1440px popup layouts.",
+    "Zoho compiled all seven functions; published source read back and compared.",
+    "Production COQL payment accounting lookup syntax and unique field metadata verified using read-only queries.",
+    "No actual supplier invoice or payment was created or modified for testing."
+  ],
+  "remaining_live_validation": "Upload the widget and verify an authorized real correction with each relevant option. No ZIP generated.",
+  "known_boundaries": [
+    "Payment accounting identity follows existing source-generated Names ending in -PAY-id / PAY-MULTI-*id or the legacy Supplier_Payment_id form. Manually renamed entries without these identifiers cannot be linked reliably because Accounting_Entries has no Supplier_Payment lookup.",
+    "Existing general-purpose payment creation outside this invoice correction flow remains on its current path."
+  ]
+}

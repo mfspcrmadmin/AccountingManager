@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-09",
+  "module": "Supplier_Invoices",
+  "status": "production_functions_published_widget_upload_pending_fields_not_deleted",
+  "functions": [
+    {
+      "api_name": "supplierinvoice_register",
+      "id": "616617000174090009",
+      "published_source_verified": true,
+      "file": "crm/supplierInvoice_register.dg"
+    },
+    {
+      "api_name": "rebuildsuppliersettlementtotals",
+      "id": "616617000163724050",
+      "published_source_verified": true,
+      "file": "crm/rebuildSupplierSettlementTotals.dg"
+    },
+    {
+      "api_name": "accent_resolvesupplierinvoiceaccountingentry",
+      "id": "616617000164322127",
+      "published_source_verified": true,
+      "file": "crm/resolveSupplierInvoiceAccountingEntry.dg"
+    }
+  ],
+  "fields": [
+    {
+      "api_name": "Accounting_Status",
+      "id": "616617000164263073"
+    },
+    {
+      "api_name": "Accounting_Posted_At",
+      "id": "616617000164263062"
+    }
+  ],
+  "live_audit": {
+    "function_catalog_count": 441,
+    "function_sources_checked": 215,
+    "scope": "All invoice, settlement, accounting, prepayment and Books named functions, plus all functions modified since these fields were created.",
+    "source_read_failures": [],
+    "accounting_status_counts": {
+      "(null)": 1033,
+      "Ready to Review": 779,
+      "Pending": 142
+    },
+    "accounting_posted_at_nonnull": 0,
+    "field_update_actions": "Connector returned only an acknowledgement without action data; workflow/layout/report dependencies still require verification."
+  },
+  "remaining": [
+    "User packages and uploads updated widget; never generate ZIP automatically.",
+    "Verify invoice reads and creation in uploaded widget.",
+    "Before deleting fields, preserve any required historical values and verify CRM workflow, layout, report, blueprint and external integration dependencies.",
+    "Delete the two Supplier_Invoices fields only; preserve same-named fields in other modules."
+  ],
+  "validation": {
+    "production_records_created_or_recalculated": false,
+    "regression_tests": {
+      "total": 129,
+      "passed": 127,
+      "failed": 2
+    },
+    "unrelated_test_failures": "Invoice deletion tests: missing Supplier_Pay_Allocations.Payment_Accounting_Status in current live metadata."
+  }
+}

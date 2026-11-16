@@ -1,0 +1,93 @@
+@layer widget-views {
+[data-prepayment-workflow] .prepayment-workflow-layout { grid-template-columns: minmax(0,45fr) minmax(0,55fr); overflow: hidden; }
+[data-prepayment-workflow] .prepayment-workflow-summary { background: #f7f8fa; }
+[data-prepayment-workflow] .prepayment-workflow-summary, [data-prepayment-workflow] .prepayment-workflow-form { padding: 16px 20px; }
+[data-prepayment-workflow] .panel-eyebrow, [data-prepayment-workflow] .field > span, [data-prepayment-workflow] dt { text-transform: none; letter-spacing: 0; font-size: 12px; }
+[data-prepayment-workflow] .card-purchase-workflow-context { padding: 0; border: 0; background: transparent; }
+[data-prepayment-workflow] .card-purchase-workflow-context dl { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 16px; }
+[data-prepayment-workflow] dd { margin: 3px 0 0; font-size: 13px; }
+[data-prepayment-workflow] dt, [data-prepayment-workflow] .prepayment-secondary { color: #687380; font-size: 12px; }
+.prepayment-context-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 16px; overflow-wrap: anywhere; }
+.prepayment-context-amount { color: #a44d18; font-size: 22px; font-variant-numeric: tabular-nums; }
+.prepayment-context-references { color: #687380; font-size: 12px; line-height: 1.5; margin: 5px 0 14px; }
+[data-prepayment-workflow] .prepayment-reported-by, [data-prepayment-workflow] .prepayment-observations { grid-column: 1/-1; }
+[data-prepayment-workflow] .prepayment-reported-by dd { overflow-wrap: anywhere; }
+.prepayment-context-status dd { display: inline-block; background: #f2f4f7; color: #475467; border-radius: 12px; padding: 3px 7px; font-size: 12px; }
+[data-prepayment-workflow] .card-purchase-workflow-documents { grid-column: 1/-1; margin: 0; }
+[data-prepayment-workflow] .prepayment-document-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; border: 0; border-bottom: 1px solid #eef0f3; border-radius: 0; background: #fff; text-align: left; }
+.prepayment-document-row > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.prepayment-document-row svg { width: 18px; height: 18px; flex-shrink: 0; }
+[data-prepayment-workflow] .prepayment-document-row::before { content: none; }
+.prepayment-document-row .prepayment-preview-action { margin-left: auto; color: #a44d18; padding: 5px; border-radius: 5px; }
+.prepayment-document-row:hover .prepayment-preview-action { background: #fff3e7; }
+.prepayment-document-row:active .prepayment-preview-action { background: #ffe6d1; }
+[data-prepayment-workflow] .prepayment-missing { color: #687380; font-size: 13px; font-weight: 400; }
+.prepayment-local-error { font-size: 12px; color: #a3342d; overflow-wrap: anywhere; }
+.prepayment-loading { font-size: 12px; color: #687380; }
+.prepayment-loading::before { content: ''; display: inline-block; width: 12px; height: 12px; margin-right: 7px; border: 2px solid #e1e5e9; border-top-color: #a44d18; border-radius: 50%; animation: inline-feedback-spin .8s linear infinite; }
+[data-prepayment-workflow] .prepayment-services { border: 0; border-top: 1px solid #dfe3e8; background: transparent; border-radius: 0; padding: 0; }
+[data-prepayment-workflow] .prepayment-services summary { display: flex; align-items: center; gap: 8px; padding: 10px 0; font-size: 13px; cursor: pointer; }
+.prepayment-service-count { margin-left: auto; font-size: 12px; font-weight: 400; color: #687380; }
+[data-prepayment-workflow-services] { padding: 0; }
+[data-prepayment-workflow-services] ul { max-height: clamp(180px,32dvh,320px); overflow-y: auto; margin: 8px 0; padding: 0; list-style: none; }
+[data-prepayment-workflow-services] li { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; padding: 10px; margin-bottom: 8px; border: 1px solid #e1e5e9; border-radius: 6px; background: #fff; }
+.prepayment-service-description { min-width: 0; overflow-wrap: anywhere; }
+.prepayment-service-description strong { display: block; font-weight: 600; font-size: 13px; }
+.prepayment-service-description span { display: block; margin-top: 4px; font-size: 12px; color: #687380; }
+[data-prepayment-workflow] .prepayment-service-price span { font-size: 12px; text-transform: none; letter-spacing: 0; }
+[data-prepayment-workflow] .prepayment-services-total { padding: 0; margin: 0; font-size: 12px; }
+[data-prepayment-workflow-allocations] { margin-top: 16px; border: 0; border-top: 1px solid #dfe3e8; border-radius: 0; padding: 12px 0 0; }
+[data-prepayment-workflow-allocations] h4, .prepayment-form-heading, .prepayment-allocation-group h4 { margin: 0 0 12px; font-size: 13px; font-weight: 600; }
+[data-prepayment-workflow-allocations] li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; font-size: 12px; }
+.prepayment-allocation-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.prepayment-allocation-metrics dd { font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-prepayment-workflow-new-invoice] { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+[data-prepayment-workflow-new-invoice] > .prepayment-form-heading { grid-column: 1/-1; border-top: 1px solid #dfe3e8; padding-top: 14px; margin-top: 4px; margin-bottom: 0; }
+.prepayment-allocation-group { margin-top: 16px; padding-top: 14px; border-top: 1px solid #dfe3e8; }
+.prepayment-money-control { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.prepayment-money-control input { min-width: 0; width: 100%; }
+.prepayment-money-control > span { font-size: 12px; color: #687380; }
+.prepayment-calculated-summary { display: block; flex: 1; padding: 8px 0; font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+[data-prepayment-summary="total-payable"] { color: #a44d18; font-size: 20px; }
+[data-prepayment-workflow] .prepayment-observations.is-empty { display: flex; align-items: baseline; gap: 8px; }
+[data-prepayment-workflow] .prepayment-observations.is-empty dd { margin: 0; }
+[data-prepayment-workflow] input.prepayment-calculated { border: 0; background: #f7f8fa; box-shadow: none; font-weight: 600; padding: 9px; }
+[data-prepayment-workflow] label:has([data-prepayment-workflow-total-payable]) { grid-column: 1/-1; padding-top: 10px; border-top: 1px solid #e1e5e9; }
+[data-prepayment-workflow] [data-prepayment-workflow-total-payable] { color: #a44d18; font-size: 18px; }
+.prepayment-fixed-footer { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 20px; border-top: 1px solid #dfe3e8; background: #fff; }
+.prepayment-fixed-footer [data-prepayment-workflow-message] { flex: 1; margin: 0; min-width: 0; font-size: 12px; }
+.prepayment-fixed-footer [type=submit] { margin-left: auto; }
+[data-prepayment-workflow] :is(button,summary,[tabindex]):focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+.prepayment-field-error { color: #a3342d; font-size: 12px; }
+@media(max-width:760px) { [data-prepayment-workflow] .prepayment-workflow-layout { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,38%) minmax(0,1fr); } .prepayment-fixed-footer { padding: 10px 16px; } }
+@media(max-width:420px) { [data-prepayment-workflow-new-invoice] { grid-template-columns: minmax(0,1fr); } }
+@media(prefers-reduced-motion:reduce) { .prepayment-loading::before { animation: none; } }
+
+/* Shared compact reading sections in prepayment and card-purchase workflows. */
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-services {
+  margin: 16px 0 0; padding: 12px 0 0; height: auto; min-height: 0;
+  border: 0; border-top: 1px solid #dfe3e8; border-radius: 0; background: transparent;
+}
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-services > summary {
+  display: flex; flex-wrap: nowrap; justify-content: flex-start; align-items: center; gap: 4px;
+  padding: 0 0 8px; font-size: 12px; font-weight: 600; color: #344054;
+}
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) :is(.prepayment-service-count, .card-reading-count) { margin: 0; white-space: nowrap; font-size: 12px; color: #687380; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .associated-services-total { margin-left: auto; font-size: 12px; color: #344054; font-weight: 500; text-align: right; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-services-edit { flex-shrink: 0; margin: 0 0 0 4px; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) :is([data-prepayment-workflow-services], #card-purchase-workflow-service) { padding: 0; height: auto; min-height: 0; max-height: none; overflow: visible; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-services ul { display: grid; gap: 8px; margin: 0; padding: 0; max-height: clamp(180px,32dvh,320px); overflow-y: auto; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-services li { margin: 0; padding: 8px 10px; gap: 6px 10px; grid-template-columns: minmax(0,1fr) auto; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) :is(.prepayment-service-description, .card-reading-service-name) strong { font-size: 12px; color: #344054; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-service-price { text-align: right; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-service-price span { margin: 0 0 3px; font-size: 11px; font-weight: 400; color: #687380; }
+:is([data-prepayment-workflow], #card-purchase-workflow-modal) .prepayment-service-price strong { color: #344054; font-size: 13px; }
+[data-prepayment-workflow] [data-prepayment-workflow-allocations], #card-purchase-associated-invoices {
+  margin: 16px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid #dfe3e8; border-radius: 0; background: transparent;
+}
+[data-prepayment-workflow-allocations] h4, #card-purchase-associated-invoices h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #344054; }
+[data-prepayment-workflow-allocations] p.prepayment-secondary, #card-purchase-associated-invoices p { margin: 0; font-size: 12px; font-weight: 400; color: #687380; }
+[data-prepayment-workflow-allocations] .prepayment-allocation-metrics { margin: 12px 0 0; padding: 10px 0 0; border-top: 1px solid #e3e6ea; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+[data-prepayment-workflow-allocations] .prepayment-allocation-metrics dd { margin-top: 4px; color: #344054; font-size: 14px; }
+
+}

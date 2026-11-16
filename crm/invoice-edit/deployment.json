@@ -1,0 +1,120 @@
+{
+  "date": "2026-10-09",
+  "status": "production_functions_published_widget_upload_pending",
+  "scope": "Edit Supplier_Invoices from the existing Edit button. Supplier and settlement membership remain unchanged. Credit notes and posted/cancelled/reconciled records require a separate correction workflow.",
+  "editable": [
+    "Name",
+    "Invoice_Date",
+    "Invoice_Type",
+    "Invoice_File (attach corrected document; retain originals)",
+    "Invoice_Amount_Excl_VAT",
+    "VAT_percentage",
+    "IRPF_percentage",
+    "Additional_Amount_Excl_VAT",
+    "Additional_VAT_percentage",
+    "Additional_IRPF_percentage",
+    "Reimbursable_Expense",
+    "Inv_Set_Allocations.Allocated_Amount (existing settlements)"
+  ],
+  "production_fields": [
+    {
+      "module": "Supplier_Invoices",
+      "api_name": "Edit_Status",
+      "id": "616617000174369027"
+    },
+    {
+      "module": "Supplier_Invoices",
+      "api_name": "Edit_Request",
+      "id": "616617000174369037"
+    },
+    {
+      "module": "Accounting_Entry_Lines",
+      "api_name": "Invoice_Edit_Key",
+      "id": "616617000174333018",
+      "unique": true
+    }
+  ],
+  "helpers": [
+    {
+      "api_name": "supplierinvoiceedit_read",
+      "id": "616617000174317017"
+    },
+    {
+      "api_name": "supplierinvoiceedit_write",
+      "id": "616617000174313025"
+    },
+    {
+      "api_name": "supplierinvoiceedit_accountingplan",
+      "id": "616617000174330020"
+    },
+    {
+      "api_name": "supplierinvoiceedit_applyaccounting",
+      "id": "616617000174330023"
+    },
+    {
+      "api_name": "supplierinvoice_edit",
+      "id": "616617000174359025"
+    }
+  ],
+  "published": [
+    {
+      "api_name": "supplierinvoiceedit_accountingplan",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "supplierinvoiceedit_applyaccounting",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "supplierinvoice_edit",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "createsupplierpaymentfrominvoices",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "managesupplierpaymentallocations",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "accent_resolvesupplierinvoiceaccountingentry",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "supplierinvoice_register",
+      "published_source_verified": true
+    }
+  ],
+  "oauth_endpoint": "Existing supplierinvoice_register OAuth endpoint dispatches operation=edit to private helpers.",
+  "coherence": [
+    "Recompute VAT, withholding, totals and payable using two-decimal rounding.",
+    "Preserve payments and their allocations; reject reductions below their reserved amounts or prepayment allocations.",
+    "Update invoice Paid/Partially Paid status from verified payments and corrected payable.",
+    "Update existing settlement allocations; rebuild totals without adding service costs a second time.",
+    "Plan existing unposted accounting entries before writing; create and verify new lines with unique revision keys before removing prior lines; verify final balanced totals.",
+    "Refresh linked Card_Purchases.Invoice_Number when the invoice number changes.",
+    "Supplier_Invoice_Lines are informational booking-service snapshots; editing invoice header amounts does not redistribute those service costs.",
+    "Suppress workflow triggers for controlled writes; derive related state explicitly."
+  ],
+  "recovery": [
+    "Server-side Edit_Request keeps an immutable correction plan and before-values; Edit_Status tracks Pending/Complete/Discarded separately from financial Status.",
+    "Conditional writes use If-Unmodified-Since; repeat requests reuse the same operation key.",
+    "A five-minute lease avoids concurrent retries; a caught failure releases it.",
+    "Before invoice mutation, a rejected correction can be discarded; after mutation it must be resumed or reviewed.",
+    "Widget and production guards block payment creation/allocation changes and manual accounting sync while a correction is pending; widget deletion also blocks.",
+    "Native CRM edits and unrelated external integrations do not share this operation lock. Conflicting changes stop recovery for review."
+  ],
+  "validation": {
+    "automated_tests_passed": 124,
+    "browser_checks": "Desktop and 390px mobile; required fields/reviews, expense recalculation, settlement allocation, file chooser/upload, save refresh and lost-response recovery.",
+    "deluge_compilation": "All new and modified functions accepted by Zoho.",
+    "real_invoice_edits_executed": false,
+    "zip_generated": false
+  },
+  "remaining": [
+    "User packages and uploads updated widget.",
+    "Validate embedded-widget access with the intended finance profile and save a controlled correction; inspect invoice, allocation, settlement and accounting records.",
+    "Existing repository-wide deletion failures involving missing Supplier_Pay_Allocations.Payment_Accounting_Status are separate from this feature."
+  ]
+}

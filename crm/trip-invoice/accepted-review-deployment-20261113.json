@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-13",
+  "function": "tripinvoice_manage",
+  "published": true,
+  "source_verified": true,
+  "local_tests_passed": 24,
+  "live_check": {
+    "booking": "MFSP152165E",
+    "booking_id": "616617000158325892",
+    "action": "inspect",
+    "result": "{\"success\":true,\"existing\":false,\"historical_required\":true,\"historical_amount\":5745.0,\"detailed_net\":0,\"client\":{\"name\":\"Huffman Travel\",\"id\":\"616617000003247903\"},\"mfsp\":\"MFSP152165E\",\"sales_price\":5745,\"commission\":925,\"currency\":\"EUR\",\"balance\":0}"
+  },
+  "behavior": "Honors the exact settlement review exception in the latest closure acceptance note only when the settlement has not changed since acceptance. Acceptance evidence is included in the invoice preview snapshot.",
+  "created_invoice": false
+}

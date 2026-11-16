@@ -1,0 +1,14 @@
+{
+  "function": "supplierinvoiceedit_read",
+  "status": "published_and_source_verified",
+  "reason": "The published helper allowed payment recovery keys but omitted Vendor_Payment lookups for Prepayments and Card_Purchases, causing allocation validation to fail.",
+  "change": "Added exactly Prepayments.Vendor_Payment and Card_Purchases.Vendor_Payment to the read allowlist; no financial writes or validation bypasses.",
+  "backup": "_local/supplierinvoiceedit_read.before-payment-links-20261019.dg",
+  "verification": {
+    "crm_compile_and_update": "SUCCESS",
+    "published_allowlist_verified": true,
+    "read_only_coql_checks": "Both lookup queries accepted by CRM (204, no matches for sentinel id 0)",
+    "local_tests_passed": 100,
+    "payment_executed": false
+  }
+}

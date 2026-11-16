@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-13",
+  "function": "supplierinvoiceedit_filedigest",
+  "id": "616617000174816048",
+  "published_and_read_back": true,
+  "change": "Expose download HTTP status and CRM error code with connection-specific recovery instructions; preserve verification guards.",
+  "invoice": "616617000173365008",
+  "invoice_data_modified": false,
+  "execution_verified": false,
+  "pending": "Resume the correction in the widget to obtain the actual CRM download error; no callable function execution tool is available in this session.",
+  "tests": "60 invoice edit tests passed"
+}

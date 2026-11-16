@@ -1,0 +1,50 @@
+string standalone.supplierInvoiceRegistration_ensureRecord(String moduleName, String registrationKey, Map values)
+{
+result = {"success":false};
+try
+{
+    if(moduleName != "Inv_Set_Allocations" && moduleName != "Supplier_Invoice_Lines") { throw "Unsupported registration record."; }
+    if(!registrationKey.matches("[A-Za-z0-9-]+")) { throw "Invalid registration key."; }
+    lookup = standalone.supplierInvoiceRegistration_read(moduleName,"Registration_Key",registrationKey).toMap();
+    if(lookup.get("success") != true) { throw lookup.get("message"); }
+    rows = lookup.get("records");
+    existing = Map();
+    if(rows.size() > 1) { throw "Duplicate registration records require review."; }
+    if(rows.size() == 1) { existing = rows.get(0); }
+    if(existing.isEmpty())
+    {
+        values.put("Registration_Key",registrationKey);
+        created = zoho.crm.createRecord(moduleName,values,{"trigger":List()});
+        recordId = ifnull(created.get("id"),"").toString();
+        if(recordId == "" && created.get("code") == "DUPLICATE_DATA" && created.get("details") != null)
+        {
+            recordId = ifnull(created.get("details").get("id"),"").toString();
+        }
+        if(recordId == "") { throw "Registration record was not confirmed: " + created.toString(); }
+        existing = zoho.crm.getRecordById(moduleName,recordId.toLong());
+    }
+    if(existing.get("Registration_Key") != registrationKey) { throw "Registration key collision; no existing record was modified."; }
+    // A retry may only accept the same associations and monetary values.
+    for each fieldName in values.keys()
+    {
+        expected = values.get(fieldName);
+        actual = existing.get(fieldName);
+        if(fieldName == "Vendor_Invoice" || fieldName == "Vendor_Settlement" || fieldName == "Supplier_Invoice" || fieldName == "Booking_Service")
+        {
+            if(actual == null || actual.get("id").toString() != expected.get("id").toString()) { throw "Registration association changed; review the existing record."; }
+        }
+        else if(fieldName == "Allocated_Amount" || fieldName == "Amount")
+        {
+            if(actual == null || actual.toDecimal() != expected.toDecimal()) { throw "Registration amount changed; review the existing record."; }
+        }
+        else if(fieldName == "Status" && actual != expected) { throw "Registration allocation is no longer active."; }
+    }
+    result.put("success",true);
+    result.put("id",existing.get("id"));
+}
+catch (e)
+{
+    result.put("message",e.toString());
+}
+return result.toString();
+}

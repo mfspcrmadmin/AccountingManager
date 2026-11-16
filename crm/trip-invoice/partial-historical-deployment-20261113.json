@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-13",
+  "change": "Partial historical invoice collections",
+  "functions": [
+    {
+      "api_name": "tripinvoice_manage",
+      "id": "616617000177035431",
+      "state": "active",
+      "has_draft": false,
+      "rest_api_mode": [
+        "Oauth"
+      ],
+      "modified_time": "2026-11-13T11:43:47+01:00",
+      "published_source_verified": true
+    },
+    {
+      "api_name": "tripinvoice_collections",
+      "id": "616617000177026279",
+      "state": "active",
+      "has_draft": false,
+      "rest_api_mode": [
+        "None"
+      ],
+      "modified_time": "2026-11-13T11:43:53+01:00",
+      "published_source_verified": true
+    }
+  ],
+  "checks": {
+    "local_tests_passed": 20,
+    "live_execution": "Not performed; execution tool unavailable",
+    "widget": "Local changes still require widget update"
+  },
+  "auth_activation_required": false
+}

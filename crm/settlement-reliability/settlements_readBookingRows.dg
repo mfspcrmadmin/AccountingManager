@@ -1,0 +1,28 @@
+string standalone.settlements_readBookingRows(String moduleName, String bookingId)
+{
+if(!bookingId.matches("[0-9]+")) { throw "Invalid booking id"; }
+fields = "id,Name,Booking,Supplier,Supplier_Name,Ezus_Supplier_Reference,Status_EZUS,Total_Purchase_Price,Service_Date,Number_of_Pax,Supplier_Settlement";
+if(moduleName == "Supplier_Settlements")
+{
+ fields = "id,Name,Booking,Supplier,Supplier_Name,Ezus_Supplier_Reference,Technical_Key,Settlement_Type,Admin_Status,Booking_Status,Service_Count,Total_Service_Cost";
+}
+else if(moduleName != "Booking_Services") { throw "Unsupported settlement input module"; }
+records = List();
+complete = false;
+offset = 0;
+pages = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25".toList(",");
+for each page in pages
+{
+ if(complete == false)
+ {
+  response = standalone.jobs_query("select " + fields + " from " + moduleName + " where Booking = '" + bookingId + "' order by id asc limit " + offset + ", 200");
+  for each row in response.get("data") { records.add(row); }
+  complete = response.get("more_records") == false;
+  offset = offset + 200;
+ }
+}
+if(complete == false) { throw "Settlement input exceeds 5000 records; no partial snapshot will be used"; }
+result = Map();
+result.put("data",records);
+return result;
+}

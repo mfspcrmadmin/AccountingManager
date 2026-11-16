@@ -1,0 +1,33 @@
+string standalone.jobs_conditionalUpdate(String jobId, String modifiedTime, Map changes)
+{
+if(jobId == "" || modifiedTime == "") { throw "Job update requires an id and Modified_Time"; }
+rows = List();
+rows.add(changes);
+body = Map();
+body.put("data",rows);
+body.put("trigger",List());
+headers = Map();
+headers.put("Content-Type","application/json");
+headers.put("If-Unmodified-Since",modifiedTime);
+response = invokeurl
+[
+ url :"https://www.zohoapis.eu/crm/v8/Admin_Process_Jobs/" + jobId
+ type :PUT
+ parameters:body.toString()
+ headers:headers
+ detailed:true
+ connection:"crm_oauth_connection"
+];
+result = Map();
+result.put("error",true);
+result.put("conflict",response.get("responseCode") == 412);
+if(response.get("responseCode") == 412) { return result; }
+payload = response.get("responseText").toString().toMap();
+if(!isnull(payload.get("data")) && payload.get("data").size() == 1)
+{
+ row = payload.get("data").get(0);
+ if(row.get("code") == "SUCCESS" && row.get("status") == "success") { result.put("error",false); }
+}
+if(result.get("error") == true) { throw "Job update not confirmed: " + payload; }
+return result;
+}

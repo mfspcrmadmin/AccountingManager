@@ -1,0 +1,101 @@
+{
+  "date": "2026-10-08",
+  "scope": "Supplier settlement calculation and Create Invoice reliability",
+  "production": {
+    "field": {
+      "module": "Admin_Process_Jobs",
+      "api_name": "Active_Key",
+      "unique_case_insensitive": true
+    },
+    "functions": [
+      {
+        "api_name": "jobs_query",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "jobs_conditionalupdate",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "settlements_readbookingrows",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "settlements_deleteservice",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "settlements_recalculatecore",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "recalculatesuppliersettlementsforbooking",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "jobs_processadminprocessjob",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "jobs_enqueueadminprocessjob",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "jobs_processpendingadminprocessjobs",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "deletebookingservice",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "syncservicesfromezuswithtoken",
+        "published_source_matches": true
+      },
+      {
+        "api_name": "bp_orchestratebookingtransition",
+        "published_source_matches": true
+      }
+    ]
+  },
+  "validation": {
+    "automated_tests_passed": 46,
+    "crm_compilation": "All published functions accepted",
+    "read_queries": "COQL input and scheduler queries accepted by production CRM",
+    "end_to_end_live_execution": "Not performed: no function execution capability available; no real invoices, payments or deletions created as test data"
+  },
+  "widget": {
+    "files": [
+      "app/scripts/bookings.js",
+      "app/scripts/main.js"
+    ],
+    "deployment": "Local changes; user must package and upload",
+    "zip_generated": false
+  },
+  "preserved": [
+    "Existing invoice/payment relationships",
+    "Legacy Cancel_Services_for_Dead_Booking workflow for Tourplan",
+    "Scheduler frequency and 15-job budget",
+    "Existing business cancellation/charge policies"
+  ],
+  "operational_notes": [
+    "Active_Key values QUEUED:<dedup> coalesce waiting requests; processing clears the slot so subsequent events create a successor.",
+    "On Hold jobs with Source_Function settlement_recalculation_lease are execution locks. They are not pending business requests; released leases are Done and expired leases are recovered on next recalculation.",
+    "Manual and scheduled recalculations share the unique per-booking lease. Missing Technical_Key or incomplete snapshots fail closed and require reconciliation or retry.",
+    "Due Pending/Retry jobs are FIFO by Created_Time; Priority does not override FIFO.",
+    "Failed final writes retain Processing until lock-expiry recovery; no false Done is reported.",
+    "Historical timestamp fields are not rewritten. Recovery also checks CRM Modified_Time to avoid prematurely reclaiming legacy locks."
+  ],
+  "pending_validation": [
+    "Run one manual and one scheduled recalculation with existing invoices and verify unchanged invoice/payment associations.",
+    "Exercise two concurrent recalculations in Zoho to validate unique-lease behavior and conditional claim responses.",
+    "Check a real authorized EZUS cancellation with charges, Dead transition and service deletion; verify the queued recalc and resulting costs reflect EZUS.",
+    "Upload widget and verify refresh/partial-error notices in the embedded CRM context."
+  ],
+  "backups": "crm/settlement-reliability/backups",
+  "technical_references": [
+    "https://www.zoho.com/crm/developer/docs/api/v8/update-records.html",
+    "https://www.zoho.com/deluge/help/functions/common/totime.html",
+    "https://www.zoho.com/deluge/help/webhook/invokeurl-api-task.html"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-08",
+  "scope": "Suppliers > Create Invoice: settlement calculation status",
+  "production": {
+    "function": "recalculatesuppliersettlementsforbooking",
+    "published_source_verified": true,
+    "change": "Released execution leases now record Done/Error and explicit Last_Result_JSON outcome; failed manual runs are visible."
+  },
+  "widget": {
+    "deployment": "Local changes ready for user packaging and upload",
+    "zip_generated": false,
+    "poll_seconds": 30,
+    "features": [
+      "Booking-scoped pending/running/failed/on-hold status, including bookings with services but no settlements",
+      "Last calculation time, CRM error and manual retry through the existing protected function",
+      "Automatic complete COQL settlement refresh with preserved valid selections, document and allocation amounts",
+      "Stale selected-settlement warning; removed/foreign-supplier selections discarded",
+      "Unknown state on denied/incomplete reads; late responses ignored after supplier change or close"
+    ]
+  },
+  "validation": {
+    "automated_tests_passed": 57,
+    "browser": "Headless Edge, mocked CRM, actual status renderer, 390/1440px widths, literal error text and retry state",
+    "production": "Read-only COQL queries accepted; function compilation and published source verified",
+    "live_widget": "Requires upload and verification in the embedded CRM context"
+  },
+  "constraints": [
+    "The CRM user needs read access to Admin_Process_Jobs, Booking_Services and Supplier_Settlements; lack of access displays an explicit unknown status.",
+    "Discovery is limited to bookings linked to this supplier through existing settlements or booking services.",
+    "Polling stops on close; retries are explicit and do not create invoices or payments.",
+    "No production invoice, payment or deletion was executed for testing."
+  ],
+  "files": [
+    "app/scripts/settlement-calculation.js",
+    "app/scripts/invoice-create.js",
+    "app/scripts/dom.js",
+    "app/styles/invoices.css",
+    "app/widget.html"
+  ],
+  "backup": "crm/settlement-reliability/backups/recalculatesuppliersettlementsforbooking-before-status.dg"
+}

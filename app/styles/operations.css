@@ -1,3 +1,30 @@
+@layer widget-views {
+.card-alhambra-commission { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+.card-alhambra-commission h4 { margin: 0 0 12px; }
+.card-alhambra-commission p { font-size: 12px; line-height: 1.5; }
+.card-alhambra-commission fieldset { border: 0; padding: 0; margin: 12px 0; min-width: 0; }
+.card-alhambra-commission legend { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.card-commission-totals { display: grid; gap: 8px; margin: 0; }
+.card-commission-totals > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.card-commission-totals dd { margin: 0; font-weight: 600; }
+.card-commission-totals > div:last-child { border-top: 1px solid var(--line); padding-top: 8px; color: var(--accent-strong); }
+.card-commission-amount { display: grid; gap: 6px; margin: 16px 0; padding: 14px 16px; border: 1px solid #f4d4ae; border-radius: 8px; background: #fff7ed; color: var(--text); }
+.card-commission-amount > span { font-size: 13px; font-weight: 600; }
+.card-commission-amount > strong { font-size: 28px; line-height: 1.2; color: var(--accent-strong); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.card-commission-amount p { margin: 2px 0; }
+.card-commission-amount small { font-size: 11px; line-height: 1.5; color: var(--muted); }
+.card-supplier-breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card-supplier-breakdown .card-commission-amount { margin: 0; padding: 12px; }
+.card-commission-amount h5 { margin: 0; font-size: 15px; color: var(--accent-strong); }
+.card-commission-amount dl { display: grid; gap: 10px; margin: 8px 0 0; }
+.card-commission-amount dl > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 8px; }
+.card-commission-amount dt { font-size: 12px; }
+.card-commission-amount dd { margin: 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.card-split-payment-total { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 6px 12px; margin: 14px 0; }
+.card-split-payment-total > span { font-size: 13px; font-weight: 600; }
+.card-split-payment-total > strong { font-size: 24px; color: var(--accent-strong); }
+.card-split-payment-total small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; line-height: 1.5; }
+@media (max-width: 520px) { .card-supplier-breakdown { grid-template-columns: minmax(0, 1fr); } }
 .operations-header {
   align-items: flex-start;
 }
@@ -40,6 +67,8 @@
 
 #operations-table-wrap.is-card-purchases .operations-results-table.has-column-widths { min-width: 100%; table-layout: fixed; }
 .operations-results-table .card-purchase-review-cell { width: 48px; }
+#operations-table-wrap.is-card-purchases .card-purchase-review-cell { width: 104px; min-width: 104px; }
+#operations-table-wrap.is-card-purchases .prepayment-row-actions { justify-content: center; }
 
 .operations-panel .operations-empty-state:not([hidden]) {
   flex: 1 1 auto;
@@ -212,7 +241,7 @@
 .ministry-export-picker-row small { margin-top: 3px; color: var(--muted); font-size: 11px; }
 @media (max-width: 560px) { .ministry-export-picker-row { grid-template-columns: 1fr; gap: 8px; } }
 .ministry-register-table-wrap { min-height: 0; height: 100%; overflow: auto; }
-.ministry-register-table { min-width: 1880px; }
+.ministry-register-table { width: 100%; min-width: max(100%, 1880px); }
 .ministry-register-table th, .ministry-register-table td { white-space: nowrap; }
 .ministry-register-table thead th { position: sticky; top: 0; z-index: 2; }
 .ministry-register-table thead .table-columns-gear-cell { z-index: 4; }
@@ -584,6 +613,13 @@
 .operations-panel:has(#prepayments-workspace:not([hidden])) > .operations-header { margin-bottom: 12px; }
 .prepayments-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; }
 .prepayments-refresh { margin-left: auto; }
+.prepayments-refresh.is-refreshing, #card-purchases-refresh.is-refreshing { position: relative; color: transparent; cursor: progress; }
+.prepayments-refresh.is-refreshing::after, #card-purchases-refresh.is-refreshing::after { content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid #e4ded8; border-top-color: #ed741c; border-radius: 50%; animation: operations-refresh-spin .8s linear infinite; }
+@keyframes operations-refresh-spin { to { transform: rotate(360deg); } }
+.operations-loading { display: flex; align-items: center; gap: 10px; }
+.operations-loading::before { content: ""; flex: 0 0 auto; width: 18px; height: 18px; border: 2px solid #e4ded8; border-top-color: #ed741c; border-radius: 50%; animation: operations-refresh-spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .operations-loading::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .prepayments-refresh.is-refreshing::after, #card-purchases-refresh.is-refreshing::after { animation: none; } }
 /* On narrow screens the filters may exceed the viewport. Let the existing
    shell scroll the complete panel instead of overflowing its zero flex basis. */
 @media (max-width: 720px) {
@@ -638,9 +674,22 @@
 .prepayment-record-link { padding: 0; border: 0; background: transparent; color: #2458a6; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .prepayment-record-link:hover { text-decoration: underline; }
 .prepayments-table { width: 100%; min-width: 880px; }
+.prepayments-table .card-purchase-review-cell { width: 128px; min-width: 128px; }
 .table-wrap .prepayments-table thead .table-columns-gear-cell { z-index: 4; }
 .prepayments-table th, .prepayments-table td { text-align: center; vertical-align: middle; }
 .prepayments-table td { font-size: 12px; }
+.prepayment-coverage { display: grid; gap: 7px; min-width: 120px; max-width: 180px; margin-inline: auto; color: #92400e; }
+.prepayment-coverage-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 3px 8px; text-align: left; }
+.prepayment-coverage-heading strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.prepayment-coverage-heading > span { font-size: 11px; }
+.prepayment-coverage-track { display: block; height: 6px; overflow: hidden; border-radius: 8px; background: #e5e7eb; }
+.prepayment-coverage-track > span { display: block; height: 100%; border-radius: inherit; background: #d97706; }
+.prepayment-coverage.is-full { color: #166534; }
+.prepayment-coverage.is-full .prepayment-coverage-track > span { background: #15803d; }
+.prepayment-request-type { display: inline-flex; padding: 5px 9px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid transparent; }
+.prepayment-request-type.is-partial { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+.prepayment-request-type.is-full { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+.prepayment-request-type.is-unknown, .prepayment-coverage.is-unknown { color: var(--muted); }
 .prepayments-table .prepayment-record-link, .prepayments-table .card-purchase-file { text-align: center; }
 .prepayments-table .prepayment-row-actions { justify-content: center; }
 .prepayments-table .prepayment-documents { justify-items: center; }
@@ -754,10 +803,9 @@
 .prepayment-bank-toolbar > .button { flex: 0 0 auto; white-space: nowrap; min-height: 36px; padding: 6px 10px; }
 .prepayment-selection-count { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-width: 100px; min-height: 28px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 20px; background: #f2f4f7; color: #475467; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .prepayment-bank-dialog {
-  width: min(1040px, calc(100vw - 32px));
-  height: min(880px, calc(100vh - 32px));
-  height: min(880px, calc(100dvh - 32px));
-  max-height: none;
+  width: min(860px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100dvh - 32px);
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--line);
@@ -766,9 +814,26 @@
   color: var(--text);
   box-shadow: 0 24px 64px #10182833;
 }
-.prepayment-bank-dialog::backdrop { background: #10182866; }
-.prepayment-bank-dialog > form { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100%; min-width: 0; min-height: 0; }
-.prepayment-bank-dialog-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--line); }
+.prepayment-bank-dialog, .prepayment-bank-preparation { --accent: #147d83; --color-primary: #147d83; --color-action: #147d83; --color-action-hover: #0f6267; --focus-ring: 0 0 0 3px #147d8326; }
+.prepayment-bank-dialog::backdrop, .prepayment-bank-preparation::backdrop { background: #10182866; }
+.prepayment-bank-preparation { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: #fff; color: var(--text); box-shadow: 0 24px 64px #10182833; }
+.prepayment-bank-preparation h3 { margin: 14px 0 8px; font-size: 18px; }
+.prepayment-bank-preparation p { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.prepayment-bank-preparation details { color: var(--muted); font-size: 12px; margin: 16px 0; }
+.prepayment-bank-preparation summary { cursor: pointer; }
+.prepayment-bank-preparation pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.prepayment-bank-preparation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.prepayment-bank-error-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #fee4e2; color: #b42318; font-size: 22px; font-weight: 700; }
+.prepayment-bank-spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #dce7e7; border-top-color: var(--accent); border-radius: 50%; animation: prepayment-bank-spin .8s linear infinite; }
+.prepayment-bank-dialog-actions .prepayment-bank-spinner { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
+.prepayment-bank-spinner[hidden], .prepayment-bank-error-icon[hidden] { display: none; }
+@keyframes prepayment-bank-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .prepayment-bank-spinner { animation-duration: 2s; } }
+.prepayment-bank-dialog > form { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); min-width: 0; min-height: 0; }
+.prepayment-bank-body { overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.prepayment-bank-dialog-header { position: relative; flex: 0 0 auto; padding: 16px 56px 12px 24px; border-bottom: 1px solid var(--line); }
+.prepayment-bank-dialog-header > p { margin: 6px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.prepayment-bank-close { position: absolute; top: 10px; right: 12px; font-size: 22px; padding: 4px 10px; }
 .prepayment-bank-dialog-header h3 { margin: 0; font-size: 19px; font-weight: 600; line-height: 1.3; }
 .prepayment-bank-dialog h4 { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.4; }
 .prepayment-bank-details { padding: 16px 24px 20px; }
@@ -782,33 +847,37 @@
   color: var(--text); font: inherit; font-size: 13px; font-weight: 400; line-height: 20px;
   outline: none; box-shadow: none;
 }
-.prepayment-bank-subject { display: block; height: auto; min-height: 38px; background: #f8fafc; overflow-wrap: anywhere; }
+.prepayment-bank-subject { display: block; height: auto; min-height: 38px; font-weight: 600; overflow-wrap: anywhere; }
 .prepayment-bank-dialog input:hover:not(:focus) { border-color: #c6ced8; }
-.prepayment-bank-dialog input:focus, .prepayment-bank-subject:focus-visible { border-color: #d6a16d; outline: none; box-shadow: 0 0 0 2px #d977060d; }
+.prepayment-bank-dialog input:focus, .prepayment-bank-subject:focus-visible { border-color: var(--accent); outline: none; box-shadow: var(--focus-ring); }
 .prepayment-bank-preview-section { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 0 24px 20px; gap: 10px; }
 .prepayment-bank-preview-heading { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; }
 .prepayment-bank-editable-badge { padding: 3px 8px; border-radius: 6px; background: #f2f4f7; color: #667085; font-size: 11px; line-height: 16px; }
 .prepayment-bank-preview-section:has([contenteditable="false"]) .prepayment-bank-editable-badge { visibility: hidden; }
-.prepayment-bank-editor { display: block; flex: 1 1 0; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; border: 1px solid #e4e7ec; border-radius: 12px; background: #f4f5f7; }
+.prepayment-bank-editor { display: block; min-height: 0; min-width: 0; overflow-wrap: anywhere; border: 1px solid #e4e7ec; border-radius: 10px; background: #fff; padding: 8px; }
+.prepayment-bank-editor img, .prepayment-bank-editor table { max-width: 100%; }
+.prepayment-bank-editor > div { width: auto !important; background: #fff !important; padding: 8px !important; }
 .prepayment-bank-editor > :first-child { margin-left: auto; margin-right: auto; }
-.prepayment-bank-editor:focus { outline: 2px solid #d9770620; outline-offset: 2px; }
-.prepayment-bank-dialog-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; border-top: 1px solid var(--line); background: #fff; }
+.prepayment-bank-editor:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prepayment-bank-dialog-footer { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 24px; border-top: 1px solid var(--line); background: #fff; }
 .prepayment-bank-dialog-footer > p { min-width: 0; margin: 0; color: #667085; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .prepayment-bank-dialog-footer > p:empty { display: none; }
 .prepayment-bank-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 8px; margin-left: auto; }
 .prepayment-bank-dialog-actions > .button { height: 38px; min-height: 38px; padding: 8px 16px; border-radius: 8px; }
 @media (max-width: 640px) {
-  .prepayment-bank-dialog { width: calc(100vw - 16px); height: calc(100vh - 16px); height: calc(100dvh - 16px); border-radius: 12px; }
-  .prepayment-bank-dialog-header { padding: 16px; }
+  .prepayment-bank-dialog { width: calc(100vw - 16px); border-radius: 12px; }
+  .prepayment-bank-dialog-header { padding: 16px 48px 16px 16px; }
   .prepayment-bank-dialog-header h3 { font-size: 18px; }
   .prepayment-bank-details { padding: 12px 16px 16px; }
   .prepayment-bank-addresses { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .prepayment-bank-preview-section { padding: 0 16px 16px; }
+  .prepayment-bank-editor > div { padding: 0 !important; }
+  .prepayment-bank-editor td, .prepayment-bank-editor th { padding: 6px !important; white-space: normal !important; }
   .prepayment-bank-dialog-footer { flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
   .prepayment-bank-dialog-footer > p { flex-basis: 100%; }
 }
 @media (max-height: 600px) {
-  .prepayment-bank-dialog-header { padding: 10px 16px; }
+  .prepayment-bank-dialog-header { padding: 10px 48px 10px 16px; }
   .prepayment-bank-details { padding: 10px 16px; }
   .prepayment-bank-details > h4 { margin-bottom: 8px; }
   .prepayment-bank-addresses { grid-template-columns: minmax(0, 1fr); gap: 6px; }
@@ -949,4 +1018,52 @@
   .prepayment-workflow-summary,
   .prepayment-workflow-card .prepayment-workflow-form { padding: 16px; }
   .prepayment-workflow-summary .card-purchase-workflow-context dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+#card-purchase-workflow-modal .prepayment-workflow-layout { grid-template-columns: minmax(0,45fr) minmax(0,55fr); }
+#card-purchase-workflow-modal .prepayment-workflow-summary { background: #f7f8fa; }
+#card-purchase-workflow-modal .prepayment-workflow-summary > .panel-eyebrow { font-size: 12px; text-transform: none; letter-spacing: 0; color: #687380; margin-bottom: 10px; }
+#card-purchase-workflow-context { padding: 0; background: transparent; border: 0; }
+#card-purchase-workflow-context .card-reading-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: baseline; font-size: 16px; }
+#card-purchase-workflow-context .card-reading-heading > strong { overflow-wrap: anywhere; }
+#card-purchase-workflow-context .card-reading-amount { color: #a44d18; font-size: 22px; font-variant-numeric: tabular-nums; }
+#card-purchase-workflow-context .card-reading-references { font-size: 12px; color: #687380; margin: 6px 0 14px; line-height: 1.5; overflow-wrap: anywhere; }
+#card-purchase-workflow-context .card-reading-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 16px; margin: 0; }
+#card-purchase-workflow-context .card-reading-grid > div { min-width: 0; }
+#card-purchase-workflow-context dt { font-size: 12px; color: #687380; text-transform: none; letter-spacing: 0; }
+#card-purchase-workflow-context dd { margin: 3px 0 0; font-size: 13px; }
+#card-purchase-workflow-context .card-reading-status { display: inline-block; padding: 3px 7px; border-radius: 12px; background: #f2f4f7; color: #475467; font-size: 12px; }
+#card-purchase-workflow-context .card-reading-documents { margin-top: 14px; padding-top: 12px; border-top: 1px solid #dfe3e8; }
+#card-purchase-workflow-context h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+#card-purchase-workflow-context .card-reading-document { display: flex; align-items: center; gap: 8px; min-height: 36px; border-bottom: 1px solid #eef0f3; }
+#card-purchase-workflow-context .card-reading-document > span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+#card-purchase-workflow-context svg { width: 18px; height: 18px; flex-shrink: 0; }
+#card-purchase-workflow-context .card-reading-preview { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px; border: 1px solid #e1e5e9; border-radius: 5px; background: #fff; color: #a44d18; cursor: pointer; }
+#card-purchase-workflow-context .card-reading-preview:hover { background: #fff4e9; }
+#card-purchase-workflow-context .card-reading-preview:active { background: #ffe7d4; }
+#card-purchase-workflow-modal .card-reading-empty, #card-purchase-workflow-modal .card-reading-missing { color: #687380; font-size: 12px; font-weight: 400; }
+#card-purchase-workflow-modal .card-reading-error { color: #a3342d; font-size: 12px; overflow-wrap: anywhere; }
+#card-purchase-workflow-modal .card-reading-loading { color: #687380; font-size: 12px; }
+#card-purchase-workflow-modal .card-reading-loading::before { content: ''; display: inline-block; width: 12px; height: 12px; margin-right: 7px; border: 2px solid #e1e5e9; border-top-color: #a44d18; border-radius: 50%; animation: inline-feedback-spin .8s linear infinite; }
+#card-purchase-services { margin-top: 14px; padding: 0; border: 0; border-top: 1px solid #dfe3e8; background: transparent; border-radius: 0; }
+#card-purchase-services > summary { display: flex; align-items: center; gap: 8px; padding: 10px 0; font-size: 13px; cursor: pointer; }
+#card-purchase-services .card-reading-count { margin-left: auto; font-size: 12px; font-weight: 400; color: #687380; }
+#card-purchase-workflow-service { padding: 0; max-height: clamp(180px,35dvh,340px); overflow-y: auto; }
+#card-purchase-workflow-service ul { margin: 0; padding: 0; list-style: none; }
+#card-purchase-workflow-service li { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; padding: 10px; margin-bottom: 8px; border: 1px solid #e1e5e9; border-radius: 6px; }
+#card-purchase-workflow-service .card-reading-service-name { min-width: 0; overflow-wrap: anywhere; }
+#card-purchase-workflow-service .card-reading-service-name strong { display: block; font-size: 13px; font-weight: 600; }
+#card-purchase-workflow-service .card-reading-service-name span { display: block; margin-top: 4px; font-size: 12px; color: #687380; }
+#card-purchase-workflow-service .prepayment-service-price span { font-size: 12px; text-transform: none; letter-spacing: 0; }
+#card-purchase-workflow-service .prepayment-service-price strong { font-size: 13px; }
+#card-purchase-workflow-modal .prepayment-workflow-summary :is(button,summary,[tabindex]):focus-visible { outline: 2px solid #b55419; outline-offset: 2px; }
+@media (max-width: 760px) { #card-purchase-workflow-modal .prepayment-workflow-layout { grid-template-columns: minmax(0,1fr); } }
+@media (prefers-reduced-motion: reduce) { #card-purchase-workflow-modal .card-reading-loading::before { animation: none; } }
+
+}
+
+.ministry-traveller-register-toolbar .ministry-date-filter { grid-column: span 2; }
+.ministry-date-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.ministry-date-controls select, .ministry-date-controls input { flex: 1 1 120px; min-width: 0; width: 100%; }
+@media (max-width: 600px) {
+  .ministry-traveller-register-toolbar .ministry-date-filter { grid-column: 1 / -1; }
 }

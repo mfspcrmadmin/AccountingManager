@@ -1,0 +1,5 @@
+string standalone.accEnt_resolveSupplierInvoiceAccountingEntry(String supplierInvoiceId, String replaceExisting)
+{
+result = {"success":false,"error":true,"disabled":true,"created":false,"updated":false,"message":"Accounting entry generation has been removed. Existing records and links are preserved."};
+return result.toString();
+}

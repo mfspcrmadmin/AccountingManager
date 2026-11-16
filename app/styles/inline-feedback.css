@@ -1,3 +1,4 @@
+@layer widget-views {
 .inline-feedback {
   display: flex;
   align-items: center;
@@ -14,6 +15,12 @@
   grid-column: 1 / -1;
 }
 .inline-feedback-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.invoice-registration-recovery { flex-wrap: wrap; }
+.invoice-registration-recovery > p { flex: 1 1 100%; margin: 0; }
+.invoice-registration-discard { flex: 1 1 100%; padding: 14px; border: 1px solid #e9cba6; border-radius: 8px; background: #fffaf3; }
+.invoice-registration-discard[hidden] { display: none; }
+.invoice-registration-discard p { margin: 0 0 12px; }
+.invoice-registration-discard .button { margin: 4px 8px 0 0; }
 .inline-feedback[data-tone="error"] { color: #9c2929; background: #fff5f5; border-color: #efcccc; }
 .inline-feedback[data-tone="success"] { color: #216442; background: #f0f9f3; border-color: #cce5d6; }
 .inline-feedback[data-tone="warning"] { color: #835711; background: #fff9ed; border-color: #ecdbb7; }
@@ -25,3 +32,5 @@
 #search-panel .inline-feedback { margin-bottom: 0; font-size: 12px; }
 @keyframes inline-feedback-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .inline-feedback-spinner { animation-duration: 2s; } }
+
+}

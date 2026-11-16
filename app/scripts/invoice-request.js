@@ -81,7 +81,14 @@
       return global.btoa(binary);
     }
 
-    function buildEml(email, subject, html) {
+    async function currentSender() {
+      var email = String(await deps.getCurrentUserEmail() || "").trim().toLowerCase();
+      if (!deps.hasValidEmailAddress(email) || /[\r\n]/.test(email)) { throw new Error("Could not identify your CRM user email. Reload the widget and try again."); }
+      return email;
+    }
+
+    function buildEml(email, subject, html, sender) {
+      if (!sender || !deps.hasValidEmailAddress(sender) || /[\r\n]/.test(sender)) { throw new Error("A valid sender email is required."); }
       validateMessage(email, subject, html);
       // RFC 2047 encoded words must remain below 75 characters, including wrappers.
       var chunks = [], chunk = "";
@@ -90,7 +97,7 @@
         chunk += character;
       });
       if (chunk) { chunks.push(chunk); }
-      return 'From: crmadmin@madeforspainandportugal.com\r\nTo: ' + email + '\r\nSubject: ' + chunks.map(function (part) { return '=?UTF-8?B?' + encodeBase64(part) + '?='; }).join('\r\n ') +
+      return 'From: ' + sender + '\r\nTo: ' + email + '\r\nSubject: ' + chunks.map(function (part) { return '=?UTF-8?B?' + encodeBase64(part) + '?='; }).join('\r\n ') +
         '\r\nX-Unsent: 1\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n' +
         (encodeBase64('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' + html + '</body></html>').match(/.{1,76}/g) || []).join('\r\n') + '\r\n';
     }
@@ -108,7 +115,7 @@
       current.setAttribute("role", "dialog");
       current.setAttribute("aria-modal", "true");
       current.setAttribute("aria-labelledby", "invoice-request-title");
-      current.innerHTML = '<header><h2 id="invoice-request-title">Request invoice · Draft</h2><button type="button" class="close-supplier-control" data-request-close aria-label="Close">&times;</button></header><div class="invoice-request-content"><p role="status">Loading supplier and service details...</p></div>';
+      current.innerHTML = '<header><h2 id="invoice-request-title">Request invoice · Draft</h2><button type="button" class="widget-popup-close close-supplier-control" data-request-close aria-label="Close" title="Close">&times;</button></header><div class="invoice-request-content"><p role="status">Loading supplier and service details...</p></div>';
       backdrop.appendChild(current);
       document.body.appendChild(backdrop);
       backdrop.addEventListener("click", function (event) {
@@ -128,10 +135,11 @@
       current.querySelector("[data-request-close]").onclick = close;
       current.querySelector("[data-request-close]").focus();
       try {
+        var sender = await currentSender();
         var draft = await loadDraft(settlement, booking);
         if (token !== requestToken) { return; }
         var content = current.querySelector(".invoice-request-content");
-        content.innerHTML = '<label class="field"><span>From</span><input type="email" value="crmadmin@madeforspainandportugal.com" readonly></label><label class="field"><span>To</span><input type="email" data-request-email value="' + esc(draft.recipient.email || "") + '"></label>' +
+        content.innerHTML = '<label class="field"><span>From</span><input type="email" value="' + esc(sender) + '" readonly></label><label class="field"><span>To</span><input type="email" data-request-email value="' + esc(draft.recipient.email || "") + '"></label>' +
           '<div class="invoice-request-recipient-actions"><span data-request-recipient-note></span><button type="button" class="button secondary compact-action-button" data-request-contacts>See contacts</button></div>' +
           '<div data-request-contact-list hidden></div><label class="field"><span>Subject</span><input type="text" data-request-subject value="' + esc(draft.subject) + '"></label>' +
           '<p class="payment-letter-warning" data-request-warning hidden></p><span id="invoice-request-message-label">Message</span>' +
@@ -177,7 +185,7 @@
         content.querySelector("[data-request-download]").onclick = function () {
           try {
             if (!editor.textContent.trim()) { throw new Error("Enter a message."); }
-            var eml = buildEml(email.value.trim(), subject.value, editor.innerHTML);
+            var eml = buildEml(email.value.trim(), subject.value, editor.innerHTML, sender);
             var url = global.URL.createObjectURL(new Blob([eml], { type: "message/rfc822" }));
             var link = document.createElement("a");
             link.href = url;
@@ -202,7 +210,7 @@
             });
             editor.contentEditable = "false";
             button.textContent = "Sending...";
-            var result = await sendDraft(settlement.id, email.value.trim(), subject.value, editor.innerHTML);
+            var result = await sendDraft(settlement.id, email.value.trim(), subject.value, editor.innerHTML, sender);
             sending = false;
             close();
             deps.renderer.showNotice(result.statusUpdateError || "Invoice request sent. Settlement marked as Invoice Requested.", { tone: result.statusUpdateError ? "warning" : "success" });
@@ -229,10 +237,12 @@
       if (!html.trim()) { throw new Error("Enter a message."); }
     }
 
-    async function sendDraft(settlementId, email, subject, html) {
+    async function sendDraft(settlementId, email, subject, html, expectedSender) {
       validateMessage(email, subject, html);
+      var sender = await currentSender();
+      if (expectedSender && expectedSender !== sender) { throw new Error("Your CRM user changed. Reopen the draft before sending."); }
       var response = await crm.executeFunction("sendsupplierinvoicerequest", {
-        settlementId: String(settlementId), recipientEmail: email, emailSubject: subject, emailBody: html
+        settlementId: String(settlementId), recipientEmail: email, emailSubject: subject, emailBody: html, actingUserEmail: sender
       });
       var result = deps.getFunctionOutputObject(response);
       if (!result || result.success !== true || result.error === true) {

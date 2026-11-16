@@ -16,6 +16,28 @@ const payments = [
 const groups = () => model.groupRecords(requests, payments);
 const filtered = filters => model.filterGroups(groups(), filters, '2026-09-11');
 
+test('reference filters search every associated invoice and the linked payment independently', () => {
+  const grouped = model.groupRecords([{ id: 'empty' }], [
+    { id: 'p1', Vendor_Payment: { name: 'PREPAY-616617000175980019' } },
+    { id: 'p2', Vendor_Payment: { name: 'OTHER-PAYMENT' } },
+    { id: 'p3', Vendor_Payment: null }
+  ], [
+    { Prepayment: { id: 'p1' }, Vendor_Invoice: { name: 'INV-001' } },
+    { Prepayment: { id: 'p1' }, Vendor_Invoice: { name: 'FINAL-002' } },
+    { Prepayment: { id: 'p2' }, Vendor_Invoice: { name: 'INV-001' } }
+  ]);
+  const ids = filters => Array.from(model.filterGroups(grouped, filters, '')).flatMap(g => Array.from(g.visible, p => p.id));
+  assert.deepEqual(ids({ invoiceNumber: ' final-002 ' }), ['p1']);
+  assert.deepEqual(ids({ invoiceNumber: 'inv-001' }), ['p1', 'p2']);
+  assert.deepEqual(ids({ paymentReference: ' prepay-616617000175980019 ' }), ['p1']);
+  assert.deepEqual(ids({ paymentReference: '175980019' }), ['p1']);
+  assert.deepEqual(ids({ invoiceNumber: 'INV-001', paymentReference: 'other' }), ['p2']);
+  assert.deepEqual(ids({ invoiceNumber: 'FINAL', paymentReference: 'other' }), []);
+  assert.deepEqual(ids({ invoiceNumber: 'PREPAY' }), []);
+  assert.deepEqual(ids({ paymentReference: 'INV-001' }), []);
+  assert.equal(model.filterGroups(grouped, { invoiceNumber: 'missing' }, '').length, 0);
+});
+
 test('today highlights open prepayments in both tables without marking closed or other dates', () => {
   for (const showRequest of [true, false]) {
     for (const status of ['Pending invoice', 'Pending payment record', '-None-', 'Unknown']) {
@@ -59,7 +81,7 @@ test('Due today defaults on and toggles immediately without applying other date 
     getAllRecords: async ({ Entity }) => ({ data: Entity === 'Prepayment_Requests' ? [] : [
       { id: 'today', Name: 'Today open', Due_Date: '2026-09-17', Payment_Date: '2026-09-15' },
       { id: 'later', Name: 'Later open', Due_Date: '2026-09-18', Payment_Date: '2026-09-16' },
-      { id: 'closed', Name: 'Today closed', Due_Date: '2026-09-17', Accounting_Status: 'Prepayment recorded' }
+      { id: 'closed', Name: 'Today closed', Due_Date: '2026-09-17', Accounting_Status: 'Prepayment recorded', Vendor_Payment: { id: 'pay1', name: 'PREPAY-616617000175980019' } }
     ] })
   } } });
   workspace.activate();
@@ -77,6 +99,14 @@ test('Due today defaults on and toggles immediately without applying other date 
   assert.equal(el('from').disabled, false);
   assert.match(el('results').innerHTML, /Later open/);
   assert.doesNotMatch(el('results').innerHTML, /Today closed/);
+  el('payment-reference').value = ' prepay-616617000175980019 ';
+  el('filters').listeners.submit({ preventDefault() {} });
+  assert.equal(el('due-today').checked, false);
+  assert.match(el('results').innerHTML, /Today closed/);
+  assert.doesNotMatch(el('results').innerHTML, /Later open/);
+  el('reset').listeners.click();
+  assert.equal(el('payment-reference').value, '');
+  assert.match(el('results').innerHTML, /Later open/);
   el('mfsp').value = 'unknown';
   el('date-mode').value = 'range';
   el('date-mode').listeners.change();

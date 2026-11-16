@@ -1,0 +1,24 @@
+string standalone.invoiceReminder_body(String modelJson)
+{
+model = modelJson.toMap();
+safe = Map();
+keyValues = "supplier_name,booking_reference,booking_name,service_date,description,invoice_reference".toList(",");
+for each key in keyValues
+{
+    safe.put(key,ifnull(model.get(key),"").toString().replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true).replaceAll("\"","&quot;",true));
+}
+intro = "Les escribimos para solicitar la factura correspondiente al siguiente servicio, necesaria para completar el cierre contable del viaje.";
+title = "Solicitud de factura";
+if(model.get("kind") == "proforma")
+{
+    title = "Solicitud de factura final";
+    intro = "Disponemos de la proforma indicada a continuaci&oacute;n y les agradecer&iacute;amos que nos enviaran la factura final correspondiente a los servicios prestados.";
+}
+html = "<div lang='es' style='font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#263445;line-height:1.6;max-width:680px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;'>";
+html = html + "<h2 style='font-size:18px;'>" + title + "</h2><p>Buen d&iacute;a " + safe.get("supplier_name") + ",</p><p>" + intro + "</p>";
+html = html + "<div style='padding:16px;background:#f8f5ef;border-radius:8px;'><p><strong>Referencia MFSP:</strong> " + safe.get("booking_reference") + "<br><strong>Booking:</strong> " + safe.get("booking_name") + "<br><strong>Fecha del servicio:</strong> " + safe.get("service_date") + "</p><p>" + safe.get("description") + "</p>";
+if(model.get("kind") == "proforma") { html = html + "<p><strong>Proforma:</strong> " + safe.get("invoice_reference") + "</p>"; }
+html = html + "</div><p>Les facilitamos nuestros datos fiscales para la emisi&oacute;n de la factura:</p><p><strong>Made for Spain, S.A.</strong><br>A82318908<br>Calle Castell&oacute;, 23, 2&ordm; Izda, 28001 Madrid</p>";
+html = html + "<p>Por favor, env&iacute;en la factura a <a href='mailto:proveedores@madeforspainandportugal.com'>proveedores@madeforspainandportugal.com</a>.</p><p>Muchas gracias por su colaboraci&oacute;n.</p><p>Atentamente,<br>Made for Spain and Portugal</p></div>";
+return html;
+}

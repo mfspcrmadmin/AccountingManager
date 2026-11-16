@@ -1,0 +1,4 @@
+void schedule.schedule_invoiceRemindersPreview()
+{
+info standalone.invoiceReminder_run("preview");
+}

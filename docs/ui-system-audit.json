@@ -1,0 +1,79 @@
+{
+  "date": "2026-10-20",
+  "status": "implemented_locally_not_published",
+  "scope": [
+    "Operations: prepayments, card purchases and shared operation forms",
+    "Bookings: filters, tables and closure dialogs",
+    "Suppliers: search, invoice creation, invoice/payment detail dialogs",
+    "Invoices: filters, lists, services and invoice editing",
+    "Payments: filters, lists, inspector, creation and allocations",
+    "Accounting: entries, lines, accounts and rules",
+    "Setup: automation information, templates, permission filters and previews"
+  ],
+  "findings_addressed": [
+    "Two competing global palettes and repeated button/input/select declarations.",
+    "Section-specific font families, control heights, corners and focus states.",
+    "Hidden persistent filter labels and navigation items outside narrow viewports.",
+    "Duplicate arrow in payment account lookup.",
+    "Unsearchable long native select lists and inconsistent dropdown selection feedback.",
+    "Existing dropdowns clipped by scrolling ancestors.",
+    "Legacy ARIA dialogs without a shared focus containment/return mechanism.",
+    "Field errors not consistently associated with their input for assistive technology."
+  ],
+  "implementation": {
+    "tokens": "app/styles/theme.css",
+    "shared_controls": "app/styles/ui-system.css",
+    "close_controls": "app/styles/popup-controls.css",
+    "shared_interactions": "app/scripts/ui-system.js",
+    "cascade": "widget-tokens < widget-views < widget-controls; views retain composition and semantic status variants.",
+    "scope_marker": "body.accounting-widget",
+    "primary_color": "#d97706",
+    "accessible_primary_button_background": "#b45309",
+    "selects": "Original select remains the value/validation source. Single-select popover emits input/change only when changed, checks stale option identity, supports optgroups and disabled options, and adds search above 10 options. Multiple selects retain native interaction. Popover-unsupported browsers retain native selects.",
+    "existing_menus": "Existing filter and lookup nodes remain in their DOM location. Manual popovers avoid ancestor clipping without replacing business handlers.",
+    "dialogs": "Native dialogs retain browser focus behavior. Legacy ARIA modal dialogs get containment and focus return; existing close/save/discard handlers keep ownership.",
+    "dependencies_added": []
+  },
+  "verification": {
+    "browser": "Local headless Microsoft Edge / Playwright, mocked CRM APIs; no live CRM writes.",
+    "browser_suites_passed": 13,
+    "browser_results": "_local/ui-system-browser-results.json",
+    "final_shared_ui_rerun": "passed with live-rendered Prepayments and Card_Purchases editor fixtures, including locked financial fields",
+    "static_view_widths": [1440, 1024, 390],
+    "additional_existing_suite_widths": [320, 390, 900, 1440],
+    "static_forms_opened": [
+      "Trip closure", "Closure detail", "Card invoice drawer",
+      "Prepayment invoice drawer", "Supplier invoice", "Supplier payment",
+      "Payment allocation manager"
+    ],
+    "states": [
+      "Long/short dropdown lists, selected/disabled options, no search results",
+      "Keyboard arrows, Enter, Escape, Tab, outside click",
+      "Legacy multiselect menu in a clipped container",
+      "Native dialog select picker",
+      "Prepayment and card purchase editors at 1440 and 390 pixels; read-only financial fields",
+      "Modal focus containment, return and existing close refusal",
+      "Inline field error association and clearing",
+      "Reduced motion",
+      "Few/many rows, progressive loading, errors, retries and empty states",
+      "Invoice edit background operation, recovery and duplicate prevention",
+      "Long references and service names, missing/zero amounts",
+      "Setup permission states, template previews and narrow layouts"
+    ],
+    "unit_tests": {
+      "total": 698,
+      "passed": 687,
+      "failed": 11,
+      "failure_cause": "All 11 fail reading missing historical Deluge files under _local/crm/crm_functions (ENOENT); no UI assertion failures.",
+      "log": "_local/ui-system-unit-results.txt"
+    },
+    "screenshots": "_local/previews/ui-system/"
+  },
+  "limits": [
+    "No live Zoho host/session verification or publication was performed.",
+    "Static form screenshots check layout, not server-populated financial values.",
+    "Not every possible CRM permission combination, record shape or report was opened.",
+    "Popover fallback on browsers without Popover API was retained but not exercised in an older browser.",
+    "This is a shared component consolidation, not a rewrite of every view-specific layout."
+  ]
+}

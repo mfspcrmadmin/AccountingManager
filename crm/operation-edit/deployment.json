@@ -1,0 +1,10 @@
+{
+  "publishedAt": "2026-10-13T14:48:46.850Z",
+  "functions": {
+    "accountingoperation_edit": "616617000174814021",
+    "supplierinvoice_register": "616617000174090009"
+  },
+  "registrationRouteVerified": true,
+  "newAuthRequired": false,
+  "productionRecordsModified": false
+}

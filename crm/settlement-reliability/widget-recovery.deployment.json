@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-09",
+  "scope": "Recover supplier settlement calculations from the Suppliers invoice widget",
+  "production_functions_published_and_read_back": [
+    "recalculatesuppliersettlementsforbooking",
+    "jobs_processadminprocessjob",
+    "jobs_processpendingadminprocessjobs",
+    "jobs_enqueueadminprocessjob",
+    "settlements_recalculatecore"
+  ],
+  "entry_point": {
+    "api_name": "recalculatesuppliersettlementsforbooking",
+    "argument": "bookingId",
+    "normal_calculation": "Numeric booking ID; existing callers unchanged",
+    "widget_recovery": "recover:<numeric booking ID>",
+    "authentication": "Existing OAuth entry point"
+  },
+  "behavior": [
+    "Use the CRM application timezone with an explicit ISO offset for new timestamps; historical timestamps are not rewritten.",
+    "Use CRM Modified_Time plus 30 minutes as an additional guard against reclaiming legacy incorrectly dated locks.",
+    "Read back each new lease and reject inconsistent persisted expiry before any calculation.",
+    "Recover only one booking, under the same unique lease as scheduled and manual calculations.",
+    "After successful calculation, conditionally cancel preexisting pending, retry, failed and expired processing jobs as superseded.",
+    "Preserve jobs changed or created during calculation; report incomplete reconciliation without claiming complete recovery.",
+    "Keep queued work if calculation fails and distinguish unconfirmed completion from confirmed failure in the widget.",
+    "Find the latest recorded update across settlements and successful jobs even when a newer request is pending."
+  ],
+  "validation": {
+    "automated_tests_passed": 57,
+    "browser": "Real status renderer with simulated CRM at 390 and 1440 px; recovery action and error escaping passed",
+    "production_compilation": "All five functions accepted and published source verified",
+    "production_coql": "Recovery queue query accepted for booking 616617000171604155",
+    "production_execution": "Pending; available connector does not expose direct function execution",
+    "timezone_round_trip_in_production": "Pending first real calculation; the new function checks the persisted expiry and fails closed on inconsistency"
+  },
+  "widget_deployment": "Local changes ready for user packaging and upload",
+  "zip_generated": false,
+  "financial_records_modified_as_tests": false,
+  "backups": "backups/*.before-widget-recovery-20261009.dg",
+  "reference": "https://www.zoho.com/deluge/help/functions/common/tostring.html"
+}

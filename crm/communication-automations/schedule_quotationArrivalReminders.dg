@@ -1,0 +1,41 @@
+void schedule.schedule_quotationArrivalReminders()
+{
+cursorKey = "quotation-arrival-reminders:scan-cursor";
+rows = standalone.jobs_query("select id, Payload_JSON, Modified_Time from Admin_Process_Jobs where Active_Key = '" + cursorKey + "' limit 1").toMap().get("data");
+if(rows.isEmpty())
+{
+	created = zoho.crm.createRecord("Admin_Process_Jobs",{"Active_Key":cursorKey,"Status":"On Hold","Source_Function":"schedule_quotationArrivalReminders","Trigger_Reason":"Weekly reminder scan cursor; not an executable retry job","Payload_JSON":"{\"after_id\":\"0\"}"},{"trigger":List()});
+	if(created.get("id") == null)
+	{
+		throw "Could not reserve reminder scan cursor.";
+	}
+	rows = standalone.jobs_query("select id, Payload_JSON, Modified_Time from Admin_Process_Jobs where Active_Key = '" + cursorKey + "' limit 1").toMap().get("data");
+}
+cursorRow = rows.get(0);
+cursor = ifnull(cursorRow.get("Payload_JSON"),"{}").toString().toMap().get("after_id");
+errors = 0;
+for each page in {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20}
+{
+	batch = standalone.comm_runQuotationArrivalReminders("send",ifnull(cursor,"0").toString()).toMap();
+	errors = errors + ifnull(batch.get("errors"),0);
+	cursor = if(batch.get("more_records") == true,batch.get("next_after_id"),"0");
+	// Persist progress after every bounded batch. Unique Communication keys
+	// arbitrate sends even if multiple invocations read the same cursor.
+	cursorPayload = {"after_id":cursor};
+	saved = standalone.jobs_conditionalUpdate(cursorRow.get("id").toString(),cursorRow.get("Modified_Time").toString(),{"Payload_JSON":cursorPayload.toString(),"Last_Run_At":zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid"),"Last_Result_JSON":batch.toString()}).toMap();
+	if(saved.get("error") == true)
+	{
+		throw "Scan cursor changed concurrently. Review progress; confirmed emails must not be resent.";
+	}
+	if(batch.get("more_records") != true)
+	{
+		break;
+	}
+	cursorRow = zoho.crm.getRecordById("Admin_Process_Jobs",cursorRow.get("id").toLong());
+}
+if(errors > 0)
+{
+	throw "Some weekly reminders need review. Inspect the scan cursor Last Result JSON and Communications.";
+}
+info "Weekly Quotation reminder scan complete. Next cursor: " + cursor;
+}

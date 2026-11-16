@@ -1,0 +1,239 @@
+string standalone.comm_quotationArrivalReminder(String bookingId, String mode)
+{
+result = {"success":false,"eligible":false,"emails_sent":0,"records_written":0,"communication_id":""};
+communicationId = "";
+sendAttempted = false;
+accepted = false;
+outcome = Map();
+try
+{
+	mode = ifnull(mode,"preview").trim().toLowerCase();
+	if(mode != "preview" && mode != "send")
+	{
+		throw "Use preview or send.";
+	}
+	if(!ifnull(bookingId,"").matches("[0-9]{1,19}"))
+	{
+		throw "A valid booking ID is required.";
+	}
+	today = zoho.currenttime.toString("yyyy-MM-dd","Europe/Madrid");
+	booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+	if(ifnull(booking.get("id"),"").toString() != bookingId)
+	{
+		throw "Booking could not be read.";
+	}
+	arrival = ifnull(booking.get("Arrival_Date"),"").toString();
+	if(booking.get("Stage") != "Quotation" || arrival == "")
+	{
+		result.put("success",true);
+		result.put("message","Booking is not eligible.");
+		return result.toString();
+	}
+	if(arrival.toDate("yyyy-MM-dd") >= today.toDate("yyyy-MM-dd"))
+	{
+		result.put("success",true);
+		result.put("message","Arrival Date has not passed.");
+		return result.toString();
+	}
+	owner = ifnull(booking.get("Owner"),Map());
+	ownerId = ifnull(owner.get("id"),"").toString();
+	recipient = ifnull(owner.get("email"),"").toString().trim().toLowerCase();
+	if(!ownerId.matches("[0-9]{1,19}") || !recipient.matches("[^ @,;<>]+@[^ @,;<>]+[.][^ @,;<>]+"))
+	{
+		throw "Booking Owner has no valid email.";
+	}
+	// Never substitute Sales Rep, logged-in ownerUser, or technical draft recipients.
+	userResponse = invokeurl [ url: "https://www.zohoapis.eu/crm/v8/users/" + ownerId type: GET connection: "crm_oauth_connection" ] ;
+	ownerUsers = ifnull(userResponse.get("users"),List());
+	if(ownerUsers.size() != 1)
+	{
+		throw "Booking Owner ownerUser could not be verified.";
+	}
+	ownerUser = ownerUsers.get(0);
+	if(ownerUser.get("status") != "active" || ifnull(ownerUser.get("email"),"").toString().toLowerCase() != recipient)
+	{
+		throw "Booking Owner is inactive or their email changed.";
+	}
+	reference = ifnull(booking.get("MFSP_Reference"),bookingId).toString();
+	result.put("booking_reference",reference);
+	result.put("recipient",recipient);
+	result.put("mode",mode);
+	// An uncertain or unfinished delivery requires review, even after seven days.
+	prior = standalone.jobs_query("select id, Communication_Status, Created_Time from Communications where (Booking = '" + bookingId + "' and Source_Function = 'comm_quotationArrivalReminder') order by Created_Time desc, id desc limit 1").toMap();
+	rows = ifnull(prior.get("data"),List());
+	previousId = "first";
+	if(!rows.isEmpty())
+	{
+		previous = rows.get(0);
+		previousId = previous.get("id").toString();
+		previousStatus = ifnull(previous.get("Communication_Status"),"Unknown").toString();
+		result.put("previous_communication_id",previousId);
+		if(previousStatus != "Sent" && previousStatus != "Failed" && previousStatus != "Skipped")
+		{
+			result.put("message","Previous reminder is unfinished or uncertain. Manual review required; no resend.");
+			return result.toString();
+		}
+		// A calendar-day cooldown keeps a weekly schedule stable across DST.
+		previousDate = previous.get("Created_Time").toString().subString(0,10).toDate("yyyy-MM-dd");
+		if(previousDate.addDay(7) > today.toDate("yyyy-MM-dd"))
+		{
+			result.put("success",true);
+			result.put("message","A reminder was already requested within the last seven calendar days.");
+			return result.toString();
+		}
+	}
+	key = "quotation_arrival:" + zoho.encryption.sha256(bookingId + "|" + previousId);
+	link = "https://crm.zoho.eu/crm/tab/Potentials/" + bookingId;
+	name = ifnull(booking.get("Deal_Name"),"").toString();
+	safeReference = reference.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true);
+	safeName = name.replaceAll("&","&amp;",true).replaceAll("<","&lt;",true).replaceAll(">","&gt;",true).replaceAll("\"","&quot;",true);
+	subject = "Please update booking stage - " + reference;
+	html = "<!doctype html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0;padding:0;background:#f3f1ed;color:#293a3b;font-family:Arial,Helvetica,sans-serif;'><table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' bgcolor='#f3f1ed'><tr><td align='center' style='padding:32px 12px;'><table role='presentation' width='620' cellpadding='0' cellspacing='0' border='0' style='width:100%;max-width:620px;background:#ffffff;border:1px solid #e4e1dc;'><tr><td bgcolor='#243c3e' style='padding:28px 30px;border-top:5px solid #b56822;'><p style='margin:0 0 22px;font-size:10px;line-height:16px;letter-spacing:2px;color:#c3d1cd;'>MADE FOR SPAIN AND PORTUGAL</p><p style='margin:0 0 8px;font-size:11px;line-height:16px;letter-spacing:1px;color:#d7b994;'>WEEKLY BOOKING REVIEW</p><h1 style='margin:0;font-size:28px;line-height:36px;font-weight:600;color:#ffffff;'>A quick update for your booking</h1></td></tr><tr><td style='padding:26px 30px;'><p style='margin:0 0 10px;font-size:15px;line-height:24px;'>Hello,</p><p style='margin:0 0 22px;font-size:14px;line-height:23px;color:#65716f;'>This booking is still in <strong style='color:#243c3e;'>Quotation</strong>, although its arrival date has passed. Please take a moment to review its current status.</p><table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0'><tr><td bgcolor='#f4f6f3' style='padding:20px;border-left:3px solid #b56822;'><p style='margin:0 0 6px;font-size:12px;line-height:18px;letter-spacing:1px;font-weight:bold;color:#b56822;'>" + safeReference + "</p><h2 style='margin:0;font-size:21px;line-height:29px;font-weight:600;color:#243c3e;'>" + safeName + "</h2></td></tr></table><table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='margin-top:16px;'><tr><td width='50%' valign='top' style='padding:14px 12px 14px 0;border-bottom:1px solid #e4e1dc;'><p style='margin:0 0 5px;font-size:11px;line-height:17px;color:#65716f;'>CURRENT STAGE</p><p style='margin:0;font-size:15px;line-height:23px;font-weight:bold;color:#243c3e;'>Quotation</p></td><td width='50%' valign='top' style='padding:14px 0 14px 12px;border-bottom:1px solid #e4e1dc;'><p style='margin:0 0 5px;font-size:11px;line-height:17px;color:#65716f;'>ARRIVAL DATE</p><p style='margin:0;font-size:15px;line-height:23px;font-weight:bold;color:#243c3e;'>" + arrival.toDate("yyyy-MM-dd").toString("dd MMM yyyy") + "</p></td></tr></table><table role='presentation' width='100%' cellpadding='0' cellspacing='0' border='0' style='margin-top:24px;'><tr><td bgcolor='#fff4e6' style='padding:18px 20px;'><p style='margin:0 0 6px;font-size:14px;line-height:22px;font-weight:bold;color:#87521f;'>What needs your attention</p><p style='margin:0;font-size:14px;line-height:23px;color:#465451;'>Open the booking and update its <strong>Stage</strong> to reflect the outcome. If the trip did not go ahead, please mark it as <strong>Dead</strong>.</p></td></tr></table><table role='presentation' cellpadding='0' cellspacing='0' border='0' style='margin-top:24px;'><tr><td align='center' bgcolor='#243c3e' style='padding:14px 22px;'><a href='" + link + "' style='display:inline-block;color:#ffffff;text-decoration:none;font-size:14px;line-height:22px;font-weight:bold;'>Review booking &rarr;</a></td></tr></table><p style='margin:24px 0 0;font-size:13px;line-height:22px;color:#65716f;'>Thank you for keeping our bookings up to date.<br>The Bookings Manager team</p></td></tr><tr><td bgcolor='#f8f8f5' style='padding:18px 30px;border-top:1px solid #e5e8e2;'><p style='margin:0 0 6px;font-size:10px;line-height:17px;letter-spacing:1px;color:#65716f;'>BOOKINGS MANAGER &nbsp; / &nbsp; INTERNAL NOTIFICATION</p><p style='margin:0;font-size:11px;line-height:18px;color:#65716f;'>You are receiving this reminder as the Booking Owner. It repeats weekly while the booking remains in Quotation with an arrival date in the past.</p></td></tr></table></td></tr></table></body></html>";
+	result.put("eligible",true);
+	result.put("subject",subject);
+	result.put("html",html);
+	result.put("dedup_key",key);
+	if(mode == "preview")
+	{
+		result.put("success",true);
+		result.put("message","Preview only. No email sent and no records written.");
+		return result.toString();
+	}
+	options = {"trigger":List()};
+	model = {"reminder_kind":"quotation_arrival","owner_id":ownerId,"arrival_date":arrival,"previous_communication_id":previousId,"content_source":"requested_body"};
+	row = {"Name":"Quotation reminder " + reference,"Booking":bookingId,"Related_Module":"Deals","Related_Record_ID":bookingId,"Related_Record_Name":reference,"Source_Function":"comm_quotationArrivalReminder","Trigger_Reason":"Quotation after Arrival Date - weekly owner reminder","Dedup_Key":key,"Execution_Mode":"Automatic","Communication_Type":"Email","Communication_Purpose":"Booking Status Reminder","Communication_Status":"Queued","Audience":"Internal","Delivery_Action":"Original","Render_Status":"Pending","Rendered_Subject":subject,"Sender_Email":"crmadmin@madeforspainandportugal.com","Recipient_To":recipient,"Recipient_CC":"","Recipient_BCC":"","Render_Model_JSON":model.toString()};
+	created = zoho.crm.createRecord("Communications",row,options);
+	communicationId = ifnull(created.get("id"),"").toString();
+	if(communicationId == "")
+	{
+		throw "Reminder reservation was not acquired. No email sent; review the deduplication key.";
+	}
+	result.put("communication_id",communicationId);
+	result.put("records_written",1);
+	// Archive the outgoing body with the established native draft helper.
+	// Only the confirmed creator may create a draft or attempt this delivery.
+	archive = standalone.email_createModuleEmailDraft("Communications",communicationId,subject,html,"crmadmin@madeforspainandportugal.com").toMap();
+	draftId = ifnull(archive.get("draft_id"),"").toString();
+	if(archive.get("success") != true || draftId == "")
+	{
+		throw "Body archive creation was not confirmed. No email sent; inspect this Communication before any retry.";
+	}
+	verify = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/Communications/" + communicationId + "/__email_drafts"
+		type :GET
+		connection:"crm_coql"
+	] ;
+	verified = false;
+	for each draft in ifnull(verify.get("__email_drafts"),List())
+	{
+		if(ifnull(draft.get("id"),"").toString() == draftId && ifnull(draft.get("subject"),"").toString().trim() == subject && zoho.encryption.sha256(ifnull(draft.get("content"),"").toString()) == zoho.encryption.sha256(html))
+		{
+			verified = true;
+		}
+	}
+	if(!verified)
+	{
+		throw "Archived email body could not be verified. No email sent.";
+	}
+	model.put("native_email_archive",{"storage":"__email_drafts","draft_id":draftId,"sha256":zoho.encryption.sha256(html),"html_characters":html.length(),"subject_characters":subject.length(),"technical_from":"crmadmin@madeforspainandportugal.com","technical_to":"crmadmin@madeforspainandportugal.com","content_source":"requested_body"});
+	saved = zoho.crm.updateRecord("Communications",communicationId.toLong(),{"Render_Model_JSON":model.toString(),"Render_Status":"Ready","Render_Error":""},options);
+	if(ifnull(saved.get("id"),"").toString() != communicationId)
+	{
+		throw "Archive metadata could not be saved. No email sent.";
+	}
+	// Recheck business conditions and recipient immediately before sending.
+	fresh = zoho.crm.getRecordById("Deals",bookingId.toLong());
+	if(fresh.get("Stage") != "Quotation" || ifnull(fresh.get("Arrival_Date"),"").toString() != arrival || ifnull(ifnull(fresh.get("Owner"),Map()).get("id"),"").toString() != ownerId || ifnull(ifnull(fresh.get("Owner"),Map()).get("email"),"").toString().toLowerCase() != recipient)
+	{
+		skipped = zoho.crm.updateRecord("Communications",communicationId.toLong(),{"Communication_Status":"Skipped","Delivery_Error":"Booking or owner changed before delivery."},options);
+		result.put("message","Booking or owner changed. No email sent.");
+		return result.toString();
+	}
+	started = zoho.crm.updateRecord("Communications",communicationId.toLong(),{"Communication_Status":"Sending"},options);
+	confirmed = zoho.crm.getRecordById("Communications",communicationId.toLong());
+	if(ifnull(started.get("id"),"").toString() != communicationId || confirmed.get("Communication_Status") != "Sending" || confirmed.get("Dedup_Key") != key)
+	{
+		throw "Sending reservation could not be verified. No email sent.";
+	}
+	recipientRows = List();
+	recipientRows.add({"email":recipient});
+	mailRows = List();
+	mailRows.add({"from":{"email":"crmadmin@madeforspainandportugal.com"},"to":recipientRows,"subject":subject,"content":html,"mail_format":"html","org_email":true});
+	request = {"data":mailRows};
+	sendAttempted = true;
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/Deals/" + bookingId + "/actions/send_mail"
+		type :POST
+		parameters:request.toString()
+		headers:{"Content-Type":"application/json"}
+		detailed:true
+		connection:"crm_oauth_connection"
+	] ;
+	outcome = {"http_status":response.get("responseCode"),"response":response.get("responseText")};
+	responseData = response.get("responseText").toString().toMap();
+	responseRows = ifnull(responseData.get("data"),List());
+	state = "Unknown";
+	messageId = "";
+	rejectionCodes = {"INVALID_DATA","MANDATORY_NOT_FOUND","NO_PERMISSION","NOT_ALLOWED","LIMIT_EXCEEDED","EMAIL_OPT_OUT","RECORD_LOCKED","INVALID_EMAIL"};
+	if(responseRows.size() == 1)
+	{
+		delivery = responseRows.get(0);
+		if(delivery.get("code") == "SUCCESS" && delivery.get("status") == "success")
+		{
+			accepted = true;
+			state = "Sent";
+			messageId = ifnull(ifnull(delivery.get("details"),Map()).get("message_id"),"").toString();
+		}
+		else if(delivery.get("status") == "error" && rejectionCodes.contains(delivery.get("code")))
+		{
+			state = "Failed";
+		}
+	}
+	outcome.put("state",state);
+	outcome.put("message_id",messageId);
+	finish = {"Communication_Status":state,"Delivery_Result_JSON":outcome.toString(),"Delivery_Error":if(accepted,"","Review provider response before retrying.")};
+	if(accepted)
+	{
+		finish.put("Sent_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid"));
+		finish.put("Provider_Message_ID",messageId);
+		finish.put("Render_Status","Sent");
+	}
+	saved = zoho.crm.updateRecord("Communications",communicationId.toLong(),finish,options);
+	result.put("success",accepted);
+	result.put("delivery_status",state.toLowerCase());
+	result.put("emails_sent",if(accepted,1,0));
+	result.put("provider_message_id",messageId);
+	result.put("result_saved",ifnull(saved.get("id"),"").toString() == communicationId);
+	result.put("message",if(accepted,"CRM accepted the email request; recipient delivery is not confirmed.","Review the Communication and provider response. No automatic retry."));
+	result.remove("html");
+	return result.toString();
+}
+catch(e)
+{
+	result.put("message",e.toString());
+	result.put("success",accepted);
+	result.put("emails_sent",if(accepted,1,0));
+	result.put("delivery_status",if(sendAttempted,if(accepted,"sent","unknown"),"not_sent"));
+	if(communicationId != "")
+	{
+		result.put("communication_id",communicationId);
+		evidence = {"Delivery_Error":e.toString(),"Communication_Status":if(sendAttempted,if(accepted,"Sent","Unknown"),"Failed")};
+		if(!outcome.isEmpty())
+		{
+			evidence.put("Delivery_Result_JSON",outcome.toString());
+		}
+		try
+		{
+			savedError = zoho.crm.updateRecord("Communications",communicationId.toLong(),evidence,{"trigger":List()});
+			result.put("result_saved",ifnull(savedError.get("id"),"").toString() == communicationId);
+		}
+		catch(saveError)
+		{
+			result.put("result_saved",false);
+		}
+	}
+}
+return result.toString();
+}

@@ -1,0 +1,62 @@
+{
+  "checked_on": "2026-11-11",
+  "status": "published",
+  "functions": {
+    "entry": {
+      "api": "crm_sendemailviatemplate",
+      "id": "616617000165717151",
+      "deluge_name": "notif_sendEmailViaTemplate"
+    },
+    "journal": {
+      "api": "notif_sendloggedtemplate",
+      "id": "616617000178159030"
+    },
+    "transport": {
+      "api": "notif_sendnativetemplateraw",
+      "id": "616617000178165011"
+    },
+    "archive": {
+      "api": "notif_reconciletemplatecommunication",
+      "id": "616617000178129007"
+    },
+    "orchestrator": {
+      "api": "bp_orchestratebookingtransition",
+      "id": "616617000169225147"
+    }
+  },
+  "sender": "crmadmin@madeforspainandportugal.com",
+  "new_fields": [
+    "Native_Template_ID",
+    "Provider_Message_ID",
+    "Delivery_Result_JSON",
+    "Recipient_BCC"
+  ],
+  "new_purpose": "System Notification",
+  "delivery_states": [
+    "Queued",
+    "Sending",
+    "Sent",
+    "Failed",
+    "Unknown"
+  ],
+  "source_readback_verified": true,
+  "static_safety_checks": {
+    "confirmedCreateBeforeSend": true,
+    "sendingStateBeforeTransport": true,
+    "exactlyOneTransportCall": true,
+    "duplicateExitBeforeCreate": true,
+    "noSendInRecovery": true,
+    "stableEventCapturedBeforeSideEffects": true,
+    "twoLoggedBookingWonCalls": true,
+    "originalSignaturePreserved": true,
+    "recordOnlyExitsBeforeTransport": true,
+    "previewExitsBeforeCreate": true
+  },
+  "live_send_test": false,
+  "live_record_creation_test": false,
+  "execution_limitation": "Connector has no function-execution action; no browser automation used.",
+  "scope": "Native-template sender plus two Booking Won call sites only. Other notification functions and Quotation preview unchanged.",
+  "dedup": "Unique Communications.Dedup_Key from module/record/template/stable event. Booking stage history captured before side effects; non-booking callers may pass event_id, otherwise source Modified_Time is used.",
+  "recovery": "Existing requests never resend automatically, including Queued and Failed. Sending left after a crash requires manual review. Archive helper reads native email by confirmed message ID and never sends.",
+  "validation_next": "Call notif_sendLoggedTemplate in preview mode, then record_only using a distinct TEST event_id. Check Queued record and duplicate result before a controlled send."
+}

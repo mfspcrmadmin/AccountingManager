@@ -1,0 +1,266 @@
+string standalone.notif_reconcileTemplateCommunication(String communicationId)
+{
+// Archive sent notifications using the same native draft storage as Bookings Manager.
+// This function never sends an email or uploads an attachment.
+res = {"success":false,"emails_sent":0,"communication_id":communicationId};
+nativeVerified = false;
+jobId = "";
+try 
+{
+	if(!ifnull(communicationId,"").matches("[0-9]{1,19}"))
+	{
+		throw "Invalid Communication ID.";
+	}
+	rec = zoho.crm.getRecordById("Communications",communicationId.toLong());
+	if(ifnull(rec.get("id"),"").toString() != communicationId)
+	{
+		throw "Communication could not be read.";
+	}
+	if(ifnull(rec.get("Native_Template_ID"),"") == "" || ifnull(rec.get("Execution_Mode"),"") != "Automatic" || ifnull(rec.get("Communication_Status"),"") != "Sent")
+	{
+		throw "Only confirmed native-template automatic communications can be archived here. Other Communications were not changed.";
+	}
+	messageId = ifnull(rec.get("Provider_Message_ID"),"").toString();
+	moduleName = ifnull(rec.get("Related_Module"),"").toString();
+	recordId = ifnull(rec.get("Related_Record_ID"),"").toString();
+	if(messageId == "" || !moduleName.matches("[A-Za-z][A-Za-z0-9_]*") || !recordId.matches("[0-9]{1,19}"))
+	{
+		throw "Confirmed message ID and related record are required. This function never resends.";
+	}
+	nativeVerified = true;
+	emailResponse = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/" + moduleName + "/" + recordId + "/Emails/" + encodeUrl(messageId)
+		type :GET
+		detailed:true
+		connection:"crm_oauth_connection"
+	];
+	if(emailResponse.get("responseCode") != 200)
+	{
+		throw "Native email content is unavailable: HTTP " + emailResponse.get("responseCode");
+	}
+	payload = emailResponse.get("responseText").toString().toMap();
+	emails = ifnull(payload.get("Emails"),List());
+	if(emails.size() != 1)
+	{
+		throw "Expected exactly one native email.";
+	}
+	email = emails.get(0);
+	// Some native email responses omit sent. Null is not an explicit rejection.
+	// Require the saved successful send_mail response for this exact message ID.
+	if(email.get("sent") == false)
+	{
+		throw "Native email is explicitly marked as not sent.";
+	}
+	if(email.get("sent") != true)
+	{
+		proof = ifnull(rec.get("Delivery_Result_JSON"),"{}").toString().toMap();
+		proofRows = ifnull(ifnull(proof.get("response"),Map()).get("data"),List());
+		proofConfirmed = false;
+		if(ifnull(proof.get("state"),"") == "Sent" && ifnull(proof.get("message_id"),"").toString() == messageId && proofRows.size() == 1)
+		{
+			proofRow = proofRows.get(0);
+			proofConfirmed = proofRow.get("status") == "success" && proofRow.get("code") == "SUCCESS" && ifnull(ifnull(proofRow.get("details"),Map()).get("message_id"),"").toString() == messageId;
+		}
+		if(!proofConfirmed)
+		{
+			throw "Native sent flag is missing and no matching successful provider response was saved. Archive blocked.";
+		}
+		res.put("send_confirmation_source","Saved successful CRM send_mail response for the exact message ID");
+	}
+	else
+	{
+		res.put("send_confirmation_source","Native sent flag");
+	}
+	content = ifnull(email.get("content"),"").toString();
+	subject = ifnull(email.get("subject"),"").toString();
+	res.put("subject_characters",subject.length());
+	res.put("html_characters",content.length());
+	options = {"trigger":List()};
+	model = ifnull(rec.get("Render_Model_JSON"),"{}").toString().toMap();
+	// Persist the subject independently: a large body must not discard it.
+	subjectUpdate = Map();
+	if(subject.length() <= 255)
+	{
+		subjectUpdate.put("Rendered_Subject",subject);
+	}
+	else
+	{
+		model.put("native_email_subject",subject);
+		if(model.toString().length() > 32000)
+		{
+			throw "Full subject cannot fit in archival metadata. No subject was silently truncated.";
+		}
+		subjectUpdate.put("Rendered_Subject",subject.subString(0,255));
+		subjectUpdate.put("Render_Model_JSON",model.toString());
+		res.put("full_subject_storage","Render_Model_JSON.native_email_subject");
+	}
+	savedSubject = zoho.crm.updateRecord("Communications",communicationId.toLong(),subjectUpdate,options);
+	if(ifnull(savedSubject.get("id"),"").toString() != communicationId)
+	{
+		throw "Subject could not be saved: " + savedSubject;
+	}
+	archiveHash = zoho.encryption.sha256(content);
+	res.put("storage","__email_drafts");
+	listHttp = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/Communications/" + communicationId + "/__email_drafts"
+		type :GET
+		parameters:{"page":"1","per_page":"200"}
+		detailed:true
+		connection:"crm_coql"
+	];
+	res.put("draft_list_http_status",listHttp.get("responseCode"));
+	drafts = List();
+	if(listHttp.get("responseCode") == 200)
+	{
+		listPayload = listHttp.get("responseText").toString().toMap();
+		if(listPayload.get("__email_drafts") == null)
+		{
+			throw "Incomplete native draft list response. No draft created: " + listPayload;
+		}
+		drafts = listPayload.get("__email_drafts");
+	}
+	else if(listHttp.get("responseCode") != 204)
+	{
+		throw "Native email drafts could not be read. No draft created: " + listHttp.get("responseText");
+	}
+	if(drafts.size() >= 200)
+	{
+		throw "Native draft scan limit reached. No draft was created.";
+	}
+	draftId = "";
+	for each draft in drafts
+	{
+		draftContent = ifnull(draft.get("content"),"").toString();
+		draftSubject = ifnull(draft.get("subject"),"").toString();
+		if(zoho.encryption.sha256(draftContent) == archiveHash && draftSubject == subject.trim())
+		{
+			if(draftId != "")
+			{
+				throw "Multiple matching native drafts found. Review existing drafts; none were changed.";
+			}
+			draftId = ifnull(draft.get("id"),"").toString();
+		}
+	}
+	reused = draftId != "";
+	if(draftId == "" && !drafts.isEmpty())
+	{
+		throw "This Communication already has different native draft content. No draft was overwritten or created.";
+	}
+	if(draftId == "")
+	{
+		activeKey = "native_email_draft_archive:" + communicationId + ":" + zoho.encryption.sha256(messageId + "|" + content);
+		priorJobs = standalone.jobs_query("select id from Admin_Process_Jobs where Active_Key = '" + activeKey + "' limit 2").toMap();
+		if(!ifnull(priorJobs.get("data"),List()).isEmpty())
+		{
+			throw "Native draft creation was already reserved but no matching draft is visible. Review the reserved job before retrying creation.";
+		}
+		jobPayload = {"communication_id":communicationId,"message_id":messageId,"storage":"__email_drafts","sha256":archiveHash};
+		job = {"Active_Key":activeKey,"Status":"On Hold","Source_Function":"notif_reconcileTemplateCommunication","Related_Record_ID":communicationId,"Trigger_Reason":"Native email draft archive reservation - NOT an email send","Payload_JSON":jobPayload.toString()};
+		jobCreate = zoho.crm.createRecord("Admin_Process_Jobs",job,options);
+		jobId = ifnull(jobCreate.get("id"),"").toString();
+		if(jobId == "")
+		{
+			throw "Native draft reservation was not confirmed. No draft creation attempted.";
+		}
+		jobRead = zoho.crm.getRecordById("Admin_Process_Jobs",jobId.toLong());
+		if(ifnull(jobRead.get("Active_Key"),"") != activeKey || ifnull(jobRead.get("Status"),"") != "On Hold")
+		{
+			throw "Native draft reservation could not be verified.";
+		}
+		// Reuse the existing Bookings Manager content-storage helper unchanged.
+		// Technical From/To are never used to send this archived email.
+		createdDraft = standalone.email_createModuleEmailDraft("Communications",communicationId,subject,content,"crmadmin@madeforspainandportugal.com").toMap();
+		jobPayload.put("draft_creation_result",createdDraft);
+		jobEvidence = zoho.crm.updateRecord("Admin_Process_Jobs",jobId.toLong(),{"Payload_JSON":jobPayload.toString()},options);
+		if(createdDraft.get("success") != true || ifnull(createdDraft.get("draft_id"),"").toString() == "")
+		{
+			res.put("draft_creation_result",createdDraft);
+			throw "Native draft creation was not confirmed. Review existing drafts and the reserved job; do not create a duplicate blindly.";
+		}
+		draftId = createdDraft.get("draft_id").toString();
+	}
+	// Read the stored native draft back, including its full original HTML.
+	verifyHttp = invokeurl
+	[
+		url :"https://www.zohoapis.eu/crm/v8/Communications/" + communicationId + "/__email_drafts"
+		type :GET
+		parameters:{"page":"1","per_page":"200"}
+		detailed:true
+		connection:"crm_coql"
+	];
+	res.put("draft_verify_http_status",verifyHttp.get("responseCode"));
+	if(verifyHttp.get("responseCode") != 200)
+	{
+		throw "Native draft exists but its content could not be read back. No email was sent.";
+	}
+	verifyPayload = verifyHttp.get("responseText").toString().toMap();
+	verified = false;
+	verifyDrafts = ifnull(verifyPayload.get("__email_drafts"),List());
+	for each savedDraft in verifyDrafts
+	{
+		if(ifnull(savedDraft.get("id"),"").toString() == draftId)
+		{
+			savedContent = ifnull(savedDraft.get("content"),"").toString();
+			storedSubjectText = ifnull(savedDraft.get("subject"),"").toString();
+			res.put("stored_html_characters",savedContent.length());
+			verified = zoho.encryption.sha256(savedContent) == archiveHash && storedSubjectText == subject.trim();
+		}
+	}
+	if(!verified)
+	{
+		res.put("draft_id",draftId);
+		throw "Native draft readback does not match the source subject and HTML exactly. Existing draft was preserved for review.";
+	}
+	archive = {"storage":"__email_drafts","draft_id":draftId,"message_id":messageId,"sha256":archiveHash,"html_characters":content.length(),"subject_characters":subject.length(),"technical_from":"crmadmin@madeforspainandportugal.com","technical_to":"crmadmin@madeforspainandportugal.com"};
+	// Reload metadata to preserve other fields saved while the archive was created.
+	current = zoho.crm.getRecordById("Communications",communicationId.toLong());
+	if(ifnull(current.get("Provider_Message_ID"),"").toString() != messageId || ifnull(current.get("Communication_Status"),"") != "Sent")
+	{
+		throw "Communication delivery identity changed during archival. No draft was sent.";
+	}
+	model = ifnull(current.get("Render_Model_JSON"),"{}").toString().toMap();
+	model.put("native_email_archive",archive);
+	if(model.toString().length() > 32000)
+	{
+		throw "Archive metadata exceeds its field limit. Native draft was preserved.";
+	}
+	finalUpdate = {"Render_Model_JSON":model.toString(),"Render_Status":"Sent","Render_Error":""};
+	saved = zoho.crm.updateRecord("Communications",communicationId.toLong(),finalUpdate,options);
+	if(ifnull(saved.get("id"),"").toString() != communicationId)
+	{
+		throw "Native draft exists but archive metadata could not be saved. Recover without sending.";
+	}
+	if(jobId != "")
+	{
+		jobDone = zoho.crm.updateRecord("Admin_Process_Jobs",jobId.toLong(),{"Status":"Done","Completed_At":zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid"),"Last_Error":""},options);
+		res.put("archive_job_completed",ifnull(jobDone.get("id"),"").toString() == jobId);
+	}
+	res.put("success",true);
+	res.put("draft_id",draftId);
+	res.put("reused",reused);
+	res.put("archive",archive);
+	res.put("message","Original sent email archived in native draft storage. No email sent.");
+}
+catch (e)
+{
+	res.put("message",e.toString());
+	if(nativeVerified)
+	{
+		try
+		{
+			zoho.crm.updateRecord("Communications",communicationId.toLong(),{"Render_Error":e.toString()},{"trigger":List()});
+			if(jobId != "")
+			{
+				zoho.crm.updateRecord("Admin_Process_Jobs",jobId.toLong(),{"Last_Error":e.toString()},{"trigger":List()});
+			}
+		}
+		catch (saveError)
+		{
+			res.put("archive_error_saved",false);
+		}
+	}
+}
+return res.toString();
+}

@@ -1,0 +1,156 @@
+string standalone.jobs_enqueueAdminProcessJob(Map jobInput)
+{
+result = Map();
+result.put("error",false);
+result.put("created",false);
+result.put("dedup_skipped",false);
+result.put("job_id","");
+result.put("message","");
+adminJobsModule = "Admin_Process_Jobs";
+activeStatuses = Map();
+activeStatuses.put("Pending",true);
+activeStatuses.put("Processing",true);
+activeStatuses.put("Retry",true);
+activeStatuses.put("On Hold",true);
+jobType = ifnull(jobInput.get("job_type"),"").toString().trim();
+bookingId = ifnull(jobInput.get("booking_id"),"").toString().trim();
+relatedModule = ifnull(jobInput.get("related_module"),"").toString().trim();
+relatedRecordId = ifnull(jobInput.get("related_record_id"),"").toString().trim();
+relatedTechnicalKey = ifnull(jobInput.get("related_technical_key"),"").toString().trim();
+dedupKey = ifnull(jobInput.get("dedup_key"),"").toString().trim();
+triggerReason = ifnull(jobInput.get("trigger_reason"),"").toString().trim();
+sourceFunction = ifnull(jobInput.get("source_function"),"").toString().trim();
+payloadJson = ifnull(jobInput.get("payload_json"),"").toString();
+priority = ifnull(jobInput.get("priority"),"").toString().trim();
+if(priority == "")
+{
+	priority = "Normal";
+}
+status = ifnull(jobInput.get("status"),"").toString().trim();
+if(status == "")
+{
+	status = "Pending";
+}
+maxAttempts = 5;
+maxAttemptsRaw = ifnull(jobInput.get("max_attempts"),"").toString().trim();
+if(maxAttemptsRaw != "")
+{
+	try 
+	{
+		maxAttempts = maxAttemptsRaw.toLong();
+	}
+	catch (eMaxAttempts)
+	{
+		maxAttempts = 5;
+	}
+}
+if(jobType == "")
+{
+	result.put("error",true);
+	result.put("message","enqueueAdminProcessJob: job_type is required");
+	return result;
+}
+createMap = Map();
+createMap.put("Job_Type",jobType);
+createMap.put("Status",status);
+createMap.put("Priority",priority);
+createMap.put("Attempts",0);
+createMap.put("Max_Attempts",maxAttempts);
+if(bookingId != "")
+{
+	createMap.put("Booking",bookingId);
+}
+if(relatedModule != "")
+{
+	createMap.put("Related_Module",relatedModule);
+}
+if(relatedRecordId != "")
+{
+	createMap.put("Related_Record_ID",relatedRecordId);
+}
+if(relatedTechnicalKey != "")
+{
+	createMap.put("Related_Technical_Key",relatedTechnicalKey);
+}
+if(dedupKey != "")
+{
+	createMap.put("Dedup_Key",dedupKey);
+	createMap.put("Active_Key","QUEUED:" + dedupKey);
+}
+if(triggerReason != "")
+{
+	createMap.put("Trigger_Reason",triggerReason);
+}
+if(sourceFunction != "")
+{
+	createMap.put("Source_Function",sourceFunction);
+}
+if(payloadJson != "")
+{
+	createMap.put("Payload_JSON",payloadJson);
+}
+nextRunAt = jobInput.get("next_run_at");
+nextRunAtText = "";
+if(!isnull(nextRunAt) && nextRunAt != "")
+{
+	try 
+	{
+		nextRunAtText = nextRunAt.toString("yyyy-MM-dd'T'HH:mm:ssXXX","UTC");
+	}
+	catch (eNextRunAtFormat)
+	{
+		nextRunAtText = nextRunAt.toString();
+	}
+}
+else
+{
+	nextRunAtText = zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","UTC");
+}
+if(nextRunAtText != "" && nextRunAtText.length() == 24)
+{
+	nextRunAtText = nextRunAtText.subString(0,22) + ":" + nextRunAtText.subString(22,24);
+}
+if(nextRunAtText != "")
+{
+	createMap.put("Next_Run_At",nextRunAtText);
+}
+try 
+{
+	createRes = zoho.crm.createRecord(adminJobsModule,createMap);
+	if(isnull(createRes))
+	{
+		result.put("error",true);
+		result.put("message","enqueueAdminProcessJob: empty create response");
+		return result;
+	}
+	createdJobId = ifnull(createRes.get("id"),"").toString();
+	if(createdJobId == "" && createRes.get("code") == "DUPLICATE_DATA" && dedupKey != "")
+	{
+		duplicateId = ifnull(ifnull(createRes.get("details"),Map()).get("id"),"").toString();
+		if(duplicateId != "")
+		{
+			existing = zoho.crm.getRecordById(adminJobsModule,duplicateId);
+			if(existing.get("Dedup_Key") == dedupKey)
+			{
+				result.put("dedup_skipped",true);
+				result.put("job_id",duplicateId);
+				result.put("message","Recalculation request already queued");
+				return result;
+			}
+		}
+	}
+	if(createdJobId == "")
+	{
+		throw "Job creation was not confirmed: " + createRes;
+	}
+	result.put("created",true);
+	result.put("job_id",createdJobId);
+	result.put("message","Job enqueued successfully");
+}
+catch (eCreateJob)
+{
+	result.put("error",true);
+	result.put("message","enqueueAdminProcessJob: error creating job - " + eCreateJob.toString());
+}
+return result;
+}

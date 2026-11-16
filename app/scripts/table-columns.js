@@ -23,6 +23,8 @@
   function setupTableColumnWidths(tableKey, table) {
     var definition = tables[tableKey];
     if (!table || !table.getBoundingClientRect().width) { return; }
+    if (table.columnWidthObserver) { table.columnWidthObserver.disconnect(); }
+    var fillContainer = ["bookings", "payments", "prepayments", "prepaymentsByRequest"].indexOf(tableKey) !== -1;
     var headers = Array.prototype.slice.call(table.tHead.rows[0].cells);
     var previousGroup = table.querySelector("colgroup[data-column-widths]");
     if (previousGroup) { previousGroup.remove(); }
@@ -30,10 +32,14 @@
     table.style.removeProperty("width");
     var widths = headers.map(function (header) {
       var key = header.getAttribute("data-resizable-column");
+      var fixedWidth = Number(header.getAttribute("data-fixed-column-width"));
+      if (!key && fixedWidth > 0) { return fixedWidth; }
       var saved = Number(definition.widths[key]);
       var column = definition.columns.find(function (item) { return item.key === key; });
-      return key && Number.isFinite(saved) && saved >= 40 && saved <= 1600
+      var width = key && Number.isFinite(saved) && saved >= 40 && saved <= 1600
         ? saved : column && column.defaultWidth || header.getBoundingClientRect().width;
+      if (fillContainer && !key) { return header.classList.contains("table-columns-gear-cell") ? 42 : 40; }
+      return Math.max(column && column.minWidth || 0, width);
     });
     var group = document.createElement("colgroup");
     group.setAttribute("data-column-widths", "");
@@ -41,8 +47,16 @@
     table.insertBefore(group, table.firstChild);
     function applyWidths() {
       table.classList.add("has-column-widths");
-      widths.forEach(function (width, index) { group.children[index].style.width = width + "px"; });
-      table.style.width = widths.reduce(function (sum, width) { return sum + width; }, 0) + "px";
+      var total = widths.reduce(function (sum, width) { return sum + width; }, 0);
+      var extra = fillContainer ? Math.max(0, table.parentElement.clientWidth - total) : 0;
+      var flexible = headers.map(function (header, index) {
+        var column = definition.columns.find(function (item) { return item.key === header.getAttribute("data-resizable-column"); });
+        return column && column.flex ? index : -1;
+      }).filter(function (index) { return index >= 0; });
+      // Hidden text columns must not leave unused space either.
+      if (fillContainer && !flexible.length) { flexible = headers.map(function (header, index) { return header.hasAttribute("data-resizable-column") ? index : -1; }).filter(function (index) { return index >= 0; }); }
+      widths.forEach(function (width, index) { group.children[index].style.width = (width + (flexible.indexOf(index) !== -1 ? extra / flexible.length : 0)) + "px"; });
+      table.style.width = total + extra + "px";
     }
     function saveWidths() {
       headers.forEach(function (header, index) {
@@ -52,6 +66,10 @@
       writePreferences();
     }
     if (Object.keys(definition.widths).length || definition.columns.some(function (column) { return column.defaultWidth; })) { applyWidths(); }
+    if (fillContainer && global.ResizeObserver) {
+      table.columnWidthObserver = new global.ResizeObserver(applyWidths);
+      table.columnWidthObserver.observe(table.parentElement);
+    }
     headers.forEach(function (header, index) {
       var key = header.getAttribute("data-resizable-column");
       if (!key) { return; }
@@ -64,13 +82,13 @@
       handle.setAttribute("aria-orientation", "vertical");
       var column = definition.columns.find(function (item) { return item.key === key; });
       handle.setAttribute("aria-label", "Resize " + column.label + " column");
-      handle.setAttribute("aria-valuemin", "40");
+      handle.setAttribute("aria-valuemin", String(column.minWidth || 40));
       handle.setAttribute("aria-valuemax", "1600");
       handle.setAttribute("aria-valuenow", String(Math.round(widths[index])));
       handle.title = "Drag to resize column. Use arrow keys for fine adjustment.";
       handle.addEventListener("click", function (event) { event.stopPropagation(); });
       function resize(width) {
-        widths[index] = Math.max(40, Math.min(1600, Math.round(width)));
+        widths[index] = Math.max(column.minWidth || 40, Math.min(1600, Math.round(width)));
         applyWidths();
         handle.setAttribute("aria-valuenow", String(widths[index]));
       }
@@ -138,7 +156,7 @@
     dialog = document.createElement("div");
     dialog.className = "table-column-config-backdrop";
     dialog.innerHTML = '<section class="table-column-config-modal" role="dialog" aria-modal="true" aria-labelledby="table-column-config-title">' +
-      '<header><h2 id="table-column-config-title">Edit columns</h2><button type="button" class="table-column-config-close" aria-label="Close">&times;</button></header>' +
+      '<header><h2 id="table-column-config-title">Edit columns</h2><button type="button" class="widget-popup-close table-column-config-close" aria-label="Close" title="Close">&times;</button></header>' +
       '<p>Drag a column to change its order. Use the eye to show or hide it.</p>' +
       '<div class="table-column-config-list"></div>' +
       '<footer><button type="button" class="button secondary" data-column-config-cancel>Cancel</button><button type="button" class="button primary" data-column-config-save>Save</button></footer></section>';

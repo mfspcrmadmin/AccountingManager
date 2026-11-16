@@ -1,0 +1,4 @@
+void schedule.schedule_invoiceReminders()
+{
+info standalone.invoiceReminder_run("send");
+}

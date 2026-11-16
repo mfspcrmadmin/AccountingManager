@@ -1,0 +1,46 @@
+@layer widget-views {
+.pending-operations { margin: 0 0 12px; padding: 0; border: 1px solid var(--border, #e5e0d9); border-radius: 9px; background: #fff; color: var(--text, #293344); font-size: 12px; }
+.pending-operations[hidden], .pending-operations [hidden] { display: none !important; }
+.pending-operations > summary { display: flex; align-items: center; gap: 9px; padding: 10px 14px; cursor: pointer; list-style: none; border-radius: 9px; }
+.pending-operations summary::-webkit-details-marker { display: none; }
+.pending-operations > summary:hover { background: #faf8f5; }
+.pending-title { font-weight: 600; font-size: 13px; }
+.pending-count { padding: 2px 7px; border-radius: 12px; background: #f0eeeb; font-size: 11px; font-weight: 600; }
+.pending-icon { display: inline-flex; color: #777e88; flex: 0 0 auto; }
+.pending-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.pending-operations > summary > .pending-icon:last-child { margin-left: 2px; }
+.pending-operations[open] > summary > .pending-icon:last-child { transform: rotate(180deg); }
+.pending-help { margin-left: auto; border: 0; background: transparent; padding: 3px; border-radius: 4px; cursor: pointer; display: inline-flex; }
+.pending-operations p { margin: 5px 0; font-size: 12px; line-height: 1.4; }
+.pending-operations .pending-help-text { padding: 0 14px 8px; margin: 0; color: #69717c; }
+.pending-list { max-height: min(360px, 50vh); overflow: auto; }
+.pending-list article { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; align-items: center; gap: 10px; border-top: 1px solid #eeeae5; padding: 10px 14px; }
+.pending-body { min-width: 0; overflow-wrap: anywhere; }
+.pending-body strong { font-size: 12px; font-weight: 600; }
+.pending-reference { color: #69717c; font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+.pending-row-actions { display: flex; gap: 10px; align-items: center; }
+.pending-confirmation { grid-column: 2 / -1; padding: 14px; border: 1px solid #e9cba6; border-radius: 8px; background: #fffaf3; }
+.pending-confirmation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.pending-operations .pending-confirmation p { max-width: 720px; color: #61513d; }
+.pending-feedback.is-loading { display: flex; align-items: center; gap: 10px; color: #82511e; background: #fffaf3; }
+.pending-feedback.is-loading::before { content: ''; flex: 0 0 16px; width: 16px; height: 16px; border: 2px solid #efdac2; border-top-color: #b05e16; border-radius: 50%; animation: pending-spin .8s linear infinite; }
+@keyframes pending-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pending-feedback.is-loading::before { animation-duration: 2s; } }
+.pending-status { font-size: 10px; padding: 3px 7px; border-radius: 5px; color: #606975; background: #f2f3f5; white-space: nowrap; }
+.pending-status.is-attention { color: #875b1e; background: #fff4df; }
+.pending-operations .button { min-height: 30px; padding: 5px 9px; font-size: 11px; cursor: pointer; margin-right: 5px; }
+.pending-operations .pending-review { color: #a34d10; border: 1px solid #eed7c4; background: #fff9f3; white-space: nowrap; margin: 0; }
+.pending-operations .pending-review:hover { background: #ffefde; border-color: #d98a4a; }
+.pending-operations button:active { transform: translateY(1px); }
+.pending-operations button:disabled { opacity: .5; cursor: not-allowed; }
+.pending-details { margin-top: 4px; color: #69717c; font-size: 11px; }
+.pending-details > summary { display: flex; gap: 3px; align-items: center; width: fit-content; list-style: none; cursor: pointer; }
+.pending-details .pending-icon svg { width: 12px; height: 12px; }
+.pending-details[open] > summary .pending-icon { transform: rotate(180deg); }
+.pending-problem { color: #875b1e; }
+.pending-operations .pending-feedback:empty { display: none; }
+.pending-operations .pending-feedback:not(:empty) { padding: 6px 14px; margin: 0; border-top: 1px solid #eeeae5; }
+.pending-operations :focus-visible { outline: 2px solid #c47738; outline-offset: 3px; }
+@media (max-width: 600px) { .pending-list article { grid-template-columns: 18px minmax(0,1fr); gap: 7px; } .pending-row-actions { grid-column: 2; flex-wrap: wrap; } .pending-operations > summary { padding: 9px 12px; } }
+
+}

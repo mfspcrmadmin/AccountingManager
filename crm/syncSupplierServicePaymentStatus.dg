@@ -1,0 +1,126 @@
+string standalone.syncSupplierServicePaymentStatus(String settlementId)
+{
+result = {"success":false,"updated":0,"skipped_prepayment":0};
+try
+{
+    servicesRead = standalone.supplierInvoiceRegistration_read("Booking_Services","Supplier_Settlement",settlementId).toMap();
+    if(servicesRead.get("success") != true) { throw servicesRead.get("message"); }
+    invoices = Map();
+    payments = Map();
+    updates = List();
+    for each service in servicesRead.get("records")
+    {
+        serviceId = service.get("id").toString();
+        requestLinks = standalone.supplierInvoiceRegistration_read("Prepayment_Request_Services","Booking_Service",serviceId).toMap();
+        if(requestLinks.get("success") != true) { throw requestLinks.get("message"); }
+        // Prepayment services retain their existing request-based rule.
+        if(!requestLinks.get("records").isEmpty())
+        {
+            result.put("skipped_prepayment",result.get("skipped_prepayment") + 1);
+            continue;
+        }
+        linesRead = standalone.supplierInvoiceRegistration_read("Supplier_Invoice_Lines","Booking_Service",serviceId).toMap();
+        if(linesRead.get("success") != true) { throw linesRead.get("message"); }
+        seenInvoices = Map();
+        count = 0;
+        full = 0;
+        anyPaid = false;
+        refundCount = 0;
+        fullRefundCount = 0;
+        anyRefund = false;
+        for each line in linesRead.get("records")
+        {
+            if(line.get("Supplier_Invoice") == null) { throw "An invoice line has no invoice."; }
+            invoiceId = line.get("Supplier_Invoice").get("id").toString();
+            if(seenInvoices.containKey(invoiceId)) { continue; }
+            seenInvoices.put(invoiceId,true);
+            if(!invoices.containKey(invoiceId))
+            {
+                invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+                if(invoice == null || invoice.get("id") == null) { throw "Could not read service invoice."; }
+                summary = {"ignored":false,"refund":false,"paid":0,"total":0};
+                if(invoice.get("Status") == "Cancelled" || invoice.get("Status") == "Rejected")
+                {
+                    summary.put("ignored",true);
+                }
+                else
+                {
+                    summary.put("refund",invoice.get("Invoice_Type") == "Credit Note");
+                    if(invoice.get("Registration_Status") == "Pending") { throw "An invoice registration is incomplete. Resume it before updating service payment status."; }
+                    total = ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal().round(2);
+                    if(total <= 0) { throw "The service invoice has no positive payable amount."; }
+                    allocated = 0.0;
+                    paid = 0.0;
+                    seenPayments = Map();
+                    allocationsRead = standalone.supplierInvoiceRegistration_read("Supplier_Pay_Allocations","Supplier_Invoice",invoiceId).toMap();
+                    if(allocationsRead.get("success") != true) { throw allocationsRead.get("message"); }
+                    for each allocation in allocationsRead.get("records")
+                    {
+                        if(allocation.get("Status") == "Cancelled" || allocation.get("Status") == "Void") { continue; }
+                        if(allocation.get("Supplier_Payment") == null) { throw "A service invoice allocation has no payment."; }
+                        paymentId = allocation.get("Supplier_Payment").get("id").toString();
+                        if(seenPayments.containKey(paymentId)) { throw "Duplicate invoice/payment allocation."; }
+                        seenPayments.put(paymentId,true);
+                        if(!payments.containKey(paymentId))
+                        {
+                            payment = zoho.crm.getRecordById("Supplier_Payments",paymentId.toLong());
+                            if(payment == null || payment.get("id") == null) { throw "Could not read service invoice payment."; }
+                            payments.put(paymentId,payment);
+                        }
+                        payment = payments.get(paymentId);
+                        if(payment.get("Status") == "Cancelled" || payment.get("Status") == "Rejected") { continue; }
+                        if(ifnull(payment.get("Currency"),"") != ifnull(invoice.get("Currency"),"")) { throw "Service payment currencies do not match."; }
+                        amount = ifnull(allocation.get("Allocated_Amount"),0).toDecimal();
+                        if(amount <= 0 || amount != amount.round(2)) { throw "Invalid service invoice payment allocation."; }
+                        allocated = allocated + amount;
+                        if(payment.get("Status") == "Paid" || payment.get("Status") == "Reconciled") { paid = paid + amount; }
+                    }
+                    if(allocated.round(2) > total) { throw "Service invoice payment allocations exceed its payable amount."; }
+                    summary.put("paid",paid.round(2));
+                    summary.put("total",total);
+                }
+                invoices.put(invoiceId,summary);
+            }
+            summary = invoices.get(invoiceId);
+            if(summary.get("ignored") == true) { continue; }
+            if(summary.get("refund") == true)
+            {
+                refundCount = refundCount + 1;
+                if(summary.get("paid") > 0) { anyRefund = true; }
+                if(summary.get("paid") >= summary.get("total")) { fullRefundCount = fullRefundCount + 1; }
+                continue;
+            }
+            count = count + 1;
+            if(summary.get("paid") > 0) { anyPaid = true; }
+            if(summary.get("paid") >= summary.get("total")) { full = full + 1; }
+        }
+        desired = "To Be Paid";
+        if(count > 0 && full == count) { desired = "Fully Paid"; }
+        else if(anyPaid) { desired = "Partially Paid"; }
+        // Actual refunds take precedence over the ordinary payment state.
+        // An unpaid credit note alone does not prove money has been returned.
+        if(anyRefund)
+        {
+            desired = "Partially Refunded";
+            if(refundCount > 0 && fullRefundCount == refundCount) { desired = "Refunded"; }
+        }
+        if(service.get("Payment_Status") != desired)
+        {
+            updates.add({"id":serviceId,"version":service.get("Modified_Time"),"status":desired});
+        }
+    }
+    // All reads and validations finish before writing. Retry recomputes from live records.
+    for each update in updates
+    {
+        written = standalone.supplierInvoiceEdit_write("Booking_Services",update.get("id"),update.get("version"),{"Payment_Status":update.get("status")}).toMap();
+        if(written.get("error") == true) { throw "Service changed or its payment status could not be saved. Retry the settlement update."; }
+        result.put("updated",result.get("updated") + 1);
+    }
+    result.put("success",true);
+}
+catch (e)
+{
+    result.put("message",e.toString());
+}
+return result.toString();
+}

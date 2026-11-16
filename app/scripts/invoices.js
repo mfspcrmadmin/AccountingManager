@@ -43,6 +43,39 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var invoiceFileLoadQueue = [];
     var invoiceFileLoadQueueIsRunning = false;
 
+    var relatedQueries = {};
+    function relatedTable(kind, invoiceId) {
+      if (!invoiceId) { return null; }
+      var key = kind + ":" + invoiceId;
+      if (!relatedQueries[key]) {
+        var view = { records: [] };
+        var query = ns.createProgressiveQuery({ view: view, render: renderAll,
+          resetScroll: function () { var wrap = global.document && global.document.getElementById(kind === "lines" ? "selected-invoice-lines-table-wrap" : "selected-invoice-allocations-table-wrap"); if (wrap) { wrap.scrollTop = 0; } },
+          getRecords: function () { return view.records; }, setRecords: function (rows) { view.records = rows; },
+          fetch: async function (search) {
+            var lines = kind === "lines";
+            var result = await deps.fetchRelatedPage(lines ? MODULES.invoiceLines : MODULES.payAllocations,
+              lines ? INVOICE_LINE_RELATED_FIELDS : PAY_ALLOCATION_FIELDS,
+              { page: search.page, perPage: 50, whereClause: (lines ? INVOICE_LINE_FIELDS.invoiceLookup : "Supplier_Invoice") + " = '" + String(invoiceId).replace(/'/g, "\\'") + "'",
+                orderByClause: (lines ? INVOICE_LINE_FIELDS.serviceDate : "Allocation_Date") + " desc, id asc" });
+            if (lines) { result.records = await enrichInvoiceLinesWithBookingServiceNames(result.records); }
+            return result;
+          }
+        });
+        view.onLoadMore = query.more;
+        relatedQueries[key] = { view: view, query: query };
+      }
+      return relatedQueries[key];
+    }
+    function loadRelatedTables(invoiceId, reset) {
+      return Promise.all(["lines", "allocations"].map(function (kind) {
+        var table = relatedTable(kind, invoiceId);
+        if (!table) { return; }
+        if (reset || !table.view.hasLoaded && !table.view.loadingInitial) { return table.query.reset({}); }
+      }));
+    }
+    function cancelRelatedTables() { Object.keys(relatedQueries).forEach(function (key) { relatedQueries[key].query.cancel(); }); relatedQueries = {}; }
+
     function getCreatedByValue(record) {
       if (!record) {
         return null;
@@ -139,29 +172,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function loadPayAllocationsForInvoice(invoiceId) {
-      var escapedId = invoiceId.replace(/'/g, "\\'");
-      var selectFields = await resolveCoqlFields(MODULES.payAllocations, PAY_ALLOCATION_FIELDS);
-
-      try {
-        return sortRecordsByDateDesc(
-          await crm.coql(
-            "select " + selectFields.join(", ") +
-            " from " + MODULES.payAllocations +
-            " where Supplier_Invoice = '" + escapedId + "'" +
-            " limit 0, 200"
-          ),
-          "Allocation_Date"
-        );
-      } catch (coqlError) {
-        try {
-          return sortRecordsByDateDesc(
-            await crm.searchRecord(MODULES.payAllocations, "(Supplier_Invoice:equals:" + invoiceId + ")"),
-            "Allocation_Date"
-          );
-        } catch (searchError) {
-          return [];
-        }
-      }
+      return loadRecordsByCoql(MODULES.payAllocations, PAY_ALLOCATION_FIELDS, {
+        whereClause: "Supplier_Invoice = '" + String(invoiceId).replace(/'/g, "\\'") + "'",
+        orderByClause: "Allocation_Date desc, id asc", requireComplete: true
+      });
     }
 
     async function ensureInvoiceAllocationsLoaded(invoiceId, forceReload) {
@@ -204,7 +218,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return [];
       }
 
-      return loadRecordsByCoql(MODULES.bookingServices, ["id", "Name"], {
+      return loadRecordsByCoql(MODULES.bookingServices, ["id", "Name", "Product_Description"], {
         whereClause: buildCoqlOrEqualsClause("id", normalizedIds)
       });
     }
@@ -212,9 +226,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     async function enrichInvoiceLinesWithBookingServiceNames(lines) {
       var normalizedLines = Array.isArray(lines) ? lines.slice() : [];
       var serviceIds = helpers.uniqueNonEmpty(normalizedLines.map(function (line) {
-        return helpers.getLookupId(line && line[INVOICE_LINE_FIELDS.serviceLookup]);
+        var lookup = line && line[INVOICE_LINE_FIELDS.serviceLookup];
+        return helpers.getLookupId(lookup);
       }));
       var serviceNameById = {};
+      var serviceDescriptionById = {};
       var serviceRecords;
 
       if (!serviceIds.length) {
@@ -230,13 +246,27 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           if (serviceId && serviceName) {
             serviceNameById[serviceId] = serviceName;
           }
+          if (serviceId && Object.prototype.hasOwnProperty.call(service, "Product_Description")) {
+            serviceDescriptionById[serviceId] = String(service.Product_Description || "");
+          }
         });
       } catch (error) {
         debugError("enrichInvoiceLinesWithBookingServiceNames failed", error, {
           serviceIds: serviceIds
         });
-        return normalizedLines;
       }
+
+      await Promise.all(serviceIds.filter(function (id) {
+        return !Object.prototype.hasOwnProperty.call(serviceDescriptionById, id);
+      }).map(async function (id) {
+        try {
+          var service = await crm.getRecord(MODULES.bookingServices, id);
+          serviceNameById[id] = helpers.getLookupName(service);
+          serviceDescriptionById[id] = String(service && service.Product_Description || "");
+        } catch (error) {
+          debugError("Invoice line service lookup failed", error, { serviceId: id });
+        }
+      }));
 
       return normalizedLines.map(function (line) {
         var updatedLine = Object.assign({}, line);
@@ -246,6 +276,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           ? String(lookupValue.name || lookupValue.Name || "").trim()
           : "";
         var resolvedName = lookupName || serviceNameById[serviceId] || "";
+
+        updatedLine._serviceProductDescription = serviceDescriptionById[serviceId] || "";
 
         if (!serviceId || !resolvedName) {
           return updatedLine;
@@ -267,37 +299,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function loadInvoiceLinesForInvoice(invoiceId) {
-      var escapedId = invoiceId.replace(/'/g, "\\'");
-      var selectFields = await resolveCoqlFields(MODULES.invoiceLines, INVOICE_LINE_RELATED_FIELDS);
-      var records;
-
-      try {
-        records = sortRecordsByDateDesc(
-          await crm.coql(
-            "select " + selectFields.join(", ") +
-            " from " + MODULES.invoiceLines +
-            " where " + INVOICE_LINE_FIELDS.invoiceLookup + " = '" + escapedId + "'" +
-            " limit 0, 200"
-          ),
-          INVOICE_LINE_FIELDS.serviceDate
-        );
-      } catch (coqlError) {
-        try {
-          records = sortRecordsByDateDesc(
-            await crm.searchRecord(MODULES.invoiceLines, "(" + INVOICE_LINE_FIELDS.invoiceLookup + ":equals:" + invoiceId + ")"),
-            INVOICE_LINE_FIELDS.serviceDate
-          );
-        } catch (searchError) {
-          records = sortRecordsByDateDesc(
-            (await crm.getAllRecords(MODULES.invoiceLines, 1, 200)).filter(function (record) {
-              return helpers.getLookupId(record[INVOICE_LINE_FIELDS.invoiceLookup]) === invoiceId;
-            }),
-            INVOICE_LINE_FIELDS.serviceDate
-          );
-        }
-      }
-
-      return enrichInvoiceLinesWithBookingServiceNames(records);
+      return enrichInvoiceLinesWithBookingServiceNames(await loadRecordsByCoql(MODULES.invoiceLines, INVOICE_LINE_RELATED_FIELDS, {
+        whereClause: INVOICE_LINE_FIELDS.invoiceLookup + " = '" + String(invoiceId).replace(/'/g, "\\'") + "'",
+        orderByClause: INVOICE_LINE_FIELDS.serviceDate + " desc, id asc", requireComplete: true
+      }));
     }
 
     async function ensureInvoiceLinesLoaded(invoiceId, forceReload) {
@@ -894,149 +899,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function buildInvoicesView() {
       var records = state.records.invoices.slice();
       var filters = cloneFilterState(state.views.invoices.filters);
-      var appliedFilters = cloneFilterState(state.views.invoices.appliedFilters || state.views.invoices.filters);
       var hasCurrentFilters = hasAnyLoadFilterValue(filters);
       var sort = state.views.invoices.sort || { key: "date", direction: "desc" };
       var invoiceView = state.views.invoices.view || "open";
-      var selectedStatuses = getNormalizedStatusFilterValues(appliedFilters.statusValues);
-      var selectedInvoiceType = String(appliedFilters.invoiceType || "").trim();
-      var filteredRecords = records.filter(function (invoice) {
-        var invoiceDate = helpers.toIsoDate(invoice.Invoice_Date);
-        var status = String(invoice.Status || "").trim().toLowerCase();
-        var destinations = appliedFilters.destinationValues;
-        if (Array.isArray(destinations) && destinations.length < 3 && !destinations.some(function (value) {
-          return (value === "Empty" ? "" : value.toLowerCase()) === getInvoiceSupplierDestination(invoice).toLowerCase();
-        })) { return false; }
-        if (appliedFilters.selfEmployed === "true" || appliedFilters.selfEmployed === "false") {
-          var selfEmployed = invoice["Supplier.Is_Self_Employed"];
-          if (String(selfEmployed).toLowerCase() !== appliedFilters.selfEmployed) { return false; }
-        }
-
-        if (invoiceView === "closed" && status !== "paid" && status !== "cancelled" && status !== "rejected") {
-          return false;
-        }
-
-        if (invoiceView === "open" && (status === "paid" || status === "cancelled" || status === "rejected")) {
-          return false;
-        }
-
-        if (selectedStatuses.length && selectedStatuses.indexOf(String(invoice.Status || "")) === -1) {
-          return false;
-        }
-
-        if (appliedFilters.dateFrom && (!invoiceDate || invoiceDate < appliedFilters.dateFrom)) {
-          return false;
-        }
-
-        if (appliedFilters.dateTo && (!invoiceDate || invoiceDate > appliedFilters.dateTo)) {
-          return false;
-        }
-
-        if (selectedInvoiceType && getInvoiceType(invoice) !== selectedInvoiceType) {
-          return false;
-        }
-
-        if (appliedFilters.supplierCode && !helpers.matchesText(getInvoiceSupplierDisplay(invoice).code, appliedFilters.supplierCode)) {
-          return false;
-        }
-
-        if (appliedFilters.invoiceNumber && !helpers.matchesText([
-          helpers.getInvoiceDisplayNumber(invoice, FIELD_CANDIDATES),
-          invoice.Name,
-          invoice.Invoice_Number
-        ].join(" "), appliedFilters.invoiceNumber)) {
-          return false;
-        }
-
-        if (appliedFilters.mfsp && !helpers.matchesText(getMfspFromInvoice(invoice), appliedFilters.mfsp)) {
-          return false;
-        }
-
-        return true;
-      }).sort(function (left, right) {
-        var leftGroup = getInvoiceGroup(left);
-        var rightGroup = getInvoiceGroup(right);
-        var groupComparison = leftGroup && rightGroup
-          ? compareValues(leftGroup.label, rightGroup.label, "asc") || compareValues(leftGroup.key, rightGroup.key, "asc") : 0;
-        if (groupComparison) { return groupComparison; }
-        if (sort.key === "invoice") {
-          return compareValues(
-            helpers.getInvoiceDisplayNumber(left, FIELD_CANDIDATES),
-            helpers.getInvoiceDisplayNumber(right, FIELD_CANDIDATES),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "status") {
-          return compareValues(left.Status, right.Status, sort.direction);
-        }
-
-        if (sort.key === "invoiceType") {
-          return compareValues(getInvoiceType(left), getInvoiceType(right), sort.direction);
-        }
-
-        if (sort.key === "supplier") {
-          return compareValues(
-            getInvoiceSupplierSortValue(left),
-            getInvoiceSupplierSortValue(right),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "supplierCode") {
-          return compareValues(
-            getInvoiceSupplierCodeSortValue(left),
-            getInvoiceSupplierCodeSortValue(right),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "mfsp") {
-          return compareValues(
-            getMfspFromInvoice(left),
-            getMfspFromInvoice(right),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "booking") {
-          return compareValues(
-            getInvoiceBookingDisplay(left),
-            getInvoiceBookingDisplay(right),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "total") {
-          return compareValues(
-            helpers.getInvoiceTotalAmount(left, FIELD_CANDIDATES),
-            helpers.getInvoiceTotalAmount(right, FIELD_CANDIDATES),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "paid") {
-          return compareValues(
-            getInvoicePaidAmount(left),
-            getInvoicePaidAmount(right),
-            sort.direction
-          );
-        }
-
-        if (sort.key === "pending") {
-          return compareValues(
-            helpers.getInvoicePendingAmount(left, FIELD_CANDIDATES),
-            helpers.getInvoicePendingAmount(right, FIELD_CANDIDATES),
-            sort.direction
-          );
-        }
-
-        return compareValues(
-          Date.parse(left.Invoice_Date || "") || 0,
-          Date.parse(right.Invoice_Date || "") || 0,
-          sort.direction
-        );
-      });
+      // The server owns filtering and ordering across the entire result set.
+      var filteredRecords = records;
       var filteredTotalAmount = filteredRecords.reduce(function (sum, invoice) {
         return sum + helpers.getInvoiceTotalAmount(invoice, FIELD_CANDIDATES) * (getInvoiceType(invoice) === "Credit Note" ? -1 : 1);
       }, 0);
@@ -1066,9 +933,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }, 0);
       // Invoice records are already loaded as a complete filtered dataset.
       // Keep one scrollable list instead of dividing it into local pages.
-      var totalPages = 1;
-      var page = 1;
-      var hasMore = false;
+      var page = state.views.invoices.page || 1;
+      var hasMore = Boolean(state.views.invoices.hasMore);
       var visibleRecords = filteredRecords;
       var selectedVisibleCount = visibleRecords.filter(function (invoice) {
         return Boolean(state.views.invoices.selectedIds[invoice.id]);
@@ -1091,10 +957,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }) || null;
 
       if (selectedDetailId) {
-        selectedInvoiceLines = state.invoiceLinesByInvoiceId[selectedDetailId] || [];
-        selectedInvoiceLinesLoading = state.invoiceLineLoadingId === selectedDetailId;
-        selectedInvoiceAllocations = state.invoiceAllocationsByInvoiceId[selectedDetailId] || [];
-        selectedInvoiceAllocationsLoading = state.invoiceAllocationLoadingId === selectedDetailId;
+        var lineTable = relatedTable("lines", selectedDetailId), allocationTable = relatedTable("allocations", selectedDetailId);
+        selectedInvoiceLines = lineTable.view.records;
+        selectedInvoiceLinesLoading = lineTable.view.loadingInitial;
+        selectedInvoiceAllocations = allocationTable.view.records;
+        selectedInvoiceAllocationsLoading = allocationTable.view.loadingInitial;
       }
 
       if (selectedInvoice) {
@@ -1106,13 +973,18 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       return {
         filters: filters,
+        loadingInitial: Boolean(state.views.invoices.loadingInitial),
+        loadingMore: Boolean(state.views.invoices.loadingMore),
+        loadError: state.views.invoices.loadError || "",
+        onLoadMore: loadMoreInvoices,
+        onRetry: function () { return state.records.invoices.length ? loadMoreInvoices() : refreshInvoicesTabData(); },
         sort: sort,
         filteredRecords: filteredRecords,
         filteredTotalAmount: filteredTotalAmount,
         selectedFilteredRecords: selectedFilteredRecords,
         selectedFilteredAmount: selectedFilteredAmount,
         countLabel: state.views.invoices.hasLoaded
-          ? filteredRecords.length + (filteredRecords.length === 1 ? " invoice" : " invoices")
+          ? filteredRecords.length + (filteredRecords.length === 1 ? " invoice loaded" : " invoices loaded")
           : "0 invoices",
         listTab: state.views.invoices.listTab || "basic",
         showAttachments: Boolean(state.views.invoices.showAttachments),
@@ -1122,6 +994,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         selectedInvoice: selectedInvoice,
         selectedInvoiceDetailTab: normalizeInvoiceDetailTab(state.views.invoices.detailTab || "basic"),
         selectedInvoiceLines: selectedInvoiceLines,
+        lineTable: selectedDetailId ? relatedTable("lines", selectedDetailId).view : null,
+        allocationTable: selectedDetailId ? relatedTable("allocations", selectedDetailId).view : null,
         selectedInvoiceLinesLoading: selectedInvoiceLinesLoading,
         selectedInvoiceAllocations: selectedInvoiceAllocations,
         selectedInvoiceAllocationsLoading: selectedInvoiceAllocationsLoading,
@@ -1130,11 +1004,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         selectedVisibleCount: selectedVisibleCount,
         page: page,
         hasMore: hasMore,
-        pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " invoice" : " invoices"),
+        pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " invoice loaded" : " invoices loaded"),
         statusOptions: ns.getWorkspaceStatusValues("invoices", invoiceView, INVOICE_STATUS_FILTER_OPTIONS).map(function (value) {
           return { value: value, label: value };
         }),
-        emptyMessage: state.currentTab === "invoices" && state.isLoading
+        emptyMessage: state.views.invoices.loadingInitial
           ? "Loading invoices..."
           : state.views.invoices.hasLoaded || !hasCurrentFilters
           ? "No invoices match the current filters."
@@ -1180,6 +1054,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function selectInvoiceDetail(invoiceId) {
       var activeDetailTab = normalizeInvoiceDetailTab(state.views && state.views.invoices ? state.views.invoices.detailTab : "basic");
 
+      cancelRelatedTables();
       closeSelectedInvoiceDeletePanel(false);
       state.views.invoices.selectedDetailId = invoiceId || "";
       state.invoiceLineLoadingId = invoiceId || "";
@@ -1190,8 +1065,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       if (invoiceId) {
         ensureInvoiceCreatedByLoaded(invoiceId);
         ensureInvoiceFileLoaded(invoiceId);
-        ensureInvoiceLinesLoaded(invoiceId);
-        ensureInvoiceAllocationsLoaded(invoiceId);
+        loadRelatedTables(invoiceId, true);
       }
     }
 
@@ -1203,8 +1077,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       renderAll();
 
       if (normalizedTab === "payment" && selectedInvoiceId) {
-        ensureInvoiceLinesLoaded(selectedInvoiceId);
-        ensureInvoiceAllocationsLoaded(selectedInvoiceId);
+        loadRelatedTables(selectedInvoiceId);
       }
     }
 
@@ -1257,39 +1130,79 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       });
     }
 
-    async function refreshInvoicesTabData() {
-      var options = arguments[0] || {};
+    var searchGeneration = 0;
+    var searchSnapshot = null;
+    var activeRequest = null;
 
-      renderer.showError("");
-      renderer.showNotice(options.loadingLabel || "Loading invoices...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, options.loadingLabel || "Loading invoices...");
-      renderAll();
+    function refreshInvoicesTabData() {
+      var view = state.views.invoices;
+      searchGeneration += 1;
+      activeRequest = null;
+      searchSnapshot = {
+        filters: cloneFilterState(view.appliedFilters || view.filters),
+        sort: Object.assign({}, view.sort),
+        groupBy: view.groupBy || "none",
+        nextPage: 1,
+        perPage: Math.max(1, Math.min(200, Math.floor(Number(view.perPage) || 50)))
+      };
+      searchSnapshot.filters.invoiceView = view.view || "open";
+      view.page = 0;
+      view.hasMore = true;
+      view.hasLoaded = false;
+      view.loadError = "";
+      view.loadingMore = false;
+      state.loaded.invoices = false;
+      state.records.invoices = [];
+      if (deps.resetInvoiceScroll) { deps.resetInvoiceScroll(); }
+      return loadMoreInvoices();
+    }
 
-      try {
-        state.loaded.invoices = false;
-        state.views.invoices.hasMore = false;
-        state.records.invoices = [];
-        await ensureInvoicesLoaded();
-        state.views.invoices.hasLoaded = options.loadedFlag !== false;
-        if (typeof onInvoicesLoaded === "function") {
-          onInvoicesLoaded();
-        }
+    function loadMoreInvoices() {
+      var view = state.views.invoices;
+      if (activeRequest) { return activeRequest; }
+      if (!searchSnapshot || !view.hasMore) { return Promise.resolve(); }
+      var generation = searchGeneration;
+      var snapshot = searchSnapshot;
+      var page = snapshot.nextPage;
+      view.loadingInitial = page === 1;
+      view.loadingMore = page > 1;
+      view.loadError = "";
+      // Defer work until the request guard is installed (render can trigger scroll).
+      activeRequest = Promise.resolve().then(function () {
         renderAll();
-      } catch (error) {
-        debugError("refreshInvoicesTabData failed", error, {
-          filters: cloneFilterState(state.views.invoices.appliedFilters || state.views.invoices.filters)
+        return deps.fetchInvoicePage(Object.assign({}, snapshot, { page: page }));
+      }).then(function (result) {
+        if (generation !== searchGeneration) { return; }
+        var seen = new Set(state.records.invoices.map(function (record) { return String(record.id); }));
+        result.records.forEach(function (record) {
+          if (!seen.has(String(record.id))) {
+            seen.add(String(record.id));
+            state.records.invoices.push(record);
+          }
         });
-        renderer.showError(getFriendlyLoadErrorMessage("invoices", error, options.errorMessage || "Could not refresh invoices."));
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
+        view.page = page;
+        snapshot.nextPage = page + 1;
+        view.hasMore = result.hasMore;
+        view.hasLoaded = true;
+        state.loaded.invoices = true;
+        if (typeof onInvoicesLoaded === "function") { onInvoicesLoaded(); }
+      }).catch(function (error) {
+        if (generation !== searchGeneration) { return; }
+        view.loadError = /pagination limit/.test(String(error && error.message)) ? error.message : "Could not load invoices. Please retry.";
+        debugError("loadInvoicePage failed", error, { page: page, filters: snapshot.filters });
+      }).finally(function () {
+        if (generation !== searchGeneration) { return; }
+        view.loadingInitial = false;
+        view.loadingMore = false;
+        activeRequest = null;
+        renderAll();
+      });
+      return activeRequest;
     }
 
     return {
       buildView: buildInvoicesView,
+      enrichLines: enrichInvoiceLinesWithBookingServiceNames,
       toggleSelection: toggleInvoiceSelection,
       toggleVisible: toggleVisibleInvoices,
       selectDetail: selectInvoiceDetail,
@@ -1298,6 +1211,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       setShowAttachments: setShowInvoiceAttachments,
       openInCrm: openInvoiceInCrm,
       loadTabData: loadInvoicesTabData,
+      loadMore: loadMoreInvoices,
+      cancel: function () { cancelRelatedTables(); searchGeneration += 1; activeRequest = null; searchSnapshot = null; state.views.invoices.loadingInitial = state.views.invoices.loadingMore = false; },
       refreshTabData: refreshInvoicesTabData,
       ensureAllocationsLoaded: ensureInvoiceAllocationsLoaded,
       ensureLinesLoaded: ensureInvoiceLinesLoaded,

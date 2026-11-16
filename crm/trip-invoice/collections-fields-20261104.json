@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-04",
+  "module": "Invoices",
+  "fields": [
+    {
+      "api_name": "Invoice_Origin",
+      "id": "616617000177025170",
+      "data_type": "picklist"
+    },
+    {
+      "api_name": "Booking_MFSP",
+      "id": "616617000177025183",
+      "data_type": "text"
+    },
+    {
+      "api_name": "Original_Sales_Invoice",
+      "id": "616617000177025192",
+      "data_type": "lookup"
+    },
+    {
+      "api_name": "Collections_Status",
+      "id": "616617000177025204",
+      "data_type": "picklist"
+    },
+    {
+      "api_name": "Collected_Amount",
+      "id": "616617000177025214",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Refunded_Amount",
+      "id": "616617000177035435",
+      "data_type": "currency"
+    },
+    {
+      "api_name": "Collection_Source",
+      "id": "616617000177035444",
+      "data_type": "picklist"
+    },
+    {
+      "api_name": "Collection_Evidence",
+      "id": "616617000177035454",
+      "data_type": "textarea"
+    },
+    {
+      "api_name": "Collections_Checked_At",
+      "id": "616617000177035462",
+      "data_type": "datetime"
+    }
+  ],
+  "helper_function": {
+    "api_name": "tripinvoice_collections",
+    "id": "616617000177026279"
+  },
+  "real_financial_records_modified": false,
+  "real_invoices_created": false,
+  "validation": {
+    "node_tests": 56,
+    "browser": [
+      "trip-invoice.browser.cjs",
+      "trip-closure-scroll.browser.cjs"
+    ]
+  }
+}

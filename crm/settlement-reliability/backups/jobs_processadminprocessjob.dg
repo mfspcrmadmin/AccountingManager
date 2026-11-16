@@ -1,0 +1,273 @@
+string standalone.jobs_processAdminProcessJob(Map jobRecord)
+{
+result = Map();
+result.put("error",false);
+result.put("job_id","");
+result.put("job_type","");
+result.put("final_status","");
+result.put("message","");
+result.put("details",Map());
+adminJobsModule = "Admin_Process_Jobs";
+jobId = ifnull(jobRecord.get("id"),"").toString();
+jobType = ifnull(jobRecord.get("Job_Type"),"").toString().trim();
+result.put("job_id",jobId);
+result.put("job_type",jobType);
+if(jobId == "")
+{
+	result.put("error",true);
+	result.put("final_status","Error");
+	result.put("message","jobs_processAdminProcessJob: job id is empty");
+	return result;
+}
+attempts = 0;
+attemptsRaw = ifnull(jobRecord.get("Attempts"),"0").toString().trim();
+if(attemptsRaw != "")
+{
+	try 
+	{
+		attempts = attemptsRaw.toLong();
+	}
+	catch (eAttempts)
+	{
+		attempts = 0;
+	}
+}
+maxAttempts = 5;
+maxAttemptsRaw = ifnull(jobRecord.get("Max_Attempts"),"5").toString().trim();
+if(maxAttemptsRaw != "")
+{
+	try 
+	{
+		maxAttempts = maxAttemptsRaw.toLong();
+	}
+	catch (eMaxAttempts)
+	{
+		maxAttempts = 5;
+	}
+}
+nowText = standalone.jobs_formatDateTimeForCRM(zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssZ"));
+lockExpiresAtText = standalone.jobs_formatDateTimeForCRM(zoho.currenttime.addMinutes(30).toString("yyyy-MM-dd'T'HH:mm:ssZ"));
+startUpdate = Map();
+startUpdate.put("Status","Processing");
+startUpdate.put("Attempts",attempts + 1);
+startUpdate.put("Last_Run_At",nowText);
+startUpdate.put("Locked_At",nowText);
+startUpdate.put("Lock_Expires_At",lockExpiresAtText);
+startUpdate.put("Completed_At",null);
+startUpdate.put("Last_Error","");
+try 
+{
+	startUpdateRes = zoho.crm.updateRecord(adminJobsModule,jobId,startUpdate);
+	if(isnull(startUpdateRes))
+	{
+		result.put("error",true);
+		result.put("final_status","Error");
+		result.put("message","jobs_processAdminProcessJob: CRM returned an empty response while claiming the job");
+		return result;
+	}
+	startUpdateCode = ifnull(startUpdateRes.get("code"),"").toString();
+	startUpdateStatus = ifnull(startUpdateRes.get("status"),"").toString();
+	if(startUpdateCode.equalsIgnoreCase("error") || startUpdateStatus.equalsIgnoreCase("error") || startUpdateCode.equalsIgnoreCase("INVALID_DATA"))
+	{
+		result.put("error",true);
+		result.put("final_status","Error");
+		result.put("message","jobs_processAdminProcessJob: could not claim job - " + startUpdateRes.toString());
+		return result;
+	}
+}
+catch (eStartUpdate)
+{
+	result.put("error",true);
+	result.put("final_status","Error");
+	result.put("message","jobs_processAdminProcessJob: exception claiming job - " + eStartUpdate.toString());
+	return result;
+}
+jobError = false;
+finalStatus = "Done";
+finalMessage = "";
+executionDetails = Map();
+if(jobType == "Delete Inactive Booking Step")
+{
+	stepId = ifnull(jobRecord.get("Related_Record_ID"),"").toString().trim();
+	if(stepId == "")
+	{
+		jobError = true;
+		finalMessage = "Delete Inactive Booking Step: Related_Record_ID is empty";
+	}
+	else
+	{
+		try 
+		{
+			stepRecord = zoho.crm.getRecordById("Booking_Steps",stepId);
+			if(isnull(stepRecord) || ifnull(stepRecord.get("id"),"").toString() == "")
+			{
+				finalStatus = "Done";
+				finalMessage = "Booking Step was already deleted";
+			}
+			else
+			{
+				stepStatus = ifnull(stepRecord.get("Status"),"").toString().trim();
+				stepReference = ifnull(stepRecord.get("Step_Reference"),"").toString().trim();
+				executionDetails.put("step_status_before_delete",stepStatus);
+				executionDetails.put("step_reference",stepReference);
+				if(!stepStatus.equalsIgnoreCase("Inactive"))
+				{
+					finalStatus = "Cancelled";
+					finalMessage = "Booking Step is no longer inactive";
+				}
+				else
+				{
+					deleteMap = Map();
+					deleteMap.put("module","Booking_Steps");
+					deleteMap.put("id",stepId);
+					deleteRes = zoho.crm.invokeConnector("crm.delete",deleteMap);
+					executionDetails.put("delete_response",deleteRes);
+					deleteCode = ifnull(deleteRes.get("code"),"").toString();
+					deleteStatus = ifnull(deleteRes.get("status"),"").toString();
+					if(deleteCode.equalsIgnoreCase("error") || deleteStatus.equalsIgnoreCase("error"))
+					{
+						jobError = true;
+						finalMessage = "Delete Inactive Booking Step failed: " + deleteRes.toString();
+					}
+					else
+					{
+						finalStatus = "Done";
+						finalMessage = "Inactive Booking Step deleted successfully";
+					}
+				}
+			}
+		}
+		catch (eDeleteInactiveStep)
+		{
+			jobError = true;
+			finalMessage = "Delete Inactive Booking Step exception: " + eDeleteInactiveStep.toString();
+		}
+	}
+}
+else if(jobType == "Supplier Settlement Recalc")
+{
+	bookingId = "";
+	bookingLookup = jobRecord.get("Booking");
+	if(!isnull(bookingLookup))
+	{
+		try 
+		{
+			bookingId = ifnull(bookingLookup.get("id"),"").toString().trim();
+		}
+		catch (eBookingLookup)
+		{
+			bookingId = ifnull(bookingLookup,"").toString().trim();
+		}
+	}
+	if(bookingId == "")
+	{
+		bookingId = ifnull(jobRecord.get("Related_Record_ID"),"").toString().trim();
+	}
+	if(bookingId == "")
+	{
+		jobError = true;
+		finalMessage = "Supplier Settlement Recalc: booking id is empty";
+	}
+	else
+	{
+		try 
+		{
+			executionDetails.put("booking_id_used",bookingId);
+			recalcRes = standalone.recalculateSupplierSettlementsForBooking(bookingId);
+			executionDetails.put("recalc_result",recalcRes);
+			if(recalcRes.get("error") == true)
+			{
+				jobError = true;
+				finalMessage = "Supplier Settlement Recalc failed: " + ifnull(recalcRes.get("message"),"").toString();
+			}
+			else
+			{
+				finalStatus = "Done";
+				finalMessage = "Supplier settlements recalculated successfully";
+			}
+		}
+		catch (eSettlementRecalc)
+		{
+			jobError = true;
+			finalMessage = "Supplier Settlement Recalc exception: " + eSettlementRecalc.toString();
+		}
+	}
+}
+else
+{
+	jobError = true;
+	finalMessage = "Unsupported Job_Type: " + jobType;
+}
+finishUpdate = Map();
+finishUpdate.put("Locked_At",null);
+finishUpdate.put("Lock_Expires_At",null);
+lastResultJson = executionDetails.toString();
+// Last_Result_JSON is limited to 32,000 characters in CRM. A failed final
+// update would otherwise leave the job permanently in Processing.
+if(lastResultJson.length() > 30000)
+{
+	lastResultJson = lastResultJson.subString(0,30000) + "... [truncated]";
+}
+finishUpdate.put("Last_Result_JSON",lastResultJson);
+if(jobError == true)
+{
+	if(attempts + 1 >= maxAttempts)
+	{
+		finalStatus = "Error";
+	}
+	else
+	{
+		finalStatus = "Retry";
+	}
+	finishUpdate.put("Status",finalStatus);
+	finishUpdate.put("Last_Error",finalMessage);
+	finishUpdate.put("Completed_At",null);
+}
+else
+{
+	finishUpdate.put("Status",finalStatus);
+	finishUpdate.put("Last_Error","");
+	finishUpdate.put("Completed_At",standalone.jobs_formatDateTimeForCRM(zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssZ")));
+}
+try 
+{
+	finishUpdateRes = zoho.crm.updateRecord(adminJobsModule,jobId,finishUpdate);
+	if(isnull(finishUpdateRes))
+	{
+		throw "CRM returned an empty response while closing the job";
+	}
+	finishUpdateCode = ifnull(finishUpdateRes.get("code"),"").toString();
+	finishUpdateStatus = ifnull(finishUpdateRes.get("status"),"").toString();
+	if(finishUpdateCode.equalsIgnoreCase("error") || finishUpdateStatus.equalsIgnoreCase("error") || finishUpdateCode.equalsIgnoreCase("INVALID_DATA"))
+	{
+		throw "CRM rejected final job update: " + finishUpdateRes.toString();
+	}
+}
+catch (eFinishUpdate)
+{
+	jobError = true;
+	finalStatus = "Error";
+	finalMessage = "Error updating final job status: " + eFinishUpdate.toString();
+	// Best-effort minimal update: do not include the potentially invalid
+	// diagnostic payload, so a transient/final-write failure cannot strand it.
+	try 
+	{
+		fallbackUpdate = Map();
+		fallbackUpdate.put("Status","Error");
+		fallbackUpdate.put("Locked_At",null);
+		fallbackUpdate.put("Lock_Expires_At",null);
+		fallbackUpdate.put("Last_Error",finalMessage);
+		fallbackUpdate.put("Completed_At",standalone.jobs_formatDateTimeForCRM(zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssZ")));
+		_ = zoho.crm.updateRecord(adminJobsModule,jobId,fallbackUpdate);
+	}
+	catch (eFallbackUpdate)
+	{
+		finalMessage = finalMessage + " | Fallback update failed: " + eFallbackUpdate.toString();
+	}
+}
+result.put("error",jobError);
+result.put("final_status",finalStatus);
+result.put("message",finalMessage);
+result.put("details",executionDetails);
+return result;
+}

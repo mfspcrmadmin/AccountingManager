@@ -1,0 +1,33 @@
+string standalone.jobs_enqueueSupplierSettlementRecalcForBooking(String bookingId, String triggerReason, String sourceFunction)
+{
+result = Map();
+result.put("error",false);
+result.put("created",false);
+result.put("dedup_skipped",false);
+result.put("job_id","");
+result.put("message","");
+bookingId = ifnull(bookingId,"").toString().trim();
+triggerReason = ifnull(triggerReason,"").toString().trim();
+sourceFunction = ifnull(sourceFunction,"").toString().trim();
+if(bookingId == "")
+{
+	result.put("error",true);
+	result.put("message","enqueueSupplierSettlementRecalcForBooking: bookingId is required");
+	return result;
+}
+payload = Map();
+payload.put("booking_id",bookingId);
+jobInput = Map();
+jobInput.put("job_type","Supplier Settlement Recalc");
+jobInput.put("booking_id",bookingId);
+jobInput.put("related_module","Supplier_Settlements");
+jobInput.put("related_record_id",bookingId);
+jobInput.put("related_technical_key",bookingId);
+jobInput.put("dedup_key","SUPPLIER_SETTLEMENT_RECALC:" + bookingId);
+jobInput.put("trigger_reason",triggerReason);
+jobInput.put("source_function",sourceFunction);
+jobInput.put("payload_json",payload.toString());
+jobInput.put("priority","Normal");
+jobInput.put("max_attempts",5);
+return standalone.jobs_enqueueAdminProcessJob(jobInput);
+}

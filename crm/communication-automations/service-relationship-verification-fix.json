@@ -1,0 +1,28 @@
+{
+  "checked_on": "2026-11-12",
+  "communication_id": "616617000178172179",
+  "booking_id": "616617000167022011",
+  "reference": "MFSP2607526",
+  "observed": {
+    "status": "Draft",
+    "render_status": "Pending",
+    "selected_services": 3,
+    "saved_relationships": 3,
+    "relationship_creation_times": "2026-11-12T09:02:21+01:00 through 09:02:22+01:00",
+    "all_relationships_read_back_by_id": true
+  },
+  "diagnosis": "All requested relationships exist. Error originates in final COQL count verification after individual creates were confirmed and read back. A lagging immediate COQL result is consistent with this evidence; no original runtime response log is available.",
+  "fix": {
+    "api": "wmc_comm_updatecommunicationservices",
+    "id": "616617000178168007",
+    "published_readback_verified": true,
+    "change": "Retain confirmed creation IDs and directly reread all requested relationships after the completed COQL conflict scan. Missing indexed rows are not recreated. Wrong/missing direct IDs, unexpected services, duplicates and incomplete scans still block.",
+    "business_runtime_tested": false
+  },
+  "record_recovery": {
+    "performed": false,
+    "next": "Refresh booking Emails, select existing Communication, use Regenerate draft. Do not create a new Communication.",
+    "sends": 0
+  },
+  "scope": "No sender, email body, send function, template or widget source changes. Function source retained only in memory."
+}

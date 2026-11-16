@@ -1,3 +1,4 @@
+@layer widget-views {
 .button#irpf-open[aria-expanded="true"],
 .button#booking-won-open[aria-expanded="true"] {
   background: var(--accent-strong, #b85f00);
@@ -17,5 +18,11 @@
 .irpf-report .table-wrap { max-height: 380px; overflow: auto; }
 .irpf-report th, .irpf-report td { white-space: nowrap; }
 #irpf-message { font-weight: 600; }
+.irpf-proforma-warning { margin: 14px 0; padding: 16px; border: 1px solid #d99b29; border-radius: 8px; background: #fff8e6; }
+.irpf-proforma-warning h4 { margin: 0; }
+.irpf-proforma-warning .field { margin-bottom: 12px; }
+.irpf-proforma-warning select { max-width: 100%; }
 @media (max-width: 980px) { .workspace-grid.invoices-workspace { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 600px) { .irpf-report { padding: 12px; } .irpf-controls .button { flex: 1 1 100%; } }
+
+}

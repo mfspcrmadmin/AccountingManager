@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-13",
+  "status": "production_function_published_and_read_back_widget_upload_pending",
+  "function": {
+    "api_name": "supplierinvoice_edit",
+    "id": "616617000174359025"
+  },
+  "public_entrypoint": "supplierinvoice_register, operation=edit, action=convert_proforma",
+  "ui": "Final Invoice badge, editable proposed number and required Invoice Date in the same row; existing date prefilled; a new document is required.",
+  "number_proposal": "Replace an initial PROF prefix with INV, otherwise prefix the current reference with INV-. The user may edit the suggestion or retain the current number; the CRM unique Name constraint still applies.",
+  "server": "Conversion accepts invoice_date and validates it through the existing edit pipeline. Requests from older widgets without invoice_date retain the stored date. Financial fields and settlement allocations remain server-controlled. Published change read back and verified.",
+  "recovery": "Existing immutable edit journal, lease, retry and discard protections apply. Applied conversions resume despite their type already being Final Invoice.",
+  "validation": [
+    "40 invoice edit tests passed, including six conversion/suggestion tests.",
+    "Edge browser verified required fields, read-only target type, editable and keep-current number, file chooser, conversion payload, non-Proforma rejection and 320/390/1440px layouts.",
+    "Zoho compilation succeeded and published source matched the intended update.",
+    "No real invoices or payments modified for testing.",
+    "Invoice date: 41 invoice-edit tests passed; browser checked date prefill, required validation, changed-date payload, and responsive layout. No real invoices modified for testing.",
+    "43 invoice-edit tests passed; browser validated conversion file selection without an id property, removal of the pending selection, and unchanged stored document. Production update compiled and published source read back matched."
+  ],
+  "auth": "No additional public function authentication required.",
+  "remaining": "Upload the widget and verify the action in the deployed widget. No ZIP generated.",
+  "document_replacement": "Conversion automatically resolves all existing document link IDs on the server and replaces them with the new upload in the conditional header write. Supports id/File_Id__s and attachment_Id/file_Id read shapes. Client no longer requires or supplies removal IDs for conversion.",
+  "legacy_reimbursable_conversion": {
+    "date": "2026-10-13",
+    "rule": "Only for one active settlement allocation equal to Invoice_Total, positive existing Reimbursable_Expense, and a consistent payable sum: allocate the stored Total_Payable_Amount. Other mismatches require Edit invoice.",
+    "observed_invoice": "616617000173365008",
+    "observed_invoice_total": 204.58,
+    "observed_reimbursable": 60,
+    "observed_payable": 264.58,
+    "observed_allocation_before": 204.58,
+    "deployment": "Published and read-back verified. 53 edit tests passed including exact amounts and ambiguous-allocation rejection. No real invoice or payment was changed for testing.",
+    "next_step": "Reopen and retry conversion. This backend correction requires no new widget upload."
+  }
+}

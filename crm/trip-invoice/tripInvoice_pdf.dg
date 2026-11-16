@@ -1,0 +1,182 @@
+string standalone.tripInvoice_pdf(String bookingId, String action, String requestJson)
+{
+result = {"success":false};
+claimed = false;
+invoiceId = "";
+try
+{
+    request = requestJson.toMap();
+    invoiceId = ifnull(request.get("invoice_id"),"").toString();
+    if(!bookingId.matches("^[0-9]+$") || !invoiceId.matches("^[0-9]+$") || !"pdf-prepare,pdf-archive".toList(",").contains(action)) { throw "Invalid invoice PDF request."; }
+    invoiceResponse = invokeurl
+    [
+        url :"https://www.zohoapis.eu/crm/v8/Invoices/" + invoiceId
+        type :GET
+        detailed:true
+        connection:"crm_oauth_connection"
+    ];
+    invoicePayload = invoiceResponse.get("responseText").toString().toMap();
+    if(invoiceResponse.get("responseCode") != 200 || invoicePayload.get("data") == null || invoicePayload.get("data").size() != 1) { throw "Could not read the invoice PDF data."; }
+    invoice = invoicePayload.get("data").get(0);
+    if(invoice.get("id") == null || ifnull(invoice.get("Deal_Name__s"),Map()).get("id") != bookingId) { throw "The invoice is unavailable or belongs to another Booking."; }
+    if(invoice.get("Invoice_Origin") != "Accounting Manager" || invoice.get("Trip_Booking_Key") != "BOOKING-" + bookingId || invoice.get("Type") != "Invoice") { throw "For historical documents, download the original PDF from the invoice attachments. This workflow does not reissue Tourplan invoices."; }
+    if(!ifnull(invoice.get("Subject"),"").matches("^FV-[0-9]{4}-[0-9]{6}$")) { throw "The invoice number requires review before downloading its PDF."; }
+    filename = invoice.get("Subject") + ".pdf";
+    snapshot = ifnull(invoice.get("Invoice_PDF_Snapshot"),"");
+    if(snapshot == "")
+    {
+        if(invoice.get("Account_Name") == null || invoice.get("Invoice_Date") == null || invoice.get("Grand_Total") == null) { throw "The invoice needs a client, date and total before its PDF can be generated."; }
+        client = zoho.crm.getRecordById("Accounts",invoice.get("Account_Name").get("id").toLong());
+        booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+        if(client.get("id") == null || ifnull(client.get("Account_Name"),"") == "") { throw "The invoice client could not be read."; }
+        address = ifnull(client.get("Billing_Address"),"");
+        if(address == "") { address = ifnull(client.get("Billing_Street"),"") + "\n" + ifnull(client.get("Billing_Code"),"") + " " + ifnull(client.get("Billing_City"),"") + "\n" + ifnull(client.get("Billing_State"),"") + " " + ifnull(client.get("Billing_Country"),""); }
+        lines = List();
+        total = 0.0;
+        items = invoice.get("Invoiced_Items");
+        if(items == null || items.size() == 0 || ifnull(invoice.get("$has_more"),Map()).get("Invoiced_Items") == true) { throw "The complete invoice lines could not be read."; }
+        for each item in items
+        {
+            if(item.get("Net_Total") == null) { throw "An invoice line has no confirmed total."; }
+            lineTotal = item.get("Net_Total").toDecimal().round(2);
+            total = total + lineTotal;
+            lines.add({"description":ifnull(item.get("Description"),ifnull(item.get("Product_Name"),Map()).get("name")),"total":lineTotal});
+        }
+        if(total.round(2) != invoice.get("Grand_Total").toDecimal().round(2)) { throw "Invoice lines do not match its total. Review discounts or taxes before generating the PDF."; }
+        travelDates = "";
+        if(booking.get("Arrival_Date") != null && booking.get("Departure_Date") != null) { travelDates = booking.get("Arrival_Date").toString() + " - " + booking.get("Departure_Date").toString(); }
+        model = {"template_version":"2","number":invoice.get("Subject"),"date":invoice.get("Invoice_Date"),"currency":invoice.get("Currency"),"total":total.round(2),"issuer":{"name":"Made for Spain, S.A.","tax_id":"A82318908","address":"Calle Castelló, 23, 2º Izda, 28001 Madrid, Spain"},"client":{"id":client.get("id"),"name":client.get("Account_Name"),"address":address,"tax_id":""},"mfsp":invoice.get("Booking_MFSP"),"booking_name":booking.get("Deal_Name"),"travel_dates":travelDates,"lines":lines};
+        model.put("agent_name",ifnull(ifnull(booking.get("Contact_Name"),Map()).get("name"),ifnull(booking.get("Contact_Name_Migration"),"")));
+        model.put("iata",ifnull(booking.get("IATA_Code"),ifnull(client.get("IATA_Code"),"")));
+        model.put("sales_rep",ifnull(ifnull(booking.get("Sales_Rep"),Map()).get("name"),""));
+        model.put("operations_rep",ifnull(ifnull(booking.get("Reservation_Rep"),Map()).get("name"),""));
+        guestNames = List();
+        guestPages = "1,2,3,4,5,6,7,8,9,10".toList(",");
+        for each guestPage in guestPages
+        {
+            guests = zoho.crm.getRelatedRecords("PAX3","Deals",bookingId.toLong(),guestPage.toLong(),200);
+            for each guest in guests
+            {
+                guestName = (ifnull(guest.get("Forename"),"") + " " + ifnull(guest.get("Name"),"")).trim();
+                if(guestName != "") { guestNames.add(guestName); }
+            }
+            if(guests.size() < 200) { break; }
+            if(guestPage == "10") { throw "Could not read all invoice guests. No guest list was truncated."; }
+        }
+        model.put("guests",guestNames.toString(", "));
+        model.put("pax",ifnull(booking.get("No_De_PAX"),ifnull(booking.get("Travellers_Number"),"")));
+        snapshot = model.toString();
+        if(snapshot.length() > 30000) { throw "Invoice PDF data exceeds its storage capacity. No data was truncated."; }
+        hash = zoho.encryption.sha256(snapshot);
+        updates = List();
+        updates.add({"Invoice_PDF_Snapshot":snapshot,"Invoice_PDF_Hash":hash});
+        updateBody = {"data":updates,"trigger":List()};
+        saved = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/Invoices/" + invoiceId
+            type :PUT
+            parameters:updateBody.toString()
+            headers:{"Content-Type":"application/json","If-Unmodified-Since":invoice.get("Modified_Time")}
+            detailed:true
+            connection:"crm_oauth_connection"
+        ];
+        savedBody = saved.get("responseText").toString().toMap();
+        if(saved.get("responseCode") != 200 || savedBody.get("data") == null || savedBody.get("data").get(0).get("code") != "SUCCESS") { throw "The invoice changed while preparing its PDF. Retry to read its saved document."; }
+        invoice = zoho.crm.getRecordById("Invoices",invoiceId.toLong());
+    }
+    model = snapshot.toMap();
+    hash = zoho.encryption.sha256(snapshot);
+    if(ifnull(invoice.get("Invoice_PDF_Hash"),"") != hash) { throw "The saved invoice PDF data failed verification. Review the invoice before downloading."; }
+    if(ifnull(model.get("client"),Map()).get("id") != ifnull(invoice.get("Account_Name"),Map()).get("id")) { throw "The invoice client differs from its saved PDF. Review the change before downloading."; }
+    if(model.get("number") != invoice.get("Subject") || model.get("date") != invoice.get("Invoice_Date") || model.get("currency") != invoice.get("Currency") || model.get("total").toDecimal() != invoice.get("Grand_Total").toDecimal()) { throw "The invoice differs from its saved PDF. Review the change; the original document has been preserved."; }
+    fileId = ifnull(invoice.get("Invoice_PDF_File_ID"),"").toString();
+    attachmentId = ifnull(invoice.get("Invoice_PDF_Attachment_ID"),"").toString();
+    state = ifnull(invoice.get("Invoice_PDF_State"),"");
+    if(state == "Creating" || state == "Review required" || state == "Ready")
+    {
+        found = "";
+        pages = "1,2,3,4,5,6,7,8,9,10".toList(",");
+        for each page in pages
+        {
+            attachments = zoho.crm.getRelatedRecords("Attachments","Invoices",invoiceId.toLong(),page.toLong(),200);
+            for each attachment in attachments
+            {
+                if(attachment.get("File_Name") == filename)
+                {
+                    if(found != "") { throw "Several invoice PDFs need manual review. No attachment was replaced."; }
+                    found = attachment.get("id").toString();
+                }
+            }
+            if(attachments.size() < 200) { break; }
+            if(page == "10") { throw "Could not check all invoice attachments."; }
+        }
+        if(found == "" || fileId == "") { throw "The PDF archive needs verification. Review invoice Attachments before retrying; another copy was not uploaded."; }
+        repaired = zoho.crm.updateRecord("Invoices",invoiceId.toLong(),{"Invoice_PDF_Attachment_ID":found,"Invoice_PDF_State":"Ready"},{"trigger":List()});
+        if(repaired.get("id") == null) { throw "The PDF exists, but its saved attachment link could not be confirmed."; }
+        attachmentId = found;
+        state = "Ready";
+    }
+    if(action == "pdf-archive" && state != "Ready")
+    {
+        if(request.get("snapshot_hash") != hash) { throw "The PDF snapshot changed. Download the current invoice again."; }
+        encoded = ifnull(request.get("base64"),"");
+        if(!encoded.startsWith("JVBERi0") || encoded.length() > 3000000) { throw "The PDF file is invalid or too large."; }
+        claimRows = List();
+        claimRows.add({"Invoice_PDF_State":"Creating"});
+        claimBody = {"data":claimRows,"trigger":List()};
+        claim = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/Invoices/" + invoiceId
+            type :PUT
+            parameters:claimBody.toString()
+            headers:{"Content-Type":"application/json","If-Unmodified-Since":invoice.get("Modified_Time")}
+            detailed:true
+            connection:"crm_oauth_connection"
+        ];
+        claimPayload = claim.get("responseText").toString().toMap();
+        if(claim.get("responseCode") != 200 || claimPayload.get("data") == null || claimPayload.get("data").get(0).get("code") != "SUCCESS") { throw "Another invoice operation is in progress. Retry the download after it finishes."; }
+        claimed = true;
+        pdf = zoho.encryption.base64DecodeToFile(encoded,filename);
+        pdf.setParamName("file");
+        upload = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/files"
+            type :POST
+            files:pdf
+            connection:"crm_oauth_connection"
+        ];
+        if(upload.get("data") == null || upload.get("data").get(0).get("code") != "SUCCESS") { throw "CRM did not confirm PDF file storage."; }
+        fileId = upload.get("data").get(0).get("details").get("id").toString();
+        checkpoint = zoho.crm.updateRecord("Invoices",invoiceId.toLong(),{"Invoice_PDF_File_ID":fileId},{"trigger":List()});
+        if(checkpoint.get("id") == null) { throw "CRM did not confirm the PDF file checkpoint."; }
+        attached = zoho.crm.attachFile("Invoices",invoiceId.toLong(),pdf);
+        if(attached.get("code") != "SUCCESS" || ifnull(attached.get("details"),Map()).get("id") == null) { throw "CRM did not confirm the PDF attachment."; }
+        attachmentId = attached.get("details").get("id").toString();
+        verifiedAttachment = false;
+        verifyPages = "1,2,3,4,5,6,7,8,9,10".toList(",");
+        for each verifyPage in verifyPages
+        {
+            confirmedAttachments = zoho.crm.getRelatedRecords("Attachments","Invoices",invoiceId.toLong(),verifyPage.toLong(),200);
+            for each confirmedAttachment in confirmedAttachments
+            {
+                if(confirmedAttachment.get("id").toString() == attachmentId && confirmedAttachment.get("File_Name") == filename) { verifiedAttachment = true; }
+            }
+            if(verifiedAttachment || confirmedAttachments.size() < 200) { break; }
+        }
+        if(!verifiedAttachment) { throw "The upload succeeded, but the invoice attachment could not yet be read back. Review Attachments before retrying."; }
+        completed = zoho.crm.updateRecord("Invoices",invoiceId.toLong(),{"Invoice_PDF_Attachment_ID":attachmentId,"Invoice_PDF_State":"Ready"},{"trigger":List()});
+        if(completed.get("id") == null) { throw "The PDF attachment exists, but its saved link needs verification."; }
+    }
+    result.put("success",true);
+    result.put("model",model);
+    result.put("snapshot_hash",hash);
+    result.put("filename",filename);
+    if(attachmentId != "" && fileId != "") { result.put("file_id",fileId); result.put("attachment_id",attachmentId); }
+}
+catch (e)
+{
+    if(claimed) { try { zoho.crm.updateRecord("Invoices",invoiceId.toLong(),{"Invoice_PDF_State":"Review required"},{"trigger":List()}); } catch (checkpointError) { result.put("checkpoint_error",true); } }
+    result.put("message",e.toString());
+}
+return result.toString();
+}

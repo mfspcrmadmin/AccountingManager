@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-26",
+  "invoice_id": "616617000174846142",
+  "invoice_name": "INV-MFSP2606156- 058/2026",
+  "payable": 538.6,
+  "registration_status": "Pending",
+  "findings": [
+    "Invoice file exists; no invoice settlement allocations, service lines or payment allocations exist.",
+    "Stored request has two spaces before 058/2026; saved Name has one. Published registration compared them literally, blocking recovery.",
+    "Payment preflight correctly blocks incomplete registration but previously hid the invoice and exact cause."
+  ],
+  "crm_function_fix": "Published only the repeated-space comparison correction to supplierinvoice_register (616617000174090009); read back verified.",
+  "financial_records_modified": false,
+  "remaining_action": "Resume the existing invoice registration with its original operation key and request; only after completion resume the remittance. The connector cannot execute standalone functions and the originating browser is unavailable.",
+  "widget_changes": "Local source only: identify blocking invoice and reason, reject incomplete registration at payment form opening, and append payment recovery guidance only when a recovery journal exists.",
+  "tests_passed": 40,
+  "zip_generated": false
+}

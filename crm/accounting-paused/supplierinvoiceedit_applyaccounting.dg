@@ -1,0 +1,5 @@
+string standalone.supplierInvoiceEdit_applyAccounting(String entryId, String invoiceId, String operationKey, String planJson)
+{
+res = {"success":false,"error":true,"disabled":true,"created":false,"updated":false,"message":"Accounting entry generation has been removed. Existing entries and relationships are preserved."};
+return res.toString();
+}

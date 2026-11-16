@@ -1,6 +1,82 @@
 (function (global) {
 var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
+  // Lookup labels must not pass through textValue(value, ""): that helper
+  // intentionally replaces an empty fallback with "-".
+  ns.paymentLookupLabel = function (value) {
+    if (!value) { return ""; }
+    if (typeof value === "object") { return String(value.name || value.Name || value.Deal_Name || value.full_name || "").trim(); }
+    return /^\d+$/.test(String(value)) ? "" : String(value).trim();
+  };
+  ns.paymentAccountLabel = function (payment, loading) {
+    if (!payment) { return ""; }
+    var account = payment.Payment_Account;
+    if (Object.prototype.hasOwnProperty.call(payment, "Payment_Account") && !account) { return "No payment account"; }
+    var name = ns.paymentLookupLabel(account) || String(payment["Payment_Account.Name"] || "").trim();
+    if (name) { return name; }
+    if (loading) { return "Loading payment account..."; }
+    return account ? "Payment account name unavailable" : "Payment account not loaded";
+  };
+  ns.paymentDescription = function (payment, loading) {
+    return [String(payment && payment.Movement_Type || "").trim(), ns.paymentAccountLabel(payment, loading)].filter(Boolean).join(" | ");
+  };
+
+  ns.enrichSupplierPaymentActivity = async function (detail, crm, modules, helpers) {
+    // Share in-flight reads across allocations, without retaining stale records after reopening.
+    var reads = new Map();
+    function read(module, id) {
+      var key = module + ":" + id;
+      if (!reads.has(key)) {
+        reads.set(key, Promise.resolve().then(function () { return crm.getRecord(module, id); }).then(function (record) {
+          if (!record || String(record.id) !== String(id)) { throw new Error("Related record unavailable"); }
+          return record;
+        }));
+      }
+      return reads.get(key);
+    }
+    async function resolve(record, field, module, label) {
+      if (!Object.prototype.hasOwnProperty.call(record, field)) { return { text: label + " unavailable", error: true }; }
+      var value = record[field];
+      if (!value) { return { text: "-" }; }
+      var name = ns.paymentLookupLabel(value), id = helpers.getLookupId(value);
+      if (name) { return { text: name }; }
+      try {
+        var related = await read(module, id);
+        name = ns.paymentLookupLabel(related);
+        if (!name) { throw new Error("Related name unavailable"); }
+        record[field] = Object.assign({}, typeof value === "object" ? value : {}, { id: id, name: name });
+        return { text: name };
+      } catch (error) { return { text: label + " unavailable", error: true }; }
+    }
+    await Promise.all([
+      (async function () {
+        var payment = detail.record;
+        try {
+          if (!Object.prototype.hasOwnProperty.call(payment, "Payment_Account") && !payment["Payment_Account.Name"]) {
+            var full = await read(modules.payments, payment.id);
+            if (Object.prototype.hasOwnProperty.call(full, "Payment_Account")) { payment.Payment_Account = full.Payment_Account; }
+          }
+          if (ns.paymentLookupLabel(payment.Payment_Account) || payment["Payment_Account.Name"]) {
+            detail.accountDisplay = { text: ns.paymentAccountLabel(payment, false) };
+          } else { detail.accountDisplay = await resolve(payment, "Payment_Account", modules.paymentAccounts, "Payment account"); }
+        } catch (error) { detail.accountDisplay = { text: "Payment account unavailable", error: true }; }
+      }()),
+      Promise.all((detail.allocations || []).map(async function (allocation) {
+        allocation._invoiceDisplay = await resolve(allocation, "Supplier_Invoice", modules.invoices, "Invoice");
+        if (!Object.prototype.hasOwnProperty.call(allocation, "Booking")) {
+          var invoiceId = helpers.getLookupId(allocation.Supplier_Invoice);
+          if (invoiceId) {
+            try {
+              var invoice = await read(modules.invoices, invoiceId);
+              if (Object.prototype.hasOwnProperty.call(invoice, "Booking")) { allocation.Booking = invoice.Booking; }
+            } catch (error) { /* resolve below distinguishes an unread field from an empty lookup. */ }
+          }
+        }
+        allocation._bookingDisplay = await resolve(allocation, "Booking", modules.bookings, "Booking");
+      }))
+    ]);
+  };
+
   ns.createPaymentsModule = function (deps) {
     var FIELD_CANDIDATES = deps.FIELD_CANDIDATES;
     var helpers = deps.helpers;
@@ -29,6 +105,36 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var ensureTabDataLoaded = deps.ensureTabDataLoaded;
     var getPaymentAccountsContextLoading = deps.getPaymentAccountsContextLoading;
 
+    var auxiliaryQueries = {};
+    function auxiliaryQuery(key) {
+      if (!auxiliaryQueries[key]) {
+        var view = state.views[key];
+        auxiliaryQueries[key] = ns.createProgressiveQuery({ view: view, render: renderAll,
+          getRecords: function () { return view.browserRecords || []; },
+          setRecords: function (records) { view.browserRecords = records; if (key === "paymentAccounts") { var byId = new Map(state.records.paymentAccounts.map(function (r) { return [String(r.id), r]; })); records.forEach(function (r) { byId.set(String(r.id), r); }); state.records.paymentAccounts = Array.from(byId.values()); } },
+          fetch: function (query) { return deps.fetchAuxPage(key, query); },
+          resetScroll: function () { if (deps.resetAuxScroll) { deps.resetAuxScroll(key); } }
+        });
+      }
+      return auxiliaryQueries[key];
+    }
+    function loadAuxiliary(key, apply) {
+      var view = state.views[key];
+      if (apply || !view.appliedFilters) { view.appliedFilters = cloneFilterState(view.filters); }
+      return auxiliaryQuery(key).reset({ filters: view.appliedFilters, perPage: Math.min(100, view.perPage || 50) });
+    }
+    function auxiliaryView(key, value) {
+      var view = state.views[key];
+      return Object.assign(value, { loadingInitial: view.loadingInitial, loadingMore: view.loadingMore, hasMore: view.hasMore,
+        loadError: view.loadError, onLoadMore: function () { return auxiliaryQuery(key).more(); } });
+    }
+    function cancelSearch() {
+      closePaymentDetail(false);
+      searchGeneration += 1; activeRequest = null; searchSnapshot = null;
+      state.views.payments.loadingInitial = state.views.payments.loadingMore = false;
+      Object.keys(auxiliaryQueries).forEach(function (key) { auxiliaryQueries[key].cancel(); });
+    }
+
     function normalizePaymentsSection(sectionName) {
       return sectionName === "accounts" || sectionName === "allocations" ? sectionName : "payments";
     }
@@ -41,12 +147,16 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     async function setPaymentsSection(sectionName) {
       var nextSection = normalizePaymentsSection(sectionName);
 
+      cancelSearch();
+      closePaymentDetail(false);
       state.views.payments.section = nextSection;
       state.currentTab = "payments";
       renderAll();
 
-      if (nextSection === "accounts" || nextSection === "allocations") {
-        await ensureTabDataLoaded("payments");
+      if (nextSection === "payments") {
+        await refreshPaymentsTabData();
+      } else if (nextSection === "accounts" || nextSection === "allocations") {
+        await loadAuxiliary(nextSection === "accounts" ? "paymentAccounts" : "paymentAllocations");
         renderAll();
       }
     }
@@ -61,66 +171,90 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       });
     }
 
-    async function refreshPaymentsTabData() {
-      var options = arguments[0] || {};
+    var searchGeneration = 0;
+    var searchSnapshot = null;
+    var activeRequest = null;
 
-      renderer.showError("");
-      renderer.showNotice(options.loadingLabel || "Loading payments...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, options.loadingLabel || "Loading payments...");
-      renderAll();
+    function refreshPaymentsTabData() {
+      var view = state.views.payments;
+      closePaymentDetail(false);
+      searchGeneration += 1;
+      activeRequest = null;
+      searchSnapshot = {
+        filters: cloneFilterState(view.appliedFilters || view.filters),
+        sort: Object.assign({}, view.sort),
+        groupBy: view.groupBy || "none",
+        nextPage: 1,
+        offset: 0,
+        perPage: Math.max(1, Math.min(100, Math.floor(Number(view.perPage) || 50)))
+      };
+      searchSnapshot.filters.paymentView = view.view || "open";
+      if (ns.startPaymentDiagnostics) { ns.startPaymentDiagnostics(searchSnapshot.filters); }
+      view.page = 0;
+      view.hasMore = true;
+      view.hasLoaded = false;
+      view.loadError = "";
+      view.loadingMore = false;
+      view.recordIds = [];
+      if (deps.resetPaymentScroll) { deps.resetPaymentScroll(); }
+      return loadMorePayments();
+    }
 
-      try {
-        state.loaded.payments = false;
-        state.loaded.payAllocations = false;
-        state.views.payments.hasMore = false;
-        state.records.payments = [];
-        state.records.payAllocations = [];
-        resetPaymentRelationshipIndexes();
-        await ensurePayAllocationsLoaded();
-        await ensurePaymentsLoaded();
-        state.views.payments.hasLoaded = options.loadedFlag !== false;
+    function loadMorePayments() {
+      var view = state.views.payments;
+      if (activeRequest) { return activeRequest; }
+      if (!searchSnapshot || !view.hasMore) { return Promise.resolve(); }
+      var generation = searchGeneration;
+      var snapshot = searchSnapshot;
+      var page = snapshot.nextPage;
+      view.loadingInitial = page === 1;
+      view.loadingMore = page > 1;
+      view.loadError = "";
+      // Defer work until the request guard is installed (render can trigger scroll).
+      activeRequest = Promise.resolve().then(function () {
         renderAll();
-      } catch (error) {
-        debugError("refreshPaymentsTabData failed", error, {
-          filters: cloneFilterState(state.views.payments.appliedFilters || state.views.payments.filters)
+        return deps.fetchPaymentPage(Object.assign({}, snapshot, { page: page }));
+      }).then(function (result) {
+        if (generation !== searchGeneration) { return; }
+        var seen = new Set(view.recordIds);
+        result.records.forEach(function (record) {
+          var existing = state.records.payments.findIndex(function (item) { return String(item.id) === String(record.id); });
+          if (existing === -1) { state.records.payments.push(record); }
+          else { state.records.payments[existing] = record; }
+          if (!seen.has(String(record.id))) {
+            seen.add(String(record.id));
+            view.recordIds.push(String(record.id));
+          }
         });
-        renderer.showError(getFriendlyLoadErrorMessage("payments", error, options.errorMessage || "Could not refresh payments."));
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
-    }
-
-    async function refreshPaymentAccountsTabData() {
-      renderer.showError("");
-      renderer.showNotice("Refreshing payment accounts...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, "Refreshing payment accounts...");
-      renderAll();
-
-      try {
-        state.loaded.payments = false;
-        state.loaded.payAllocations = false;
-        state.loaded.paymentAccounts = false;
-        state.loaded.paymentAccountsContext = false;
-        state.views.payments.hasMore = false;
-        state.records.payments = [];
-        state.records.payAllocations = [];
-        state.records.paymentAccounts = [];
-        resetPaymentRelationshipIndexes();
-        await ensurePaymentAccountsLoaded();
-        requestPaymentAccountsContextLoad();
+        view.page = page;
+        snapshot.nextPage = page + 1;
+        view.hasMore = result.hasMore;
+        view.hasLoaded = true;
+        snapshot.offset = result.nextOffset;
+        if (deps.onPaymentsLoaded) { deps.onPaymentsLoaded(result); }
+      }).catch(function (error) {
+        if (generation !== searchGeneration) { return; }
+        var reason = error && (error.message || error.code || error.statusText);
+        if (ns.failPaymentDiagnostics) { ns.failPaymentDiagnostics(error); }
+        var errorDetails = error && error.details;
+        if (error && error.code && reason !== error.code) { reason += " (" + error.code + ")"; }
+        if (errorDetails && (errorDetails.column_name || errorDetails.api_name)) {
+          reason = (reason || "CRM query rejected.") + " Field: " + (errorDetails.column_name || errorDetails.api_name) + ".";
+        }
+        view.loadError = /pagination limit/.test(String(reason)) ? reason :
+          "Could not load payments." + (reason ? " " + String(reason) : " CRM did not provide an error description.") + " Please retry.";
+        debugError("loadPaymentPage failed", error, { page: page, filters: snapshot.filters });
+      }).finally(function () {
+        if (generation !== searchGeneration) { return; }
+        view.loadingInitial = false;
+        view.loadingMore = false;
+        activeRequest = null;
         renderAll();
-      } catch (error) {
-        renderer.showError(error.message || "Could not refresh payment accounts.");
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
+      });
+      return activeRequest;
     }
+
+    function refreshPaymentAccountsTabData() { return loadAuxiliary("paymentAccounts"); }
 
     function normalizePaymentDetailTab(tabName) {
       if (tabName === "allocations" || tabName === "accounting") {
@@ -135,18 +269,101 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       renderAll();
     }
 
-    function selectPayment(paymentId) {
-      if (String(state.paymentLetter.paymentId || "") !== String(paymentId || "")) {
-        deps.closeSelectedPaymentLetterPanel();
-      }
-
-      state.views.payments.selectedId = paymentId || "";
-      renderAll();
+    var detailAllocationQuery = null;
+    var detailAllocationView = null;
+    function loadDetailAllocations(paymentId) {
+      if (!deps.fetchDetailAllocationPage) { return Promise.resolve(); }
+      if (detailAllocationQuery) { detailAllocationQuery.cancel(); }
+      var view = detailAllocationView = { records: [] };
+      detailAllocationQuery = ns.createProgressiveQuery({ view: view, render: renderAll,
+        getRecords: function () { return view.records; }, setRecords: function (rows) { view.records = rows; },
+        fetch: function (query) { return deps.fetchDetailAllocationPage(paymentId, query); },
+        resetScroll: function () { if (deps.resetDetailScroll) { deps.resetDetailScroll(); } }
+      });
+      view.onLoadMore = detailAllocationQuery.more;
+      return detailAllocationQuery.reset({ perPage: 50 });
     }
 
-    function selectPaymentAccount(accountId) {
-      state.views.paymentAccounts.selectedId = accountId || "";
+    var detailGeneration = 0;
+
+    function closePaymentDetail(shouldRender) {
+      detailGeneration += 1;
+      if (detailAllocationQuery) { detailAllocationQuery.cancel(); }
+      detailAllocationView = null;
+      state.views.payments.selectedId = "";
+      state.views.payments.detailLoad = null;
+      if (deps.closeSelectedPaymentLetterPanel) { deps.closeSelectedPaymentLetterPanel(); }
+      if (shouldRender !== false) { renderAll(); }
+    }
+
+    async function loadPaymentDetail(paymentId) {
+      var generation = ++detailGeneration;
+      var view = state.views.payments;
+      view.detailLoad = { id: paymentId, loading: true, creatorError: "", accountError: "", error: "" };
       renderAll();
+      try {
+        var detail = await deps.crm.getRecord(deps.MODULES.payments, paymentId);
+        if (generation !== detailGeneration || view.selectedId !== paymentId) { return; }
+        if (!detail || String(detail.id) !== paymentId) { throw new Error("The selected payment could not be read."); }
+        var creatorError = "";
+        if (!Object.prototype.hasOwnProperty.call(detail, "Created_By")) {
+          creatorError = "CRM did not return the payment creator.";
+        } else if (detail.Created_By && !ns.paymentLookupLabel(detail.Created_By)) {
+          creatorError = "CRM returned the creator ID without a name.";
+        }
+        var accountError = "";
+        if (!Object.prototype.hasOwnProperty.call(detail, "Payment_Account")) {
+          accountError = "CRM did not return the payment account field.";
+        } else if (detail.Payment_Account && !ns.paymentLookupLabel(detail.Payment_Account)) {
+          var accountId = helpers.getLookupId(detail.Payment_Account);
+          try {
+            if (!accountId) { throw new Error("Missing account ID"); }
+            var account = await deps.crm.getRecord(deps.MODULES.paymentAccounts, accountId);
+            if (!account || !account.Name || String(account.id) !== String(accountId)) { throw new Error("Missing account name"); }
+            detail.Payment_Account = { id: String(accountId), name: account.Name };
+          } catch (error) {
+            accountError = "Could not load the associated payment account.";
+          }
+        }
+        if (generation !== detailGeneration || view.selectedId !== paymentId) { return; }
+        var payment = state.records.payments.find(function (record) { return String(record.id) === paymentId; });
+        if (!payment) { return; }
+        // Only enrich the requested identity fields. Financial data and the
+        // current table snapshot remain owned by the list/mutation workflows.
+        ["Created_By", "Payment_Account", "Movement_Type"].forEach(function (field) {
+          if (Object.prototype.hasOwnProperty.call(detail, field)) { payment[field] = detail[field]; }
+        });
+        if (Object.prototype.hasOwnProperty.call(detail, "Payment_Account")) {
+          payment["Payment_Account.Name"] = ns.paymentLookupLabel(detail.Payment_Account);
+        }
+        view.detailLoad = { id: paymentId, loading: false, creatorError: creatorError, accountError: accountError, error: "" };
+      } catch (error) {
+        if (generation !== detailGeneration || view.selectedId !== paymentId) { return; }
+        view.detailLoad = { id: paymentId, loading: false, error: "Could not load payment details. Please retry.", creatorError: "", accountError: "" };
+        debugError("loadPaymentDetail failed", error, { paymentId: paymentId });
+      } finally {
+        if (generation === detailGeneration && view.selectedId === paymentId) { renderAll(); }
+      }
+    }
+
+    function selectPayment(paymentId) {
+      var id = String(paymentId || "");
+      if (!id) { closePaymentDetail(); return Promise.resolve(); }
+      if (String(state.paymentLetter.paymentId || "") !== id && deps.closeSelectedPaymentLetterPanel) {
+        deps.closeSelectedPaymentLetterPanel();
+      }
+      state.views.payments.selectedId = id;
+      return Promise.all([loadPaymentDetail(id), loadDetailAllocations(id)]);
+    }
+
+    async function selectPaymentAccount(accountId) {
+      state.views.paymentAccounts.selectedId = accountId || "";
+      var account = (state.views.paymentAccounts.browserRecords || []).find(function (r) { return r.id === accountId; });
+      if (!account || !deps.loadAccountMetadata) { renderAll(); return; }
+      account._contextLoading = true; renderAll();
+      try { account._browserMeta = await deps.loadAccountMetadata(accountId); }
+      catch (error) { debugError("Payment account relationships unavailable", error); }
+      finally { account._contextLoading = false; renderAll(); }
     }
 
     function getPaymentAccountMeta(account) {
@@ -154,7 +371,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return createEmptyPaymentAccountMeta();
       }
 
-      return state.indexes.paymentAccountMetaById[account.id] || createEmptyPaymentAccountMeta();
+      return account._browserMeta || state.indexes.paymentAccountMetaById[account.id] || createEmptyPaymentAccountMeta();
     }
 
     function buildSupplierOptionsFromAccountMeta(records) {
@@ -185,67 +402,23 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function buildPaymentsView() {
-      var records = state.records.payments.slice();
+      var byId = new Map(state.records.payments.map(function (record) { return [String(record.id), record]; }));
+      var records = (state.views.payments.recordIds || []).map(function (id) { return byId.get(id); }).filter(Boolean);
       var filters = cloneFilterState(state.views.payments.filters);
-      var appliedFilters = cloneFilterState(state.views.payments.appliedFilters || state.views.payments.filters);
       var selectedPaymentDetailTab = normalizePaymentDetailTab(state.views.payments.detailTab || "payment");
       var hasCurrentFilters = hasAnyLoadFilterValue(filters);
-      var selectedStatuses = getNormalizedStatusFilterValues(appliedFilters.statusValues);
       var paymentView = state.views.payments.view || "open";
-      var hasExplicitStatusFilter = selectedStatuses.length && selectedStatuses.length < PAYMENT_STATUS_FILTER_OPTIONS.length;
-      var filteredRecords = records.filter(function (payment) {
-        var paymentDate = helpers.toIsoDate(payment.Payment_Date);
-        var status = String(payment.Status || "").trim().toLowerCase();
-
-        if (paymentView === "open" && status !== "pending payment") {
-          return false;
-        }
-
-        if (paymentView === "closed" && status !== "paid" && status !== "cancelled") {
-          return false;
-        }
-
-        if (hasExplicitStatusFilter && selectedStatuses.indexOf(String(payment.Status || "")) === -1) {
-          return false;
-        }
-
-        if (appliedFilters.dateFrom && (!paymentDate || paymentDate < appliedFilters.dateFrom)) {
-          return false;
-        }
-
-        if (appliedFilters.dateTo && (!paymentDate || paymentDate > appliedFilters.dateTo)) {
-          return false;
-        }
-
-        if (appliedFilters.mfsp && !getPaymentMfspValues(payment).some(function (value) { return helpers.matchesText(value, appliedFilters.mfsp); })) {
-          return false;
-        }
-
-        if (appliedFilters.paymentName && ![
-          helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.reference),
-          payment.Name
-        ].some(function (value) {
-          return helpers.matchesText(value, appliedFilters.paymentName);
-        })) {
-          return false;
-        }
-
-        if (appliedFilters.supplierCode && !getPaymentSupplierCodeValues(payment).some(function (value) {
-          return helpers.matchesText(value, appliedFilters.supplierCode);
-        })) { return false; }
-
-        return true;
-      });
-      var totalPages = 1;
-      var page = 1;
-      var hasMore = false;
+      var filteredRecords = records;
+      var page = state.views.payments.page || 1;
+      var hasMore = Boolean(state.views.payments.hasMore);
       var selectedId = state.views.payments.selectedId;
       var visibleRecords = filteredRecords;
       var selectedRecord;
       var selectedAllocations = [];
 
       if (!filteredRecords.some(function (payment) { return payment.id === selectedId; })) {
-        selectedId = filteredRecords[0] ? filteredRecords[0].id : "";
+        selectedId = "";
+        if (state.views.payments.selectedId) { detailGeneration += 1; state.views.payments.detailLoad = null; }
         state.views.payments.selectedId = selectedId;
       }
 
@@ -264,24 +437,30 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       return {
         filters: filters,
+        loadingInitial: Boolean(state.views.payments.loadingInitial),
+        loadingMore: Boolean(state.views.payments.loadingMore),
+        loadError: state.views.payments.loadError || "",
+        onLoadMore: loadMorePayments,
+        onRetry: loadMorePayments,
         filteredRecords: filteredRecords,
         visibleRecords: visibleRecords,
         selectedRecord: selectedRecord,
         selectedAllocations: selectedAllocations,
+        detailAllocationView: detailAllocationView,
         selectedId: selectedId,
         selectedPaymentDetailTab: selectedPaymentDetailTab,
         page: page,
         hasMore: hasMore,
-        pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " payment" : " payments"),
+        pageSummary: filteredRecords.length + (filteredRecords.length === 1 ? " payment loaded" : " payments loaded"),
         countLabel: state.views.payments.hasLoaded
-          ? filteredRecords.length + (filteredRecords.length === 1 ? " payment" : " payments")
+          ? filteredRecords.length + (filteredRecords.length === 1 ? " payment loaded" : " payments loaded")
           : "0 payments",
         statusOptions: ns.getWorkspaceStatusValues("payments", paymentView, buildCombinedStatusOptions(PAYMENT_STATUS_FILTER_OPTIONS, records, "Status").map(function (option) { return option.value; }))
           .map(function (value) { return { value: value, label: value }; }),
-        emptyMessage: state.currentTab === "payments" && state.isLoading
+        emptyMessage: state.views.payments.loadingInitial
           ? "Loading payments..."
           : state.views.payments.hasLoaded || !hasCurrentFilters
-          ? "No payments match the current filters."
+          ? (hasMore ? "Searching payments..." : "No payments match the current filters.")
           : "Use the filters and click Load to fetch payments.",
         getPaymentReference: function (payment) {
           return helpers.getCandidateValue(payment, FIELD_CANDIDATES.payment.reference) || payment.Name || "Untitled payment";
@@ -292,38 +471,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function buildPaymentAccountsView() {
-      var records = state.records.paymentAccounts;
+      var records = state.views.paymentAccounts.browserRecords || [];
       var filters = state.views.paymentAccounts.filters;
-      var hasContextLoaded = Boolean(state.loaded.paymentAccountsContext);
-      var isContextLoading = Boolean(getPaymentAccountsContextLoading && getPaymentAccountsContextLoading());
-      var isAccountsSectionActive = isPaymentAccountsSectionActive();
-      var filteredRecords = records.filter(function (account) {
-        var meta = hasContextLoaded ? getPaymentAccountMeta(account) : null;
-
-        if (
-          filters.query &&
-          !helpers.matchesText(account.Name, filters.query) &&
-          !helpers.matchesText(account.Email, filters.query)
-        ) {
-          return false;
-        }
-
-        if (hasContextLoaded && filters.supplierId && meta.supplierIds.indexOf(filters.supplierId) === -1) {
-          return false;
-        }
-
-        if (hasContextLoaded && filters.mfsp && !meta.mfsps.some(function (mfsp) {
-          return helpers.matchesText(mfsp, filters.mfsp);
-        })) {
-          return false;
-        }
-
-        if (filters.status && String(account.Status || "") !== String(filters.status)) {
-          return false;
-        }
-
-        return true;
-      });
+      var hasContextLoaded = false, isContextLoading = false, isAccountsSectionActive = isPaymentAccountsSectionActive();
+      var filteredRecords = records;
       var totalPages = Math.max(1, Math.ceil(filteredRecords.length / state.views.paymentAccounts.perPage));
       var page = Math.min(state.views.paymentAccounts.page, totalPages);
       var selectedId = state.views.paymentAccounts.selectedId;
@@ -332,20 +483,20 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var selectedRecord;
       var supplierOptions;
 
-      if (!filteredRecords.some(function (account) { return account.id === selectedId; })) {
+      if (!state.records.paymentAccounts.some(function (account) { return account.id === selectedId; })) {
         selectedId = "";
         state.views.paymentAccounts.selectedId = "";
       }
 
-      selectedRecord = filteredRecords.find(function (account) {
+      selectedRecord = state.records.paymentAccounts.find(function (account) {
         return account.id === selectedId;
       }) || null;
       start = (page - 1) * state.views.paymentAccounts.perPage;
-      visibleRecords = filteredRecords.slice(start, start + state.views.paymentAccounts.perPage);
-      state.views.paymentAccounts.page = page;
+      visibleRecords = filteredRecords;
+
       supplierOptions = hasContextLoaded ? buildSupplierOptionsFromAccountMeta(records) : [];
 
-      return {
+      return auxiliaryView("paymentAccounts", {
         filters: filters,
         filteredRecords: filteredRecords,
         visibleRecords: visibleRecords,
@@ -354,36 +505,26 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         page: page,
         totalPages: totalPages,
         supplierOptions: supplierOptions,
-        isContextReady: hasContextLoaded,
-        isContextLoading: isContextLoading,
+        isContextReady: Boolean(selectedRecord && selectedRecord._browserMeta),
+        isContextLoading: Boolean(selectedRecord && selectedRecord._contextLoading),
         statusOptions: buildStatusOptions(records, "Status"),
         emptyMessage: isAccountsSectionActive && state.isLoading
           ? "Loading payment accounts..."
-          : state.loaded.paymentAccounts
+          : state.views.paymentAccounts.hasLoaded
           ? "No payment accounts match the current filters."
           : "Open Payments and switch to Payment Accounts to load payment accounts.",
         getAccountName: function (account) {
           return helpers.getCandidateValue(account, FIELD_CANDIDATES.paymentAccount.name) || account.Name || "Untitled account";
         },
         getAccountMeta: getPaymentAccountMeta
-      };
+      });
     }
 
     function buildPaymentAllocationsView() {
       var filters = state.views.paymentAllocations.filters;
-      var records = state.records.payAllocations.filter(function (allocation) {
-        return (!filters.reference || helpers.matchesText(allocation.Name, filters.reference)) &&
-          (!filters.movementType || String(allocation.Movement_Type || "") === filters.movementType) &&
-          (!filters.payment || helpers.matchesText(helpers.getLookupName(allocation.Supplier_Payment), filters.payment)) &&
-          (!filters.invoice || helpers.matchesText(helpers.getLookupName(allocation.Supplier_Invoice), filters.invoice)) &&
-          (!filters.supplierCode || helpers.matchesText(helpers.getLookupName(allocation.Supplier_Settlement), filters.supplierCode));
-      });
-      var totalPages = Math.max(1, Math.ceil(records.length / state.views.paymentAllocations.perPage));
-      var page = Math.min(Math.max(1, Number(state.views.paymentAllocations.page) || 1), totalPages);
-      var visibleRecords = records.slice(
-        (page - 1) * state.views.paymentAllocations.perPage,
-        page * state.views.paymentAllocations.perPage
-      );
+      var records = state.views.paymentAllocations.browserRecords || [];
+      var totalPages = 1, page = state.views.paymentAllocations.page || 1;
+      var visibleRecords = records;
       var selectedId = state.views.paymentAllocations.selectedId;
       var selectedRecord;
       var movementTypes = helpers.sortStrings(helpers.uniqueNonEmpty(state.records.payAllocations.map(function (allocation) { return allocation.Movement_Type; })));
@@ -393,8 +534,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         state.views.paymentAllocations.selectedId = selectedId;
       }
       selectedRecord = records.filter(function (allocation) { return allocation.id === selectedId; })[0] || null;
-      state.views.paymentAllocations.page = page;
-      return {
+
+      return auxiliaryView("paymentAllocations", {
         filters: filters,
         filteredRecords: records,
         visibleRecords: visibleRecords,
@@ -403,7 +544,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         movementTypes: movementTypes,
         page: page,
         totalPages: totalPages
-      };
+      });
     }
 
     function selectPaymentAllocation(allocationId) {
@@ -416,6 +557,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       isAccountsSectionActive: isPaymentAccountsSectionActive,
       setSection: setPaymentsSection,
       loadTabData: loadPaymentsTabData,
+      loadMore: loadMorePayments,
+      cancel: cancelSearch,
+      loadAuxiliary: loadAuxiliary,
       refreshTabData: refreshPaymentsTabData,
       refreshAccountsTabData: refreshPaymentAccountsTabData,
       buildView: buildPaymentsView,
@@ -424,6 +568,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       normalizeDetailTab: normalizePaymentDetailTab,
       setDetailTab: setPaymentDetailTab,
       selectPayment: selectPayment,
+      closeDetail: closePaymentDetail,
+      retryDetail: function () { return selectPayment(state.views.payments.selectedId); },
       selectPaymentAllocation: selectPaymentAllocation,
       selectPaymentAccount: selectPaymentAccount
     };

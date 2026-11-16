@@ -1,0 +1,164 @@
+string standalone.supplierInvoiceEdit_applyAccounting(String entryId, String invoiceId, String operationKey, String planJson)
+{
+result = {"success":false};
+try 
+{
+	plan = planJson.toMap();
+	entry = zoho.crm.getRecordById("Accounting_Entries",entryId.toLong());
+	if(entry.get("id") == null || entry.get("Supplier_Invoice") == null || entry.get("Supplier_Invoice").get("id").toString() != invoiceId || entry.get("Locked__s") == true || entry.get("Posted_At") != null || "Posted to Books,Cancelled".toList(",").contains(ifnull(entry.get("Accounting_Status"),"")) || ifnull(entry.get("Zoho_Books_Document_Id"),"") != "" || "Posted,Reconciled,Sent to Books,Exported,Cancelled".toList(",").contains(ifnull(entry.get("Books_Post_Status"),"")))
+	{
+		throw "The accounting entry is unavailable or locked.";
+	}
+	read = standalone.supplierInvoiceEdit_read("Accounting_Entry_Lines","Accounting_Entry",entryId).toMap();
+	if(read.get("success") != true)
+	{
+		throw read.get("message");
+	}
+	existing = read.get("records");
+	plannedEntry = plan.get("entry");
+	for each  field in plannedEntry.keys()
+	{
+		if(field != "Line_Count" && entry.get(field) != plan.get("before_entry").get(field) && entry.get(field) != plan.get("entry").get(field))
+		{
+			throw "The accounting entry changed outside this correction: " + field;
+		}
+	}
+	for each  line in existing
+	{
+		old = plan.get("before_lines").get(line.get("id").toString());
+		if(old == null && !ifnull(line.get("Invoice_Edit_Key"),"").toString().startsWith(operationKey + "-"))
+		{
+			throw "An accounting line was added outside this correction.";
+		}
+		if(old != null && (line.get("Account") == null || old.get("Account") == null || line.get("Account").get("id") != old.get("Account").get("id") || line.get("Debit") != old.get("Debit") && line.get("Debit") != 0 || line.get("Credit") != old.get("Credit") && line.get("Credit") != 0))
+		{
+			throw "An accounting line was modified outside this correction.";
+		}
+	}
+	notReady = standalone.supplierInvoiceEdit_write("Accounting_Entries",entryId,entry.get("Modified_Time"),{"Books_Post_Status":"Not Ready"}).toMap();
+	if(notReady.get("error") == true)
+	{
+		throw "The accounting entry changed while preparing the correction.";
+	}
+	// Revision-specific unique keys make a lost create response recoverable.
+	desiredKeys = List();
+	index = 0;
+	for each  definition in plan.get("lines")
+	{
+		index = index + 1;
+		key = operationKey + "-" + index;
+		desiredKeys.add(key);
+		lineId = "";
+		for each  candidate in existing
+		{
+			if(candidate.get("Invoice_Edit_Key") == key)
+			{
+				lineId = candidate.get("id").toString();
+			}
+		}
+		data = {"Name":"EDIT-" + entryId + "-" + key,"Invoice_Edit_Key":key,"Accounting_Entry":entryId,"Supplier_Invoice":invoiceId,"Line_No":index,"Line_Type":definition.get("line_type"),"Account_Role":definition.get("account_role"),"Account":definition.get("account_id"),"Debit":definition.get("debit"),"Credit":definition.get("credit"),"Is_IRPF_Line":definition.get("is_irpf_line"),"Is_Reimbursable":definition.get("is_reimbursable"),"Source_Date":plan.get("entry").get("Source_Date")};
+		if(ifnull(definition.get("books_account_id"),"") != "")
+		{
+			data.put("Zoho_Books_Account_Id",definition.get("books_account_id"));
+		}
+		if(lineId == "")
+		{
+			created = zoho.crm.createRecord("Accounting_Entry_Lines",data,{"trigger":List()});
+			if(created.get("id") == null)
+			{
+				if(created.get("code") == "DUPLICATE_DATA" && created.get("details") != null && created.get("details").get("id") != null)
+				{
+					lineId = created.get("details").get("id").toString();
+				}
+				else
+				{
+					throw "An accounting line could not be saved: " + created.toString();
+				}
+			}
+			else
+			{
+				lineId = created.get("id").toString();
+			}
+		}
+		verified = zoho.crm.getRecordById("Accounting_Entry_Lines",lineId.toLong());
+		if(verified.get("Invoice_Edit_Key") != key || verified.get("Accounting_Entry").get("id").toString() != entryId || verified.get("Debit") != definition.get("debit") || verified.get("Credit") != definition.get("credit") || verified.get("Account") == null || verified.get("Account").get("id").toString() != definition.get("account_id").toString() || verified.get("Supplier_Invoice") == null || verified.get("Supplier_Invoice").get("id").toString() != invoiceId || verified.get("Source_Date") != plan.get("entry").get("Source_Date"))
+		{
+			throw "An accounting line could not be verified.";
+		}
+	}
+	// Replace prior lines only after every new line has been created and verified.
+	read = standalone.supplierInvoiceEdit_read("Accounting_Entry_Lines","Accounting_Entry",entryId).toMap();
+	if(read.get("success") != true)
+	{
+		throw read.get("message");
+	}
+	lines = read.get("records");
+	debit = 0.0;
+	credit = 0.0;
+	for each  line in lines
+	{
+		if(!desiredKeys.contains(ifnull(line.get("Invoice_Edit_Key"),"")))
+		{
+			if(line.get("Locked__s") == true)
+			{
+				throw "An accounting line is locked.";
+			}
+			deleted = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/Accounting_Entry_Lines/" + line.get("id").toString() + "?wf_trigger=false"
+				type :DELETE
+				detailed:true
+				connection:"crm_oauth_connection"
+			];
+			deletion = deleted.get("responseText").toString().toMap();
+			if(deleted.get("responseCode") != 200 || deletion.get("data") == null || deletion.get("data").get(0).get("code") != "SUCCESS")
+			{
+				throw "An old accounting line could not be removed. Resume the correction.";
+			}
+		}
+		else
+		{
+			debit = debit + line.get("Debit");
+			credit = credit + line.get("Credit");
+		}
+	}
+	read = standalone.supplierInvoiceEdit_read("Accounting_Entry_Lines","Accounting_Entry",entryId).toMap();
+	if(read.get("success") != true || read.get("records").size() != desiredKeys.size())
+	{
+		throw "Could not verify the final accounting lines. Resume the correction.";
+	}
+	debit = 0.0;
+	credit = 0.0;
+	for each  line in read.get("records")
+	{
+		if(!desiredKeys.contains(ifnull(line.get("Invoice_Edit_Key"),"")))
+		{
+			throw "Unexpected accounting lines require review.";
+		}
+		debit = debit + line.get("Debit");
+		credit = credit + line.get("Credit");
+	}
+	if(debit.round(2) != plan.get("entry").get("Total_Debit") || credit.round(2) != plan.get("entry").get("Total_Credit"))
+	{
+		throw "The accounting lines do not match the planned totals.";
+	}
+	entry = zoho.crm.getRecordById("Accounting_Entries",entryId.toLong());
+	if(ifnull(entry.get("Zoho_Books_Document_Id"),"") != "" || entry.get("Books_Post_Status") == "Posted")
+	{
+		throw "The accounting entry was posted while saving. Review the correction.";
+	}
+	values = plan.get("entry");
+	values.put("Line_Count",plan.get("lines").size());
+	updated = standalone.supplierInvoiceEdit_write("Accounting_Entries",entryId,entry.get("Modified_Time"),values).toMap();
+	if(updated.get("error") == true)
+	{
+		throw "The accounting entry changed while saving.";
+	}
+	result.put("success",true);
+}
+catch (e)
+{
+	result.put("message",e.toString());
+}
+return result.toString();
+}

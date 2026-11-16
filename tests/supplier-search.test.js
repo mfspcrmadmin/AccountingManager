@@ -48,6 +48,7 @@ test('CIF/NIF search queries CRM and offers all suppliers sharing the same tax I
       setLoading() {},
       showError(message) { assert.equal(message, ''); },
       showNotice() {},
+      hideSearchResults() {},
       renderSearchResults(records) { results = records; }
     }
   });
@@ -55,4 +56,20 @@ test('CIF/NIF search queries CRM and offers all suppliers sharing the same tax I
   assert.ok(criteria.includes('(CIF_NIF:equals:B12345678)'));
   assert.ok(criteria.includes('(CIF_NIF:starts_with:B12345678)'));
   assert.deepEqual(Array.from(results, record => record.id), ['1', '2']);
+});
+
+test('typing hides previous results without showing suggestions or querying CRM', () => {
+  const app = fixture(), listeners = {}, renders = [];
+  let hidden = 0;
+  const input = {value:'hotel',addEventListener(name,fn){listeners[name]=fn;}};
+  app.createSupplierWorkspaceModule({
+    MODULES:app.MODULES,FIELD_CANDIDATES:app.FIELD_CANDIDATES,helpers:app.helpers,
+    state:{supplierIndex:{},recentSuppliers:[{id:'1',Vendor_Name:'Hotel Norte'},{id:'2',Vendor_Name:'Hotel Sur'},{id:'3',Vendor_Name:'Restaurant'}]},
+    elements:{supplierSearch:input},crm:{searchRecord(){throw Error('Typing must not query CRM');}},
+    renderer:{hideSearchResults(){hidden++;},showError(){},showNotice(){},renderSearchResults(rows,select){renders.push({rows,select});}}
+  });
+  listeners.input();
+  assert.equal(renders.length,0);
+  input.value='';listeners.input();assert.equal(renders.length,0);assert.equal(hidden,2);
+  listeners.keydown({key:'Escape'});assert.equal(hidden,3);
 });

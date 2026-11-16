@@ -1,0 +1,11 @@
+@layer widget-views {
+.progressive-table-scroll { max-height: min(65vh, 720px); overflow: auto; overflow-anchor: none; }
+.progressive-table-scroll thead th { position: sticky; top: 0; z-index: 2; background: var(--surface, #fff); }
+/* The corner header must stay above both the sticky body column and headers. */
+.table-wrap.progressive-table-scroll .results-table thead th.table-columns-gear-cell { z-index: 4; background: var(--color-surface-subtle, #f8fafc); }
+.progressive-table-footer { min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: #64748b; }
+.progressive-table-footer[hidden] { display: none; }
+.progressive-table-spinner { width: 14px; height: 14px; border: 2px solid #dbe4ed; border-top-color: #375d88; border-radius: 50%; animation: progressive-spin .8s linear infinite; }
+@keyframes progressive-spin { to { transform: rotate(360deg); } }
+
+}

@@ -1,0 +1,25 @@
+{
+  "checked_on": "2026-11-11",
+  "api_name": "notif_recoverbookingwon",
+  "id": "616617000178129024",
+  "status": "published_readback_verified",
+  "executed": false,
+  "template_id": "616617000135016204",
+  "recipients": "standalone.email_getTeamEmails() unchanged",
+  "scope": "Notification only; never executes booking transitions or updates booking state.",
+  "native_duplicate_guard": "Inspects visible Emails with pagination; blocks Booking Won subjects, incomplete/unreadable history, and more than 200 emails.",
+  "cases": [
+    {
+      "reference": "MFOF26111075",
+      "bookingId": "616617000177247010",
+      "stageEventId": "616617000177855005"
+    },
+    {
+      "reference": "MFSP26111047",
+      "bookingId": "616617000176902496",
+      "stageEventId": "616617000178135006"
+    }
+  ],
+  "execution": "User must execute function in CRM; connector does not expose function execution. Preview writes no records. Send delegates to existing journal/archive chain.",
+  "docs": "https://www.zoho.com/crm/developer/docs/api/v8/get-email-rel-list.html"
+}

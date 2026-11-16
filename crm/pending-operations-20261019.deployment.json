@@ -1,0 +1,35 @@
+{
+  "status": "local_changes_pending_widget_publication",
+  "scope": "First agreed priority: visibility and recovery of saved invoice/payment operations",
+  "deployment": "Publish widget assets together; no CRM function changes required",
+  "files": [
+    "app/widget.html",
+    "app/styles/pending-operations.css",
+    "app/scripts/pending-operations.js",
+    "app/scripts/main.js",
+    "app/scripts/prepayments.js",
+    "app/scripts/operations.js"
+  ],
+  "behavior": [
+    "Collapsible Operations to complete notice in the shared header area, visible only when saved operations or storage errors exist.",
+    "Recognizes supplier invoice registration, invoice edits/deletions, payment registration/allocation edits/deletions, card invoice/payment registration and unfinished prepayment checkpoints.",
+    "Review / resume opens the existing form or deletion confirmation. No new financial writes, automatic retries or recovery dismissal path introduced.",
+    "Completed prepayment checkpoints are excluded. Corrupt journals and old deletion recoveries remain visible for manual review.",
+    "Checks browser storage every two seconds while visible, plus focus/storage events; no CRM polling.",
+    "Active saves block recovery routing. Existing validation and idempotency safeguards remain in the original flows."
+  ],
+  "verification": {
+    "focused_suite_before_final_route_tests": "122 passed",
+    "pending_operations_suite_with_route_tests": "8 passed",
+    "browser_test": "Passed empty/populated states, routing callback, escaped labels, preserved journals, failed-open retry, corrupt data, 390/1280 widths and completed-operation removal",
+    "syntax_checks": "Passed changed JavaScript files",
+    "live_published_widget": "Not tested; not yet published",
+    "crm_records_modified": false
+  },
+  "limitations": [
+    "Browser-local visibility only: other browsers/users and operations with no retained journal are not listed.",
+    "Journal state identifies unconfirmed work, not necessarily a failed operation; an operation may still be running.",
+    "Unavailable/deleted invoice records can require manual recovery review; saved journal is preserved.",
+    "Settlement consistency check action and expanded payment summary are subsequent priorities, not included in this change."
+  ]
+}

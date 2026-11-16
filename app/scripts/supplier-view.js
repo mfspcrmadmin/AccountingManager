@@ -9,9 +9,11 @@
     var feedbackTimer;
     function updateClear() { clear.hidden = !search.value; }
     search.addEventListener('input', updateClear);
+    search.addEventListener('change', updateClear);
     search.addEventListener('focus', updateClear);
     clear.addEventListener('click', function () {
       search.value = '';
+      search.dispatchEvent(new global.Event('input', { bubbles: true }));
       updateClear();
       root.querySelector('#search-results-card').hidden = true;
       search.focus();

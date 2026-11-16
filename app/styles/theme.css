@@ -1,55 +1,83 @@
-:root {
-  --font-ui: "Aptos", "Segoe UI", "Trebuchet MS", Arial, sans-serif;
-  --bg: #fbf8f1;
-  --panel: rgba(255, 255, 255, 0.92);
-  --panel-strong: #ffffff;
-  --panel-soft: #f3f6f4;
-  --text: #132019;
-  --muted: #5f7068;
-  --line: rgba(28, 56, 46, 0.12);
-  --accent: #d18857;
-  --accent-strong: #b86f41;
-  --warm: #9f643b;
+@layer widget-tokens, widget-views, widget-controls;
+@layer widget-tokens {
+body.accounting-widget {
+  --color-primary: #d97706;
+  --color-primary-hover: #b45309;
+  --color-action: #b45309;
+  --color-action-hover: #92400e;
+  --color-primary-soft: #fff7ed;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8fafc;
+  --color-border: #e4e7ec;
+  --color-border-strong: #d0d5dd;
+  --color-text: #1d2939;
+  --color-text-muted: #667085;
+  --color-text-subtle: #98a2b3;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.06);
+
+  --bg: var(--color-background);
+  --panel: var(--color-surface);
+  --panel-strong: var(--color-surface);
+  --panel-soft: var(--color-surface-subtle);
+  --text: var(--color-text);
+  --muted: var(--color-text-muted);
+  --line: var(--color-border);
+  --accent: var(--color-primary);
+  --accent-strong: var(--color-primary-hover);
+  --shadow: var(--shadow-sm);
+  --shadow-soft: var(--shadow-sm);
+  --focus-ring: 0 0 0 3px rgba(217, 119, 6, 0.15);
+  --radius: var(--radius-md);
+
+  --font-ui: "Aptos", "Segoe UI", Arial, sans-serif;
+  --control-height: 38px;
+  --control-compact: 30px;
+  --control-icon: 36px;
+  --control-padding: 8px 12px;
+  --font-size-ui: 13px;
+  --font-size-caption: 12px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
   --danger: #b42318;
   --danger-bg: #fef3f2;
-  --info-bg: #eefbf8;
-  --shadow: 0 18px 40px rgba(77, 49, 24, 0.10);
-  --shadow-soft: 0 4px 12px rgba(77, 49, 24, 0.06);
-  --focus-ring: 0 0 0 3px rgba(209, 136, 87, 0.22);
-  --radius: 18px;
+  --success: #166534;
+  --success-bg: #f0f9f3;
+  --warning: #854d0e;
+  --warning-bg: #fffbeb;
+  --info-bg: #f0f5fa;
+  --warm: var(--color-primary-hover);
+  --shadow-menu: 0 8px 24px rgb(16 24 40 / 14%);
+  --shadow-dialog: 0 20px 64px rgb(16 24 40 / 22%);
+  --motion-fast: 120ms;
 }
 
-* {
+
+.accounting-widget, .accounting-widget * {
   box-sizing: border-box;
 }
 
-body {
+body.accounting-widget {
   margin: 0;
   min-height: 100vh;
   color: var(--text);
   font-family: var(--font-ui);
   line-height: 1.45;
-  background:
-    radial-gradient(circle at top left, rgba(209, 136, 87, 0.18), transparent 22%),
-    radial-gradient(circle at top right, rgba(173, 106, 21, 0.14), transparent 24%),
-    linear-gradient(180deg, #fcf5ef 0%, var(--bg) 100%);
+  background: var(--bg);
 }
 
-h1,
-h2,
-h3,
-strong,
-button,
-input,
-select,
-textarea {
+.accounting-widget :where(h1, h2, h3, strong, button, input, select, textarea) {
   font-family: var(--font-ui);
 }
 
-h1,
-h2,
-h3,
-p,
-dl {
+.accounting-widget :where(h1, h2, h3, p, dl) {
   margin-top: 0;
+}
+body.accounting-widget :where(input, select, textarea) { width: 100%; }
+
 }

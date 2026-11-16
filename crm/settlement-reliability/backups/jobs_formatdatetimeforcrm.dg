@@ -1,0 +1,9 @@
+string standalone.jobs_formatDateTimeForCRM(String dateTimeText)
+{
+dateTimeText = ifnull(dateTimeText,"").toString();
+if(dateTimeText != "" && dateTimeText.length() == 24)
+{
+	dateTimeText = dateTimeText.subString(0,22) + ":" + dateTimeText.subString(22,24);
+}
+return dateTimeText;
+}

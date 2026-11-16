@@ -23,6 +23,7 @@ function setup(overrides = {}) {
     ...overrides.crm
   };
   const instance = ns.createInvoiceRequestModule({
+    getCurrentUserEmail: async () => "luciano@madeforspainandportugal.com",
     MODULES: ns.MODULES, helpers: ns.helpers, crm,
     hasValidEmailAddress: value => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(value),
     getFunctionOutputObject: response => response,
@@ -123,9 +124,41 @@ test('invalid recipients and header injection never invoke the send function', a
 
 test('download retains UTF-8 HTML and creates an unsent MIME draft', () => {
   const { instance } = setup();
-  const eml = instance.buildEml('a@example.com', 'Solicitud de factura · Morería', '<p>Buen día, Castelló</p>');
+  const eml = instance.buildEml('a@example.com', 'Solicitud de factura · Morería', '<p>Buen día, Castelló</p>', 'luciano@madeforspainandportugal.com');
   assert.match(eml, /X-Unsent: 1/);
   assert.match(eml, /Content-Type: text\/html; charset=UTF-8/);
   const html = Buffer.from(eml.split('\r\n\r\n')[1].replace(/\r\n/g, ''), 'base64').toString('utf8');
   assert.ok(html.includes('<p>Buen día, Castelló</p>'));
+});
+
+test('sender follows the logged-in user and is passed to CRM', async () => {
+  for (const email of ['luciano@madeforspainandportugal.com','r.bautista@madeforspainandportugal.com']) {
+    const {instance,calls}=setup({deps:{getCurrentUserEmail:async()=>email}});
+    await instance.sendDraft('123','supplier@example.com','Subject','<p>Body</p>');
+    assert.equal(calls.find(c=>c[0]==='send')[2].actingUserEmail,email);
+    assert.ok(instance.buildEml('supplier@example.com','Subject','<p>Body</p>',email).startsWith('From: '+email+'\r\n'));
+  }
+});
+test('missing user or a changed user stops before sending or updating status', async () => {
+  for (const email of ['', 'bad\r\nBcc: other@example.com','new@example.com']) {
+    const {instance,calls}=setup({deps:{getCurrentUserEmail:async()=>email}});
+    await assert.rejects(instance.sendDraft('123','supplier@example.com','Subject','<p>Body</p>','original@example.com'));
+    assert.ok(!calls.some(c=>c[0]==='send'||c[0]==='update'));
+  }
+});
+test('Deluge dispatch sends once with the exact literal for every configured user and rejects unknown users', () => {
+  const source=fs.readFileSync('crm/sendSupplierInvoiceRequest.dg','utf8');
+  const start=source.indexOf('\tif(actingUserEmail =='),end=source.indexOf('\n\tres.put("success",true)',start);
+  const dispatch=source.slice(start,end).replace(/sendmail\s*\[([\s\S]*?)\]/g,(_,body)=>{
+    const sender=body.match(/from :"([^"]+)"/)[1];return 'sent.push("'+sender+'");';
+  });
+  const emails=[...source.matchAll(/if\(actingUserEmail == "([^"]+)"\)/g)].map(m=>m[1]);
+  assert.ok(emails.length>=27);
+  for(const email of [...emails,'unknown@example.com','']) {
+    const sent=[],res={put(){},toString(){return 'rejected'}};
+    const run=vm.runInNewContext('(function(){'+dispatch+'})',{actingUserEmail:email,sent,res});
+    const result=run();
+    assert.deepEqual(sent,emails.includes(email)?[email]:[]);
+    if(!emails.includes(email))assert.equal(result,'rejected');
+  }
 });

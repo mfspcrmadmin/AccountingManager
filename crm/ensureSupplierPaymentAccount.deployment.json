@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-10",
+  "function": "ensuresupplierpaymentaccount",
+  "id": "616617000160860266",
+  "state": "active",
+  "published": true,
+  "source": "crm/ensureSupplierPaymentAccount.dg",
+  "backup": "crm/backups/ensureSupplierPaymentAccount.before-name-length-fix-20261110.dg",
+  "validation": {
+    "zohoCompilation": "success",
+    "publishedSourceReadBack": "matches after whitespace normalization",
+    "localPaymentTests": 26,
+    "runtimeExecution": "not performed; no supplier or payment account records created during deployment",
+    "widgetTexts": "modified locally; not published",
+    "nameLengthFix": "Zoho compilation successful; published source read back matches; runtime payment retry pending"
+  },
+  "behavior": {
+    "readsOnly": false,
+    "legacySupplierIban": true,
+    "createsAccounts": "only when no default and no existing owned accounts; requires IBAN format, beneficiary and supported supplier currency",
+    "reactivatesAccounts": false,
+    "changesAccountingMapping": "optional mapping on newly created account only",
+    "selection": "valid default, unique usable owned account, or verified newly created account"
+  },
+  "scopeNote": "Fixed left(120) out-of-range error for short beneficiary names; truncation only when length exceeds 120. No business records created during deployment. Prior 26 payment tests do not exercise Deluge text runtime."
+}

@@ -140,7 +140,10 @@
       var label = document.createElement('label'), input = document.createElement('input');
       label.className = 'bookings-stage-option';
       input.type = 'checkbox'; input.value = stage; input.checked = true;
-      label.appendChild(input); label.appendChild(document.createTextNode(stage)); el('stages').appendChild(label);
+      var badge = document.createElement('span');
+      badge.className = 'status-pill ' + ns.helpers.getBookingStatusTone(stage);
+      badge.textContent = stage;
+      label.appendChild(input); label.appendChild(badge); el('stages').appendChild(label);
     });
     function setStageMenu(open) {
       el('stage-menu').hidden = !open;

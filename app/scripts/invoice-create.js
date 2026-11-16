@@ -2,6 +2,14 @@
 var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
   ns.createInvoiceCreateModule = function (deps) {
+    var invoiceDateDefaultType;
+    function updateInvoiceDateDefault(force) {
+      var type = isInvoiceCreateRefundMode() ? "Credit Note" : elements.invoiceCreateType.value;
+      if (force || type !== invoiceDateDefaultType) {
+        elements.invoiceCreateDate.value = ns.defaultInvoiceDate(type);
+        invoiceDateDefaultType = type;
+      }
+    }
     var MODULES = deps.MODULES;
     var FIELD_CANDIDATES = deps.FIELD_CANDIDATES;
     var INVOICE_LINE_FIELDS = deps.INVOICE_LINE_FIELDS;
@@ -56,6 +64,103 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var formatFileSize = deps.formatFileSize;
     var getInvoiceCreateDocumentFile = deps.getInvoiceCreateDocumentFile;
     var getInvoiceCreateNumberValue = deps.getInvoiceCreateNumberValue;
+    var calculationView = { rows: [], loading: false, error: "" };
+    var calculationRetrying = "";
+    var serviceSelectionGeneration = 0;
+    var settlementLoadGeneration = 0;
+    var calculationMonitor = ns.createSettlementCalculationMonitor ? ns.createSettlementCalculationMonitor({
+      crm: crm,
+      onChange: function (view, retrying) {
+        calculationView = view;
+        calculationRetrying = retrying;
+        renderCalculationStatus();
+        if (state.invoiceCreation.isOpen && elements.invoiceCreateSettlementTableBody) { renderInvoiceCreateSettlementTable(); }
+      },
+      onSnapshot: async function (snapshot, isCurrent) {
+        if (!isCurrent() || !state.invoiceCreation.isOpen || String(state.supplierId) !== snapshot.supplierId ||
+            state.invoiceCreation.isLoadingSettlements || state.isLoading || submitInProgress) { return; }
+        var records = normalizeSettlements(snapshot.settlements);
+        var old = state.invoiceCreation.settlements || [];
+        if (JSON.stringify(old) === JSON.stringify(records)) { return; }
+        invalidateInvoiceCreateSettlementCache();
+        state.invoiceCreation.hasLoadedSettlements = true;
+        state.invoiceCreation.loadedSupplierId = snapshot.supplierId;
+        if (ns.reconcileCalculationSettlements(state.invoiceCreation, records)) {
+          setInvoiceCreateStep(INVOICE_CREATE_STEPS.settlement);
+          state.invoiceCreation.settlementDropdownOpen = true;
+          renderer.showError("A selected settlement is no longer available for this supplier. Review the selection before saving.");
+        }
+        state.invoiceCreation.services = [];
+        renderAll();
+        var currentSelection = state.invoiceCreation.selectedSettlement;
+        if (currentSelection) {
+          var services = await loadServicesForSettlement(currentSelection.id);
+          if (isCurrent() && state.invoiceCreation.isOpen && state.invoiceCreation.selectedSettlement &&
+              String(state.invoiceCreation.selectedSettlement.id) === String(currentSelection.id)) {
+            state.invoiceCreation.services = services;
+            renderAll();
+          }
+        }
+      }
+    }) : null;
+
+    function renderCalculationStatus() {
+      if (!elements.invoiceCreateCalculation || !calculationMonitor) { return; }
+      elements.invoiceCreateCalculation.hidden = !state.invoiceCreation.isOpen;
+      var selectedBookings = getSelectedInvoiceCreateSettlements().map(function (record) { return helpers.getLookupId(record.Booking); });
+      var rows = (calculationView.rows || []).filter(function (row) { return selectedBookings.indexOf(row.bookingId) !== -1; });
+      var affected = rows.filter(function (row) { return row.status !== "idle"; });
+      var unknown = !!calculationView.error;
+      var host = elements.invoiceCreateCalculation;
+      var toggle = host.querySelector('#invoice-create-calculation-toggle');
+      var details = host.querySelector('#invoice-create-calculation-details');
+      toggle.onclick = function () {
+        details.hidden = !details.hidden;
+        toggle.setAttribute('aria-expanded', String(!details.hidden));
+      };
+      var count = host.querySelector('#invoice-create-calculation-count');
+      count.innerHTML = (affected.length ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3v1"/></svg>' : '') + affected.length;
+      count.setAttribute('aria-label', affected.length + ' bookings need attention');
+      count.dataset.tone = unknown ? 'error' : affected.length ? 'warning' : 'neutral';
+      elements.invoiceCreateCalculationSummary.textContent = 'Calculation status';
+      elements.invoiceCreateCalculationChecked.textContent = calculationView.loading ? 'Checking status…' :
+        'Last checked: ' + (calculationView.checkedAt ? new Date(calculationView.checkedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'Not checked');
+      host.querySelector('#invoice-create-calculation-help').textContent =
+        (calculationView.checkedAt ? 'Last checked: ' + new Date(calculationView.checkedAt).toLocaleString() + '. ' : '') +
+        'Checks bookings of selected settlements every 30 seconds (read-only). This panel starts a recalculation only when you click Recover calculation. Scheduled CRM jobs run independently. An empty queue does not guarantee that all source data is current.';
+      elements.invoiceCreateCalculationRefresh.classList.toggle('is-checking', calculationView.loading);
+      elements.invoiceCreateCalculationRefresh.setAttribute('aria-busy', String(calculationView.loading));
+      var selectedPending = rows.some(function (row) { return selectedBookings.indexOf(row.bookingId) !== -1 && (row.status !== "idle" || row.bookingId === calculationRetrying); });
+      var warning = selectedPending ? "Selected settlement amounts may be out of date. See calculation details." : "";
+      if (unknown && selectedBookings.length) { warning = "Selected settlement calculation status is unverified."; }
+      elements.invoiceCreateCalculationWarning.textContent = warning;
+      elements.invoiceCreateCalculationWarning.hidden = !warning;
+      elements.invoiceCreateCalculationRefresh.disabled = calculationView.loading || !!calculationRetrying;
+      var escape = helpers.escapeHtml;
+      var spinner = '<span class="calculation-spinner" aria-hidden="true"></span>';
+      var openTechnical = Array.from(elements.invoiceCreateCalculationRows.querySelectorAll('details[open]')).map(function (node) { return node.dataset.booking; });
+      var markup = rows.slice().sort(function (a, b) { return Number(a.status === "idle") - Number(b.status === "idle"); }).map(function (row) {
+        var recovering = row.bookingId === calculationRetrying;
+        var running = row.status === 'running' || recovering;
+        var label = recovering ? 'Recovering' : row.status === 'running' ? 'Calculating' : row.status === 'unconfirmed' ? 'Unconfirmed' : row.status === 'failed' ? 'Failed' : row.status === 'pending' ? row.onHold ? 'On hold' : 'Pending' : 'No pending work';
+        var description = recovering ? 'Recovery is in progress.' : row.status === 'running' ? 'A calculation is in progress.' : row.status === 'unconfirmed' ? 'The previous calculation ended without confirmed completion.' : row.status === 'failed' ? 'Calculation failed. Review the details before retrying.' : row.status === 'pending' ? row.onHold ? 'Calculation is on hold.' : 'Waiting for calculation.' : 'No pending calculation was found.';
+        var ref = state.indexes && state.indexes.mfspByBookingId && state.indexes.mfspByBookingId[row.bookingId];
+        var name = row.mfsp || ref || (row.label !== row.bookingId ? row.label : 'Reference unavailable');
+        var technical = 'Booking ID: ' + row.bookingId + (row.error ? '\n' + row.error : '') + (row.recovery ? '\n' + row.recovery.message : '');
+        return '<article class="settlement-calculation-row" data-booking="' + escape(row.bookingId) + '"><div class="calculation-card-heading"><strong>' + escape(name) + '</strong><span class="calculation-badge" data-tone="' + (row.status === 'failed' ? 'error' : row.status === 'unconfirmed' || row.status === 'pending' ? 'warning' : 'neutral') + '">' + (running ? spinner : '') + escape(label) + '</span></div>' +
+          '<p>' + escape(description) + '</p><dl class="calculation-metadata"><div><dt>Last calculation update</dt><dd>' + escape(row.lastCalculated ? new Date(row.lastCalculated).toLocaleString() : 'Unavailable') + '</dd></div>' +
+          (row.nextRunAt && row.status === 'pending' && !row.onHold ? '<div><dt>Next attempt eligible</dt><dd>' + escape(new Date(row.nextRunAt).toLocaleString()) + '</dd></div>' : '') + '</dl>' +
+          (row.recovery && !recovering ? '<p class="calculation-recovery-result" data-status="' + escape(row.recovery.status) + '" role="status">' + (row.recovery.status === 'error' ? 'Recovery could not be confirmed. See technical details.' : escape(row.recovery.message)) + '</p>' : '') +
+          '<details class="calculation-technical" data-booking="' + escape(row.bookingId) + '"' + (openTechnical.indexOf(row.bookingId) !== -1 ? ' open' : '') + '><summary data-calculation-detail="' + escape(row.bookingId) + '">Technical details</summary><pre>' + escape(technical) + '</pre></details>' +
+          (row.canRetry || recovering ? '<button type="button" class="button secondary calculation-recover" data-calculation-retry="' + escape(row.bookingId) + '"' + ((calculationRetrying || state.isLoading || submitInProgress) ? ' disabled' : '') + '>' + (recovering ? spinner + 'Recovering…' : 'Recover calculation') + '</button>' : '') + '</article>';
+      }).join('');
+      if (unknown) { markup = '<p role="alert">Calculation status unavailable.</p><details class="calculation-technical"><summary>Technical details</summary><pre>' + escape(calculationView.error) + '</pre></details>' + markup; }
+      else if (!selectedBookings.length) { markup = '<p>Select a settlement to check its booking.</p>'; }
+      else if (!rows.length && !calculationView.loading) { markup = '<p>No linked bookings found for the selected settlements.</p>'; }
+      renderStableMarkup(elements.invoiceCreateCalculationRows, markup);
+
+    }
+
     var invoiceNameDefault = ns.createInvoiceNameDefault(elements.invoiceCreateNumber, function () { return global.ZOHO.CRM.API; }, function (error) {
       renderer.showError("Could not suggest an invoice number: " + error.message);
     }, function () { elements.invoiceCreateNumber.setCustomValidity(""); refreshInvoiceCreateActionState(); });
@@ -82,6 +187,159 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     var uploadFileToInvoiceField = deps.uploadFileToInvoiceField;
     var onInvoiceCreateRequestAccountingAccountClick = deps.onInvoiceCreateRequestAccountingAccountClick;
     var eventsBound = false;
+    var submitInProgress = false;
+    var registrationRecovery;
+    var registration = ns.createInvoiceRegistration({
+      storage: {
+        getItem: function (key) { return global.localStorage.getItem(key); },
+        setItem: function (key, value) { global.localStorage.setItem(key, value); },
+        removeItem: function (key) { global.localStorage.removeItem(key); }
+      },
+      randomUUID: function () { return global.crypto.randomUUID(); },
+      withLock: function (key, execute) {
+        if (global.navigator && global.navigator.locks) { return global.navigator.locks.request(key, execute); }
+        throw new Error("This browser cannot safely coordinate invoice registration between tabs. Use a browser with Web Locks support.");
+      },
+      executeFunction: function (name, args) { return crm.executeFunction(name, args); },
+        getInvoice: function (invoiceId) { return crm.getRecord("Supplier_Invoices", invoiceId); },
+      uploadFile: function (file) { return crm.uploadFile(file); },
+      refresh: async function (invoiceId) {
+        invalidateInvoiceCreateSettlementCache();
+        await refreshInvoicesAfterCreate(invoiceId);
+        if (!(state.supplierInvoices || []).some(function (invoice) { return String(invoice.id) === String(invoiceId); })) {
+          throw new Error("The invoice was registered, but the supplier view could not load it. Resume to refresh the same invoice.");
+        }
+        await reloadInvoiceCreateSettlements({ forceReload: true, throwOnError: true });
+      }
+    });
+
+    function renderRegistrationRecovery() {
+      if (!elements.invoiceCreateForm || !global.document || !global.document.createElement) { return; }
+      if (!registrationRecovery) {
+        registrationRecovery = global.document.createElement("div");
+        registrationRecovery.className = "inline-feedback invoice-registration-recovery";
+        registrationRecovery.setAttribute("role", "status");
+        var message = global.document.createElement("p");
+        var resume = global.document.createElement("button");
+        resume.type = "button";
+        resume.className = "button primary";
+        resume.textContent = "Resume invoice registration";
+        resume.addEventListener("click", handleInvoiceCreateSubmitEvent);
+        registrationRecovery.appendChild(message);
+        registrationRecovery.appendChild(resume);
+        var discard = global.document.createElement("button");
+        discard.type = "button"; discard.className = "button secondary"; discard.textContent = "Discard registration";
+        var confirmBox = global.document.createElement("div");
+        confirmBox.className = "invoice-registration-discard"; confirmBox.hidden = true;
+        var explanation = global.document.createElement("p");
+        explanation.textContent = "Discard this unfinished registration? The invoice will be cancelled and removed from payable balances. Its document and history will be kept. This is different from hiding the notice.";
+        var keep = global.document.createElement("button"), confirm = global.document.createElement("button");
+        keep.type = confirm.type = "button"; keep.className = "button secondary"; confirm.className = "button primary";
+        keep.textContent = "Keep registration"; confirm.textContent = "Yes, discard registration";
+        discard.addEventListener("click", function () { confirmBox.hidden = false; keep.focus(); });
+        keep.addEventListener("click", function () { confirmBox.hidden = true; discard.focus(); });
+        confirm.addEventListener("click", async function () {
+          if (submitInProgress || state.isLoading) return;
+          var supplierId = String(state.supplierId);
+          submitInProgress = true;
+          try {
+            setInvoiceCreateLoading(true, "Discarding invoice registration and updating balances...");
+            renderRegistrationRecovery();
+            var result = await registration.discard(supplierId);
+            if (result.busy) return;
+            if (!result.success) throw new Error(result.message);
+            confirmBox.hidden = true;
+            resetInvoiceCreateFormAfterCreate(); state.invoiceCreation.isOpen = false;
+            renderer.showNotice("Registration discarded. The cancelled invoice and document are kept for reference." + (result.refreshRequired ? " Reload the view to see updated balances." : ""), { tone: "success" });
+          } catch (error) { renderer.showError(error.message); }
+          finally { submitInProgress = false; setInvoiceCreateLoading(false, "", { preserveNotice: true }); renderAll(); }
+        });
+        confirmBox.appendChild(explanation); confirmBox.appendChild(keep); confirmBox.appendChild(confirm);
+        registrationRecovery.appendChild(discard); registrationRecovery.appendChild(confirmBox);
+        registrationRecovery._resume = resume; registrationRecovery._discard = discard;
+        (elements.invoiceCreateFeedback || elements.invoiceCreateForm).prepend(registrationRecovery);
+      }
+      var pending;
+      var recoveryError;
+      try { pending = !isInvoiceCreateRefundMode() && state.supplierId && registration.pending(state.supplierId); }
+      catch (error) { recoveryError = error.message; renderer.showError(error.message); }
+      registrationRecovery.hidden = !pending && !recoveryError;
+      if (recoveryError) {
+        registrationRecovery.firstChild.textContent = recoveryError;
+        registrationRecovery.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+      }
+      if (pending) {
+        var request = JSON.parse(pending.requestJson);
+        if (registrationRecovery._operationKey !== pending.operationKey) {
+          registrationRecovery.querySelector('.invoice-registration-discard').hidden = true;
+          registrationRecovery._operationKey = pending.operationKey;
+        }
+        registrationRecovery.firstChild.textContent = (pending.invoiceId ? "Invoice " + pending.invoiceId + " was created. " : "The previous registration has not been confirmed. ") +
+          "Resume " + request.invoice.Name + " to complete or check the same invoice. Do not create it again.";
+        if (pending.discardRequested) registrationRecovery.firstChild.textContent = "Discarding " + request.invoice.Name + " remains to be confirmed. Continue discarding to finish updating its balances.";
+        registrationRecovery.querySelectorAll('button').forEach(function (button) { button.disabled = submitInProgress || state.isLoading; });
+        registrationRecovery._resume.hidden = Boolean(pending.discardRequested);
+        registrationRecovery._discard.textContent = pending.discardRequested ? "Continue discarding" : "Discard registration";
+      }
+      Array.prototype.forEach.call(elements.invoiceCreateForm.querySelectorAll("input, select, textarea, button"), function (element) {
+        if (registrationRecovery.contains(element) || element === elements.invoiceCreateClose || element === elements.invoiceCreateCancel) { return; }
+        if (pending || recoveryError) {
+          if (element.dataset.registrationDisabled === undefined) { element.dataset.registrationDisabled = String(element.disabled); }
+          element.disabled = true;
+        } else if (element.dataset.registrationDisabled !== undefined) {
+          element.disabled = element.dataset.registrationDisabled === "true";
+          delete element.dataset.registrationDisabled;
+        }
+      });
+      if (!pending && !recoveryError) {
+        refreshInvoiceCreateActionState();
+        renderInvoiceCreateDocumentFilePreview();
+      }
+    }
+
+    async function registerSupplierInvoice(payload, allocations, confirmedExcess, file) {
+      var supplierId = String(state.supplierId);
+      var result = await registration.run(supplierId, payload ? {
+        supplier_id: supplierId,
+        invoice: payload,
+        allocations: allocations.map(function (allocation) { return { settlement_id: String(allocation.settlement.id), amount: allocation.amount }; }),
+        amount_mode: state.invoiceCreation.lastEditedAmountMode || "gross",
+        confirmed_excess: confirmedExcess
+      } : null, file);
+      if (result.busy) { return; }
+      if (!result.success) {
+        renderer.showError((result.invoice_id ? "Invoice " + result.invoice_id + " was created. " : "") + result.message);
+        renderAll();
+        return;
+      }
+      resetInvoiceCreateFormAfterCreate();
+      state.invoiceCreation.isOpen = false;
+      renderAll();
+      renderer.showNotice((result.phase === "discarded" ? "Registration discarded. The cancelled invoice is kept for reference." : "Invoice " + result.invoice_id + " registered. No payment was created.") +
+        ((result.warnings || []).length ? " " + result.warnings.join(" ") : ""), { tone: "success" });
+    }
+
+    function renderStableMarkup(host, markup) {
+      if (!host || (host._invoiceMarkup === markup && (markup === "" || host.innerHTML !== ""))) { return; }
+      var active = global.document && global.document.activeElement;
+      var focused = active && host.contains && host.contains(active);
+      var key = focused && (active.getAttribute("data-settlement-allocation-id") || active.getAttribute("data-settlement-selection-id") || active.getAttribute("data-status-filter-value") || active.getAttribute("data-calculation-retry") || active.getAttribute("data-calculation-detail"));
+      var scrollTop = host.scrollTop;
+      host.innerHTML = markup;
+      host._invoiceMarkup = markup;
+      if (key) {
+        var replacement = Array.prototype.find.call(host.querySelectorAll("input,button,summary"), function (node) {
+          return ["data-settlement-allocation-id", "data-settlement-selection-id", "data-status-filter-value", "data-calculation-retry", "data-calculation-detail"].some(function (attribute) { return node.getAttribute(attribute) === key; });
+        });
+        if (replacement) {
+          active.disabled = replacement.disabled;
+          if (active.tagName === "BUTTON") { active.innerHTML = replacement.innerHTML; }
+          replacement.replaceWith(active);
+          active.focus({ preventScroll: true });
+        }
+      }
+      host.scrollTop = scrollTop;
+    }
 
     function normalizeSettlements(records) {
       return records
@@ -154,7 +412,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function getInvoiceCreateSettlementMfsp(settlement) {
       var bookingId = helpers.getLookupId(settlement && settlement.Booking);
-      return bookingId ? state.indexes.mfspByBookingId[bookingId] || "" : "";
+      return bookingId && state.indexes && state.indexes.mfspByBookingId ? state.indexes.mfspByBookingId[bookingId] || "" : "";
     }
 
     function getInvoiceCreateSettlementMeta(settlement) {
@@ -162,7 +420,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var ezusReference = settlement && settlement.Ezus_Supplier_Reference
         ? String(settlement.Ezus_Supplier_Reference)
         : "";
-      var metaParts = [mfsp, ezusReference].filter(Boolean);
+      var metaParts = [mfsp, helpers.getLookupName(settlement && settlement.Booking), ezusReference].filter(Boolean);
 
       if (metaParts.length) {
         return metaParts.join(" | ");
@@ -310,7 +568,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       if (elements.invoiceCreateSettlementStatusMenu) {
         elements.invoiceCreateSettlementStatusMenu.hidden = !state.invoiceCreation.settlementStatusDropdownOpen;
-        elements.invoiceCreateSettlementStatusMenu.innerHTML = [
+        renderStableMarkup(elements.invoiceCreateSettlementStatusMenu, [
           '<div class="status-filter-menu-actions">',
           '  <button class="status-filter-menu-action" type="button" data-status-filter-action="select-all">Select all</button>',
           '  <button class="status-filter-menu-action" type="button" data-status-filter-action="clear-all">Deselect all</button>',
@@ -325,18 +583,26 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
               "</label>"
             ].join("");
           }).join("")
-        ].join("");
+        ].join(""));
       }
     }
 
     async function selectInvoiceCreateSettlement(settlement) {
+      var generation = ++serviceSelectionGeneration;
+      var supplierId = state.supplierId;
+      var settlementId = settlement && settlement.id;
+      function isCurrent() {
+        return generation === serviceSelectionGeneration && state.invoiceCreation.isOpen &&
+          state.supplierId === supplierId && state.invoiceCreation.selectedSettlement &&
+          String(state.invoiceCreation.selectedSettlement.id) === String(settlementId);
+      }
       state.invoiceCreation.selectedSettlement = settlement || null;
-      state.invoiceCreation.settlementDropdownOpen = false;
       state.invoiceCreation.services = [];
       clearInvoiceCreateValidationState();
       renderAll();
       renderer.showError("");
 
+      updateInvoiceNameDefault();
       if (!state.invoiceCreation.selectedSettlement) {
         return;
       }
@@ -344,17 +610,20 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       setInvoiceCreateLoading(true, "Loading services...");
 
       try {
-        state.invoiceCreation.services = await loadServicesForSettlement(state.invoiceCreation.selectedSettlement.id);
+        var services = await loadServicesForSettlement(settlementId);
+        if (!isCurrent()) { return; }
+        state.invoiceCreation.services = services;
         renderAll();
       } catch (error) {
+        if (!isCurrent()) { return; }
         state.invoiceCreation.services = [];
         renderAll();
         debugError("selectInvoiceCreateSettlement failed", error, {
-          settlementId: state.invoiceCreation.selectedSettlement.id
+          settlementId: settlementId
         });
         renderer.showError(error.message || "Could not load settlement services.");
       } finally {
-        setInvoiceCreateLoading(false);
+        if (generation === serviceSelectionGeneration) { setInvoiceCreateLoading(false); }
       }
     }
 
@@ -392,80 +661,47 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function renderInvoiceCreateSettlementTable() {
       var settlements = getFilteredInvoiceCreateSettlements();
-      var emptyMessage = "No Supplier Settlements match the current filters.";
-      var tableBodyMarkup = "";
-
-      if (state.invoiceCreation.isLoadingSettlements) {
-        tableBodyMarkup = [
-          '<tr class="table-loading-row">',
-          '  <td class="table-loading-cell" colspan="5"><span class="table-loading-indicator"></span>Loading supplier settlements...</td>',
-          "</tr>"
-        ].join("");
+      var emptyMessage = "No settlements match these filters.";
+      if (!(state.invoiceCreation.settlements || []).length) {
+        emptyMessage = calculationView.loading ? "Checking settlement availability…" : calculationView.error ? "Calculation status could not be verified." :
+          (calculationView.rows || []).some(function (row) { return row.status === "failed"; }) ? "Calculation failed. Open calculation details to retry." :
+          (calculationView.rows || []).some(function (row) { return row.status !== "idle"; }) ? "Settlements are pending calculation. This list updates automatically." : "No settlements available for this supplier.";
       }
-
-      if (!tableBodyMarkup && settlements.length) {
-        tableBodyMarkup = settlements.map(function (settlement) {
-          var isSelected = getSelectedInvoiceCreateSettlements().some(function (item) { return String(item.id) === String(settlement.id); });
-          var isActive = state.invoiceCreation.selectedSettlement && String(state.invoiceCreation.selectedSettlement.id) === String(settlement.id);
-          var status = getInvoiceCreateSettlementStatus(settlement);
-
-          return [
-            '<tr class="is-clickable' + (isActive ? " is-active" : "") + '" data-settlement-id="' + helpers.escapeHtml(settlement.id) + '">',
-            '  <td class="checkbox-cell"><input type="checkbox" data-settlement-selection-id="' + helpers.escapeHtml(settlement.id) + '"' + (isSelected ? " checked" : "") + ' aria-label="Select ' + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(settlement)) + '"></td>',
-            "  <td>" + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(settlement)) + "</td>",
-            "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(status)) + "\">" + helpers.escapeHtml(status || "-") + "</span></td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(settlement.Total_Service_Cost)) + "</td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(settlement.Total_Invoice)) + "</td>",
-            '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(getInvoiceCreateSettlementUnpaidInvoicedAmount(settlement))) + "</td>",
-            "</tr>"
-          ].join("");
-        }).join("");
-      }
-
+      var markup = state.invoiceCreation.isLoadingSettlements ? '<p class="supplier-context-empty">Loading settlements…</p>' : settlements.map(function (settlement) {
+        var selected = getSelectedInvoiceCreateSettlements().some(function (item) { return String(item.id) === String(settlement.id); });
+        var status = getInvoiceCreateSettlementStatus(settlement);
+        return '<label class="supplier-settlement-option' + (selected ? ' is-selected' : '') + '" data-settlement-id="' + helpers.escapeHtml(settlement.id) + '">' +
+          '<input type="checkbox" data-settlement-selection-id="' + helpers.escapeHtml(settlement.id) + '"' + (selected ? ' checked' : '') + ' aria-label="Select ' + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(settlement)) + '">' +
+          '<span class="supplier-settlement-label"><strong>' + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(settlement)) + '</strong><small>' + helpers.escapeHtml(getInvoiceCreateSettlementMeta(settlement)) + '</small><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(status)) + '">' + helpers.escapeHtml(status) + '</span></span>' +
+          '<strong class="supplier-settlement-cost" title="Total service cost">' + helpers.escapeHtml(helpers.formatCurrency(settlement.Total_Service_Cost)) + '</strong></label>';
+      }).join("");
       elements.invoiceCreateSettlementEmpty.textContent = emptyMessage;
-      elements.invoiceCreateSettlementEmpty.classList.toggle("is-loading", state.invoiceCreation.isLoadingSettlements);
       elements.invoiceCreateSettlementEmpty.hidden = state.invoiceCreation.isLoadingSettlements || settlements.length > 0;
-      elements.invoiceCreateSettlementTableWrap.hidden = !state.invoiceCreation.isLoadingSettlements && settlements.length === 0;
-      elements.invoiceCreateSettlementTableBody.innerHTML = tableBodyMarkup;
+      elements.invoiceCreateSettlementTableWrap.hidden = !state.invoiceCreation.isLoadingSettlements && !settlements.length;
+      renderStableMarkup(elements.invoiceCreateSettlementTableBody, markup);
     }
 
     function renderInvoiceCreateSettlementSummary() {
+      var selected = getSelectedInvoiceCreateSettlements();
       var settlement = state.invoiceCreation.selectedSettlement;
-      var settlementDisplayName = settlement ? getInvoiceCreateSettlementDisplayName(settlement) : "-";
-      var bookingDisplayName = settlement ? helpers.textValue(helpers.getLookupName(settlement.Booking)) : "-";
-      var unpaidInvoicedAmount = settlement ? getInvoiceCreateSettlementUnpaidInvoicedAmount(settlement) : null;
-      var pendingInvoicingAmount = settlement ? getInvoiceCreateSettlementRemainingToInvoice(settlement) : null;
-      var settlementStatus = settlement ? getInvoiceCreateSettlementStatus(settlement) : "";
-      var settlementStatusTone = helpers.getStatusTone(settlementStatus);
-
-      if (elements.invoiceCreateSelectedSettlementName) {
-        elements.invoiceCreateSelectedSettlementName.textContent = settlementDisplayName;
-      }
-      if (elements.invoiceCreateSettlementPreviewSidebar) {
-        elements.invoiceCreateSettlementPreviewSidebar.textContent = settlementDisplayName;
-      }
-      elements.invoiceCreateSettlementTotalCost.textContent = settlement ? helpers.formatCurrency(settlement.Total_Service_Cost) : "-";
-      elements.invoiceCreateSettlementTotalInvoice.textContent = settlement ? helpers.formatCurrency(settlement.Total_Invoice) : "-";
-      elements.invoiceCreateSettlementThisInvoice.textContent = settlement ? helpers.formatCurrency(pendingInvoicingAmount) : "-";
-      elements.invoiceCreateSettlementTotalPaid.textContent = settlement ? helpers.formatCurrency(settlement.Total_Paid) : "-";
-      elements.invoiceCreateSettlementUnpaidInvoiced.textContent = settlement ? helpers.formatCurrency(unpaidInvoicedAmount) : "-";
-      if (elements.invoiceCreateBookingPreview) {
-        elements.invoiceCreateBookingPreview.textContent = bookingDisplayName;
-      }
-      if (elements.invoiceCreateBookingPreviewSidebar) {
-        elements.invoiceCreateBookingPreviewSidebar.textContent = bookingDisplayName;
-      }
-      elements.invoiceCreateSettlementStatus.textContent = settlement ? helpers.textValue(settlementStatus) : "-";
-      elements.invoiceCreateSettlementStatus.className = "status-pill " + (settlement ? settlementStatusTone : "neutral");
-      if (elements.invoiceCreateSelectedSettlementCard) {
-        elements.invoiceCreateSelectedSettlementCard.classList.toggle("is-selected", Boolean(settlement));
-        elements.invoiceCreateSelectedSettlementCard.classList.toggle("is-empty", !settlement);
-      }
-      if (elements.invoiceCreateSelectedSettlementSelect) {
-        elements.invoiceCreateSelectedSettlementSelect.innerHTML = getSelectedInvoiceCreateSettlements().map(function (item) {
-          return '<option value="' + helpers.escapeHtml(item.id) + '"' + (settlement && String(item.id) === String(settlement.id) ? " selected" : "") + '>' + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(item)) + '</option>';
-        }).join("") || '<option value="">No settlement selected</option>';
-        elements.invoiceCreateSelectedSettlementSelect.disabled = !getSelectedInvoiceCreateSettlements().length;
+      var sum = function (getValue) { return selected.reduce(function (total, item) { return total + (Number(getValue(item)) || 0); }, 0); };
+      if (elements.invoiceCreateSummaryEmpty) { elements.invoiceCreateSummaryEmpty.hidden = !!selected.length; }
+      if (elements.invoiceCreateFinancialSummary) { elements.invoiceCreateFinancialSummary.hidden = !selected.length; }
+      if (elements.invoiceCreateSummaryTitle) { elements.invoiceCreateSummaryTitle.textContent = selected.length > 1 ? "Combined totals · " + selected.length + " settlements" : "Settlement totals"; }
+      if (elements.invoiceCreateSelectedSettlementName) { elements.invoiceCreateSelectedSettlementName.textContent = selected.map(getInvoiceCreateSettlementDisplayName).join(", "); }
+      elements.invoiceCreateSettlementTotalCost.textContent = helpers.formatCurrency(sum(function (item) { return item.Total_Service_Cost; }));
+      elements.invoiceCreateSettlementTotalInvoice.textContent = helpers.formatCurrency(sum(function (item) { return item.Total_Invoice; }));
+      elements.invoiceCreateSettlementThisInvoice.textContent = helpers.formatCurrency(sum(getInvoiceCreateSettlementRemainingToInvoice));
+      elements.invoiceCreateSettlementTotalPaid.textContent = helpers.formatCurrency(sum(function (item) { return item.Total_Paid; }));
+      elements.invoiceCreateSettlementUnpaidInvoiced.textContent = helpers.formatCurrency(sum(getInvoiceCreateSettlementUnpaidInvoicedAmount));
+      elements.invoiceCreateSettlementStatus.hidden = true;
+      var select = elements.invoiceCreateSelectedSettlementSelect;
+      if (select) {
+        if (global.document.activeElement !== select) {
+          renderStableMarkup(select, selected.map(function (item) { return '<option value="' + helpers.escapeHtml(item.id) + '">' + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(item)) + '</option>'; }).join(""));
+          select.value = settlement ? settlement.id : "";
+        }
+        select.closest(".field").hidden = selected.length < 2;
       }
       renderInvoiceCreateSettlementAllocations();
     }
@@ -488,7 +724,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var additionalGrossAmount = hasInvoiceCreateAdditionalVatValues() ? additionalVatValues.grossAmount : 0;
       var additionalIrpfAmount = hasInvoiceCreateAdditionalVatValues() ? additionalVatValues.irpfAmount : 0;
 
-      return roundCurrency(grossAmount + additionalGrossAmount - roundCurrency(netAmount * irpfRate / 100) - additionalIrpfAmount);
+      return roundCurrency(grossAmount + additionalGrossAmount - roundCurrency(netAmount * irpfRate / 100) - additionalIrpfAmount +
+        (isInvoiceCreateRefundMode() ? 0 : getInvoiceCreateNumberValue(elements.invoiceCreateReimbursableExpense.value)));
     }
 
     function renderInvoiceCreateSettlementAllocations() {
@@ -498,11 +735,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var remaining = invoiceTotal - allocatedTotal;
 
       if (!elements.invoiceCreateSettlementAllocationList) { return; }
-      elements.invoiceCreateSettlementAllocationList.innerHTML = allocations.map(function (allocation) {
+      var allocationMarkup = allocations.map(function (allocation) {
         var value = state.invoiceCreation.settlementAllocationAmounts[allocation.settlement.id];
         if ((value === undefined || value === "") && allocations.length === 1 && invoiceTotal) { value = invoiceTotal.toFixed(2); }
         return '<tr><td>' + helpers.escapeHtml(getInvoiceCreateSettlementDisplayName(allocation.settlement)) + '</td><td class="numeric-cell"><input class="invoice-create-allocation-input" type="number" min="0" step="0.01" data-settlement-allocation-id="' + helpers.escapeHtml(allocation.settlement.id) + '" value="' + helpers.escapeHtml(value === undefined ? "" : value) + '" placeholder="0.00"></td></tr>';
-      }).join("") || '<tr><td colspan="2" class="muted-cell">Select one or more settlements in Step 1.</td></tr>';
+      }).join("") || '<tr><td colspan="2" class="muted-cell">Select one or more settlements.</td></tr>';
+      renderStableMarkup(elements.invoiceCreateSettlementAllocationList, allocationMarkup);
       updateInvoiceCreateSettlementAllocationTotals(allocatedTotal, remaining);
     }
 
@@ -554,12 +792,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         }
       }
       if (elements.invoiceCreateSubmit) {
-        elements.invoiceCreateSubmit.hidden = !isFinalStep;
+        elements.invoiceCreateSubmit.hidden = false;
         // Validation is handled in onCreateInvoiceSubmit and renders inline feedback.
-        elements.invoiceCreateSubmit.disabled = state.isLoading;
+        elements.invoiceCreateSubmit.disabled = state.isLoading || submitInProgress;
       }
       elements.invoiceCreateClose.disabled = state.isLoading;
       elements.invoiceCreateCancel.disabled = state.isLoading;
+      if (elements.invoiceCreateFileChoose) { elements.invoiceCreateFileChoose.disabled = state.isLoading || submitInProgress; }
+      if (elements.invoiceCreateFileInput) { elements.invoiceCreateFileInput.disabled = state.isLoading || submitInProgress; }
     }
 
     function renderInvoiceCreateStatusTone(value) {
@@ -705,6 +945,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       );
       var additionalVatAmount = roundCurrency(additionalAmountInclVat - additionalBaseAmount);
 
+      if (!isInvoiceCreateRefundMode() && elements.invoiceCreateAdditionalIrpfAmount) {
+        setInvoiceCreateAmountValue(elements.invoiceCreateAdditionalIrpfAmount,
+          roundCurrency(additionalBaseAmount * getInvoiceCreateAdditionalIrpfPercentValue() / 100));
+        elements.invoiceCreateAdditionalIrpfAmount.readOnly = true;
+      } else if (elements.invoiceCreateAdditionalIrpfAmount) {
+        elements.invoiceCreateAdditionalIrpfAmount.readOnly = false;
+      }
+
       setInvoiceCreateAmountValue(elements.invoiceCreateAdditionalAmountInclVat, additionalAmountInclVat);
 
       return {
@@ -745,6 +993,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function getInvoiceCreateValidationFieldElement(fieldKey) {
+      if (fieldKey === "allocation" && elements.invoiceCreateSettlementAllocationList) {
+        return elements.invoiceCreateSettlementAllocationList.querySelector("input[data-settlement-allocation-id]");
+      }
       if (fieldKey === "settlement") {
         if (
           state.invoiceCreation.selectedSettlement &&
@@ -770,7 +1021,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (fieldKey === "invoiceFile") {
-        return elements.invoiceCreateFileInput;
+        return elements.invoiceCreateFileChoose || elements.invoiceCreateFileInput;
       }
 
       if (fieldKey === "amountGross") {
@@ -912,21 +1163,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function syncInvoiceCreateStepWithFieldErrors(fieldErrors) {
-      var firstFieldKey = Object.keys(fieldErrors || {}).find(function (fieldKey) {
-        return Boolean(fieldErrors[fieldKey]);
-      });
-      var targetStep = firstFieldKey ? getInvoiceCreateStepForFieldKey(firstFieldKey) : 0;
-
-      if (targetStep && getInvoiceCreateStep() !== targetStep) {
-        setInvoiceCreateStep(targetStep);
+      if (fieldErrors && fieldErrors.settlement) {
+        state.invoiceCreation.settlementDropdownOpen = true;
         renderAll();
       }
     }
 
     function triggerInvoiceCreateSubmitValidationFeedback() {
-      var actionButton = getInvoiceCreateStep() === INVOICE_CREATE_STEPS.amounts
-        ? elements.invoiceCreateSubmit
-        : elements.invoiceCreateNext;
+      var actionButton = elements.invoiceCreateSubmit;
 
       if (!actionButton) {
         return;
@@ -988,7 +1232,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return false;
       }
 
-      if (!isInvoiceCreateRefundMode() && selectedTypeValue === INVOICE_TYPES.finalInvoice && selectedDocumentFile == null) {
+      if (isInvoiceCreateDocumentRequired() && selectedDocumentFile == null) {
         showInvoiceCreateValidationError("Attach the invoice file before creating the invoice.", {
           invoiceFile: "Invoice File is required."
         });
@@ -1142,7 +1386,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       totalPayableAmount = roundCurrency(invoiceTotal + reimbursableExpense);
 
       if (getSelectedInvoiceCreateSettlements().length === 1) {
-        state.invoiceCreation.settlementAllocationAmounts[getSelectedInvoiceCreateSettlements()[0].id] = invoiceTotal;
+        state.invoiceCreation.settlementAllocationAmounts[getSelectedInvoiceCreateSettlements()[0].id] = isInvoiceCreateRefundMode() ? invoiceTotal : totalPayableAmount;
       }
 
       elements.invoiceCreateVatAmount.textContent = helpers.formatCurrency(vatAmount);
@@ -1150,6 +1394,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.invoiceCreateAdditionalVatAmount.textContent = helpers.formatCurrency(additionalVatAmount);
       }
       elements.invoiceCreateIrpfAmount.textContent = helpers.formatCurrency(irpfAmount);
+      if (elements.invoiceCreateAdditionalIrpfDisplay) {
+        elements.invoiceCreateAdditionalIrpfDisplay.textContent = helpers.formatCurrency(additionalIrpfAmount);
+      }
       elements.invoiceCreateInvoiceTotal.textContent = helpers.formatCurrency(invoiceTotal);
       elements.invoiceCreateTotalPayableAmount.textContent = helpers.formatCurrency(totalPayableAmount);
       if (state.invoiceCreation && state.invoiceCreation.isOpen) {
@@ -1241,10 +1488,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function renderInvoiceCreateServices() {
       var services = state.invoiceCreation.services || [];
-      var showServicesPanel =
-        getInvoiceCreateStep() === INVOICE_CREATE_STEPS.settlement &&
-        Boolean(state.invoiceCreation.selectedSettlement) &&
-        !state.invoiceCreation.settlementDropdownOpen;
+      var showServicesPanel = Boolean(state.invoiceCreation.selectedSettlement);
 
       if (elements.invoiceCreateServicesPanel) {
         elements.invoiceCreateServicesPanel.hidden = !showServicesPanel;
@@ -1269,19 +1513,38 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
 
-      elements.invoiceCreateServicesTableBody.innerHTML = services.map(function (service) {
-        return [
-          "<tr>",
-          "  <td>" + helpers.escapeHtml(helpers.formatDate(service.Service_Date)) + "</td>",
-          '  <td class="muted-cell">' + helpers.escapeHtml(helpers.textValue(service.Product_Description, "-")) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(service.Total_Purchase_Price)) + "</td>",
-          '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(service.Final_Purchase_Cost)) + "</td>",
-          "</tr>"
-        ].join("");
-      }).join("");
+      renderStableMarkup(elements.invoiceCreateServicesTableBody, services.map(function (service) {
+        return '<article class="supplier-service-item"><div><strong>' + helpers.escapeHtml(helpers.textValue(service.Product_Description, service.Name || "Service")) + '</strong><span>' + helpers.escapeHtml(helpers.formatDate(service.Service_Date)) + '</span></div><dl><div><dt>Total purchase price</dt><dd>' + helpers.escapeHtml(helpers.formatCurrency(service.Total_Purchase_Price)) + '</dd></div><div><dt>Final purchase cost</dt><dd>' + helpers.escapeHtml(helpers.formatCurrency(service.Final_Purchase_Cost)) + '</dd></div></dl></article>';
+      }).join(""));
 
       elements.invoiceCreateServicesEmpty.hidden = true;
       elements.invoiceCreateServicesTableWrap.hidden = false;
+    }
+
+    function renderInvoiceCreateTypeColors() {
+      var select = elements.invoiceCreateType;
+      if (!select || !select.options) { return; }
+      var field = state.invoiceCreation.invoiceFields && state.invoiceCreation.invoiceFields.invoiceType;
+      var values = field && field.enable_colour_code !== false ? field.pick_list_values || [] : [];
+      Array.prototype.forEach.call(select.options, function (option) {
+        var metadata = values.find(function (item) { return String(item.actual_value) === option.value; });
+        var color = metadata && /^#[0-9a-f]{6}$/i.test(metadata.colour_code || "") ? metadata.colour_code : "";
+        var foreground = "#26313d";
+        if (color) {
+          var rgb = [1, 3, 5].map(function (offset) {
+            var channel = parseInt(color.slice(offset, offset + 2), 16) / 255;
+            return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+          });
+          var luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+          foreground = luminance > 0.179 ? "#000000" : "#ffffff";
+        }
+        option.style.backgroundColor = color || "#ffffff";
+        option.style.color = foreground;
+        if (option.selected) {
+          select.style.backgroundColor = color;
+          select.style.color = color ? foreground : "";
+        }
+      });
     }
 
     function renderInvoiceCreateModeState() {
@@ -1319,17 +1582,15 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.invoiceCreateInvoiceTotalLabel.textContent = isRefundMode ? "Credit Note Total" : "Invoice Total";
       }
       if (elements.invoiceCreateSubmit) {
-        elements.invoiceCreateSubmit.textContent = "Finish";
+        elements.invoiceCreateSubmit.textContent = isRefundMode ? "Create refund" : "Create invoice";
       }
       if (elements.invoiceCreateTypeField) {
         elements.invoiceCreateTypeField.hidden = isRefundMode;
       }
 
-      renderInvoiceCreateSelect(
-        elements.invoiceCreateType,
-        typeOptions,
-        isRefundMode ? INVOICE_TYPES.creditNote : "Select invoice type"
-      );
+      if (!global.document || global.document.activeElement !== elements.invoiceCreateType) {
+        renderInvoiceCreateSelect(elements.invoiceCreateType, typeOptions, isRefundMode ? INVOICE_TYPES.creditNote : "Select invoice type");
+      }
 
       if (!isRefundMode && currentTypeValue && typeOptions.some(function (option) {
         return String(option && option.value || "") === currentTypeValue;
@@ -1338,6 +1599,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       syncInvoiceCreateModeDefaults();
+      updateInvoiceDateDefault(false);
+
+      renderInvoiceCreateTypeColors();
 
       if (elements.invoiceCreateModeBadge) {
         elements.invoiceCreateModeBadge.textContent = settlementSelected
@@ -1413,11 +1677,29 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
     }
 
+    function isInvoiceCreateDocumentRequired() {
+      return !isInvoiceCreateRefundMode() && getInvoiceCreateSelectedTypeValue() !== "Commission";
+    }
+
     function renderInvoiceCreateDocumentFilePreview() {
       var selectedFile = getInvoiceCreateDocumentFile();
+      var fileRequired = isInvoiceCreateDocumentRequired();
+      if (elements.invoiceCreateFileRequired) {
+        elements.invoiceCreateFileRequired.hidden = !fileRequired;
+      }
+      if (elements.invoiceCreateFileInput) {
+        elements.invoiceCreateFileInput.setAttribute("aria-required", String(fileRequired));
+      }
 
       if (elements.invoiceCreateFileInput) {
         elements.invoiceCreateFileInput.disabled = state.isLoading;
+      }
+
+      if (elements.invoiceCreateFileDropZone) {
+        elements.invoiceCreateFileDropZone.classList.toggle("has-file", Boolean(selectedFile));
+      }
+      if (elements.invoiceCreateFileChoose) {
+        elements.invoiceCreateFileChoose.textContent = selectedFile ? "Change file" : "Choose file";
       }
 
       if (elements.invoiceCreateFileName) {
@@ -1447,6 +1729,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function closeCreateInvoicePanel() {
+      if (calculationMonitor) { calculationMonitor.stop(); }
+      settlementLoadGeneration++;
       state.invoiceCreation.isOpen = false;
       state.invoiceCreation.settlementDropdownOpen = false;
       state.invoiceCreation.mode = INVOICE_CREATE_MODES.invoice;
@@ -1475,7 +1759,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       clearInvoiceCreateValidationState();
       renderer.showNotice("");
       renderer.showError("");
-      elements.invoiceCreateDate.value = getLocalIsoDate();
+      elements.invoiceCreateDate.value = "";
+      invoiceDateDefaultType = undefined;
       applyInvoiceCreateSupplierTaxDefaults();
       syncInvoiceCreateModeDefaults();
       renderAll();
@@ -1530,33 +1815,27 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       state.invoiceLinesByInvoiceId = {};
       state.invoiceLineLoadingId = "";
 
+      var refreshTasks = [refreshSupplierRelatedActivity({ createdInvoiceId: createdInvoiceId })];
       if (shouldReloadInvoicesView) {
-        await refreshInvoicesTabData({
+        refreshTasks.push(refreshInvoicesTabData({
           loadedFlag: true
-        });
+        }));
       }
-
-      await refreshSupplierRelatedActivity({
-        createdInvoiceId: createdInvoiceId
-      });
+      var refreshResults = await Promise.allSettled(refreshTasks);
+      var refreshFailure = refreshResults.find(function (result) { return result.status === "rejected"; });
+      if (refreshFailure) { throw refreshFailure.reason; }
       renderAll();
     }
 
     function renderInvoiceCreatePanel() {
-      var hasSelectedSettlement = Boolean(state.invoiceCreation.selectedSettlement);
-      var currentStep = getInvoiceCreateStep();
-      var showSettlementSelector = currentStep === INVOICE_CREATE_STEPS.settlement;
-      var showSelectedSettlementPanel = hasSelectedSettlement && !state.invoiceCreation.settlementDropdownOpen;
-      var isSettlementStep = currentStep === INVOICE_CREATE_STEPS.settlement;
-      var isAmountsStep = currentStep === INVOICE_CREATE_STEPS.amounts;
-
       elements.invoiceCreatePanel.hidden = !state.invoiceCreation.isOpen;
-      elements.invoiceCreatePanel.classList.toggle("is-settlement-step", isSettlementStep);
-
+      elements.invoiceCreatePanel.classList.remove("is-settlement-step");
       if (!state.invoiceCreation.isOpen) {
+        if (calculationMonitor) { calculationMonitor.stop(); }
         return;
       }
-
+      if (calculationMonitor) { calculationMonitor.start(String(state.supplierId || ""), getSelectedInvoiceCreateSettlements().map(function (record) { return helpers.getLookupId(record.Booking); })); }
+      renderCalculationStatus();
       renderInvoiceCreateModeState();
       updateInvoiceNameDefault();
       renderInvoiceCreateSettlementFilters();
@@ -1564,30 +1843,29 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       renderInvoiceCreateSettlementSummary();
       renderInvoiceCreateServices();
       renderInvoiceCreateDocumentFilePreview();
-      if (elements.invoiceCreateStepSettlement) {
-        elements.invoiceCreateStepSettlement.hidden = !isSettlementStep;
-      }
-      if (elements.invoiceCreateStepAmounts) {
-        elements.invoiceCreateStepAmounts.hidden = !isAmountsStep;
-      }
-      if (elements.invoiceCreateAllocationCard) {
-        elements.invoiceCreateAllocationCard.hidden = !isAmountsStep;
-      }
-      if (elements.invoiceCreateDocumentFields) {
-        elements.invoiceCreateDocumentFields.hidden = !showSelectedSettlementPanel;
-      }
-      elements.invoiceCreateSettlementSelectorPanel.hidden = !showSettlementSelector;
-      if (elements.invoiceCreateSelectedSettlementPanel) {
-        elements.invoiceCreateSelectedSettlementPanel.hidden = !showSelectedSettlementPanel;
-      }
-      if (elements.invoiceCreateSelectOtherSettlement) {
-        elements.invoiceCreateSelectOtherSettlement.hidden = !showSelectedSettlementPanel;
+      elements.invoiceCreateStepSettlement.hidden = false;
+      elements.invoiceCreateStepAmounts.hidden = false;
+      elements.invoiceCreateDocumentFields.hidden = false;
+      elements.invoiceCreateAllocationCard.hidden = false;
+      var selected = getSelectedInvoiceCreateSettlements();
+      var expanded = state.invoiceCreation.settlementDropdownOpen || !selected.length;
+      elements.invoiceCreateSettlementSelectorPanel.hidden = !expanded;
+      if (elements.invoiceCreateSelectedSettlementPanel) { elements.invoiceCreateSelectedSettlementPanel.hidden = !selected.length || expanded; }
+      if (elements.invoiceCreateSelectionToggle) {
+        elements.invoiceCreateSelectionToggle.hidden = !selected.length;
+        elements.invoiceCreateSelectionToggle.querySelector("[data-settlement-toggle-action]").textContent = expanded ? "Hide list" : "Show list";
+        elements.invoiceCreateSelectionToggle.setAttribute("aria-expanded", String(expanded));
+        elements.invoiceCreateSelectionToggle.title = expanded ? "Hide settlement list" : "Show settlement list";
+        elements.invoiceCreateSelectionToggle.setAttribute("aria-label", elements.invoiceCreateSelectionToggle.title);
       }
       renderInvoiceCreateValidationState();
       refreshInvoiceCreateActionState();
+      renderRegistrationRecovery();
     }
 
     function resetInvoiceCreateSettlementState() {
+      settlementLoadGeneration++;
+      if (calculationMonitor) { calculationMonitor.stop(); }
       state.invoiceCreation.settlements = [];
       state.invoiceCreation.selectedSettlement = null;
       state.invoiceCreation.selectedSettlements = [];
@@ -1615,6 +1893,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function loadSettlementsForSupplier(supplierId) {
+      if (ns.readSupplierCalculationSettlements) {
+        return normalizeSettlements(await ns.readSupplierCalculationSettlements(crm, String(supplierId)));
+      }
       var fields = [
         "id",
         "Name",
@@ -1664,6 +1945,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function reloadInvoiceCreateSettlements(options) {
+      var supplierAtStart = String(state.supplierId || "");
+      var loadToken = ++settlementLoadGeneration;
       var preserveSearch = Boolean(options && options.preserveSearch);
       var forceReload = Boolean(options && options.forceReload);
       var canReuseLoadedSettlements;
@@ -1716,25 +1999,31 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       renderAll();
 
       try {
-        state.invoiceCreation.settlements = await loadSettlementsForSupplier(state.supplierId);
+        var loadedSettlements = await loadSettlementsForSupplier(supplierAtStart);
+        if (loadToken !== settlementLoadGeneration || String(state.supplierId) !== supplierAtStart) { return; }
+        state.invoiceCreation.settlements = loadedSettlements;
         state.invoiceCreation.isLoadingSettlements = false;
         state.invoiceCreation.hasLoadedSettlements = true;
 
         if (!state.invoiceCreation.settlements.length) {
-          renderer.showNotice("This supplier has no supplier settlements yet. The invoice form stays blocked until a settlement exists.");
+          renderer.showNotice("A settlement is required to register an invoice. See calculation status above.");
         } else {
           renderer.showNotice("");
         }
       } catch (error) {
+        if (loadToken !== settlementLoadGeneration || String(state.supplierId) !== supplierAtStart) { return; }
         resetInvoiceCreateSettlementState();
         state.invoiceCreation.isLoadingSettlements = false;
         debugError("reloadInvoiceCreateSettlements failed", error, {
           supplierId: state.supplierId
         });
         renderer.showError(error.message || "Could not load supplier settlements.");
+        if (options && options.throwOnError) { throw error; }
       } finally {
-        state.invoiceCreation.isLoadingSettlements = false;
-        setInvoiceCreateLoading(false);
+        if (String(state.supplierId) === supplierAtStart && (loadToken === settlementLoadGeneration || !state.invoiceCreation.isLoadingSettlements)) {
+          state.invoiceCreation.isLoadingSettlements = false;
+          setInvoiceCreateLoading(false);
+        }
       }
     }
 
@@ -1973,7 +2262,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.invoiceCreateNumber.value = "";
       invoiceNameDefault.reset();
       elements.invoiceCreateNumber.setCustomValidity("");
-      elements.invoiceCreateDate.value = getLocalIsoDate();
+      elements.invoiceCreateDate.value = "";
+      invoiceDateDefaultType = undefined;
       elements.invoiceCreateAmountGross.value = "";
       elements.invoiceCreateAmountNet.value = "";
       elements.invoiceCreateReimbursableExpense.value = "0";
@@ -2049,6 +2339,29 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     async function onCreateInvoiceSubmit(event) {
+      event.preventDefault();
+      if (submitInProgress || state.isLoading) { return; }
+      submitInProgress = true;
+      try {
+        setInvoiceCreateLoading(true, "Checking invoice...");
+        if (!isInvoiceCreateRefundMode() && state.supplierId && registration.pending(state.supplierId)) {
+          await registerSupplierInvoice(null);
+          return;
+        }
+        await performInvoiceCreateSubmit(event);
+      } catch (error) {
+        var pending;
+        try { pending = state.supplierId && registration.pending(state.supplierId); } catch (_) { /* Keep the unreadable journal. */ }
+        renderer.showError((pending && pending.invoiceId ? "Invoice " + pending.invoiceId + " was created. " : "") +
+          error.message + (pending ? " Use Resume invoice registration to check or complete the same invoice." : ""));
+      } finally {
+        submitInProgress = false;
+        setInvoiceCreateLoading(false, "", { preserveNotice: true });
+        renderAll();
+      }
+    }
+
+    async function performInvoiceCreateSubmit(event) {
       var supplierName;
       var bookingId;
       var supplierCode;
@@ -2066,6 +2379,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var allocationErrors;
       var invoiceNumberValue = elements.invoiceCreateNumber.value.trim();
       var settlementCapacityValidation;
+      var capacityMessages = [];
+      var confirmedExcess = [];
+      var supplierIdAtSubmit = state.supplierId;
       var taxReviewValidationMessage;
       var validationFieldErrors;
       var additionalVatEnabled = Boolean(elements.invoiceCreateAdditionalVatEnabled && elements.invoiceCreateAdditionalVatEnabled.checked);
@@ -2101,11 +2417,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       renderer.showError("");
       clearInvoiceCreateValidationState();
 
-      if (getInvoiceCreateStep() !== INVOICE_CREATE_STEPS.amounts) {
-        onInvoiceCreateNextClick();
-        return;
-      }
-
       if (!state.supplier || !getSelectedInvoiceCreateSettlements().length) {
         showInvoiceCreateValidationError("Select at least one supplier settlement before creating the " + recordLabel + ".", {
           settlement: "Choose the settlements you want to use for this " + recordLabel + "."
@@ -2135,7 +2446,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
 
-      if (!isRefundMode && selectedTypeValue === INVOICE_TYPES.finalInvoice && selectedDocumentFile == null) {
+      if (isInvoiceCreateDocumentRequired() && selectedDocumentFile == null) {
         showInvoiceCreateValidationError("Attach the invoice file before creating the " + recordLabel + ".", {
           invoiceFile: "Invoice File is required."
         });
@@ -2175,6 +2486,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         }
       }
 
+      if (!isRefundMode) {
+        [elements.invoiceCreateAmountGross, elements.invoiceCreateAmountNet, elements.invoiceCreateVatPercent,
+          elements.invoiceCreateIrpfPercent, elements.invoiceCreateReimbursableExpense,
+          elements.invoiceCreateAdditionalVatPercent, elements.invoiceCreateAdditionalAmountExclVat,
+          elements.invoiceCreateAdditionalIrpfPercent].forEach(function (element) {
+          if (element) { ns.invoiceRegistrationCents(element.value || 0, "Invoice amounts and percentages"); }
+        });
+      }
       computedAmounts = updateInvoiceCreateComputedAmounts(state.invoiceCreation.lastEditedAmountMode || "gross");
 
       if (!computedAmounts.grossAmount) {
@@ -2184,12 +2503,16 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
 
-      settlementAllocations = getInvoiceCreateSettlementAllocations(computedAmounts.invoiceTotal);
+      var amountToAllocate = isRefundMode ? computedAmounts.invoiceTotal : computedAmounts.totalPayableAmount;
+      settlementAllocations = getInvoiceCreateSettlementAllocations(amountToAllocate);
       allocationTotal = settlementAllocations.reduce(function (total, allocation) { return total + allocation.amount; }, 0);
       allocationErrors = settlementAllocations.some(function (allocation) { return !(allocation.amount > 0); });
-      if (allocationErrors || Math.abs(allocationTotal - computedAmounts.invoiceTotal) > 0.01) {
+      if (!isRefundMode) {
+        settlementAllocations.forEach(function (allocation) { ns.invoiceRegistrationCents(allocation.amount, "Settlement allocation"); });
+      }
+      if (allocationErrors || (isRefundMode ? Math.abs(allocationTotal - amountToAllocate) > 0.01 : Math.round(allocationTotal * 100) !== Math.round(amountToAllocate * 100))) {
         showInvoiceCreateValidationError("Allocate the complete " + recordLabel + " total between the selected settlements.", {
-          allocation: "Each selected settlement needs an allocation amount, and the total must equal " + helpers.formatCurrency(computedAmounts.invoiceTotal) + "."
+          allocation: "Each selected settlement needs an allocation amount, and the total must equal " + helpers.formatCurrency(amountToAllocate) + "."
         });
         return;
       }
@@ -2244,6 +2567,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             getInvoiceCreateSelectedTypeValue()
           );
           if (!settlementCapacityValidation.valid) { break; }
+          if (settlementCapacityValidation.requiresConfirmation) {
+            capacityMessages.push(settlementCapacityValidation.message);
+            confirmedExcess.push(String(settlementAllocations[allocationIndex].settlement.id));
+          }
         }
       } catch (validationError) {
         debugError("validateInvoiceCreateSettlementCapacity failed", validationError, {
@@ -2269,11 +2596,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
 
-      if (settlementCapacityValidation.requiresConfirmation) {
+      if (capacityMessages.length) {
         renderAll();
 
         if (typeof global.confirm === "function" && !global.confirm(
-          settlementCapacityValidation.message + " Click OK to continue anyway, or Cancel to stop."
+          capacityMessages.join("\n") + " Click OK to continue anyway, or Cancel to stop."
         )) {
           showInvoiceCreateValidationError(
             settlementCapacityValidation.message || "This " + recordLabel + " exceeds the remaining amount available on the settlement.",
@@ -2291,7 +2618,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       supplierName = state.supplier.Vendor_Name || state.supplier.Name || helpers.getLookupName(state.supplier);
       supplierCode = helpers.getCandidateValue(state.supplier, FIELD_CANDIDATES.supplier.connectionReference) || "";
       bookingId = helpers.getLookupId(state.invoiceCreation.selectedSettlement.Booking);
-      if (invoiceNumberValue && !await validateInvoiceCreateNumberUniqueness(state.supplierId, invoiceNumberValue)) {
+      if (isRefundMode && invoiceNumberValue && !await validateInvoiceCreateNumberUniqueness(state.supplierId, invoiceNumberValue)) {
         elements.invoiceCreateNumber.setCustomValidity(
           (isRefundMode ? "Refund reference" : "Invoice number") + " must be unique for the selected supplier."
         );
@@ -2350,6 +2677,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       payload[getResolvedInvoiceCreateFieldApi("mfsp", "MFSP_Reference")] = bookingMfspReference || getInvoiceCreateSettlementMfsp(state.invoiceCreation.selectedSettlement) || "";
 
       setInvoiceCreateLoading(true, isRefundMode ? "Creating refund..." : "Creating invoice...");
+
+      if (!isRefundMode) {
+        if (state.supplierId !== supplierIdAtSubmit) { throw new Error("The supplier changed. Reopen the invoice form before saving."); }
+        await registerSupplierInvoice(payload, settlementAllocations, confirmedExcess, selectedDocumentFile);
+        return;
+      }
 
       try {
         response = await crm.insertRecord(MODULES.invoices, payload);
@@ -2490,10 +2823,20 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     }
 
     function bindEvents() {
-      if (eventsBound) {
-        return;
+      if (eventsBound) { return; }
+      if (elements.invoiceCreateSelectionToggle) {
+        elements.invoiceCreateSelectionToggle.addEventListener("click", function () {
+          state.invoiceCreation.settlementDropdownOpen = !state.invoiceCreation.settlementDropdownOpen;
+          renderAll();
+        });
       }
-
+      if (calculationMonitor && elements.invoiceCreateCalculationRefresh) {
+        elements.invoiceCreateCalculationRefresh.addEventListener("click", function () { calculationMonitor.refresh(); });
+        elements.invoiceCreateCalculationRows.addEventListener("click", function (event) {
+          var button = event.target.closest("[data-calculation-retry]");
+          if (button && !button.disabled) { calculationMonitor.retry(button.dataset.calculationRetry); }
+        });
+      }
       eventsBound = true;
 
       elements.invoiceCreateClose.addEventListener("click", closeCreateInvoicePanel);
@@ -2555,6 +2898,47 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       if (elements.invoiceCreateFileInput) {
         elements.invoiceCreateFileInput.addEventListener("change", onInvoiceCreateDocumentFileChange);
       }
+      if (elements.invoiceCreateFileChoose) {
+        elements.invoiceCreateFileChoose.addEventListener("click", function () {
+          if (!state.isLoading && !submitInProgress) { elements.invoiceCreateFileInput.click(); }
+        });
+      }
+      if (elements.invoiceCreateFileDropZone) {
+        var dropZone = elements.invoiceCreateFileDropZone;
+        var dragDepth = 0;
+        function hasDraggedFiles(event) {
+          return event.dataTransfer && Array.prototype.indexOf.call(event.dataTransfer.types || [], "Files") !== -1;
+        }
+        dropZone.addEventListener("dragenter", function (event) {
+          if (!hasDraggedFiles(event)) { return; }
+          event.preventDefault();
+          dragDepth += 1;
+          dropZone.classList.toggle("is-dragging-file", !state.isLoading && !submitInProgress);
+        });
+        dropZone.addEventListener("dragover", function (event) {
+          if (!hasDraggedFiles(event)) { return; }
+          event.preventDefault();
+          event.dataTransfer.dropEffect = state.isLoading || submitInProgress ? "none" : "copy";
+        });
+        dropZone.addEventListener("dragleave", function () {
+          dragDepth = Math.max(0, dragDepth - 1);
+          if (!dragDepth) { dropZone.classList.remove("is-dragging-file"); }
+        });
+        dropZone.addEventListener("drop", function (event) {
+          event.preventDefault();
+          dragDepth = 0;
+          dropZone.classList.remove("is-dragging-file");
+          if (state.isLoading || submitInProgress) { return; }
+          var files = event.dataTransfer && event.dataTransfer.files;
+          if (!files || !files.length) { return; }
+          if (files.length !== 1) {
+            showInvoiceCreateValidationError("Attach one invoice file at a time.", { invoiceFile: "Drop a single file here." });
+            return;
+          }
+          elements.invoiceCreateFileInput.files = files;
+          onInvoiceCreateDocumentFileChange();
+        });
+      }
       if (elements.invoiceCreateFileRemove) {
         elements.invoiceCreateFileRemove.addEventListener("click", function () {
           clearInvoiceCreateValidationState();
@@ -2573,12 +2957,16 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         updateInvoiceCreateComputedAmounts("gross");
       });
       elements.invoiceCreateNumber.addEventListener("input", function () {
+        invoiceNameDefault.reset();
         clearInvoiceCreateValidationState();
         elements.invoiceCreateNumber.setCustomValidity("");
+        refreshInvoiceCreateActionState();
       });
       elements.invoiceCreateNumber.addEventListener("change", function () {
         clearInvoiceCreateValidationState();
         elements.invoiceCreateNumber.setCustomValidity("");
+        if (!elements.invoiceCreateNumber.value.trim()) { updateInvoiceNameDefault(); }
+        refreshInvoiceCreateActionState();
       });
       elements.invoiceCreateAmountNet.addEventListener("input", function () {
         clearInvoiceCreateValidationState();
@@ -2607,6 +2995,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       if (elements.invoiceCreateAdditionalAmountExclVat) {
         elements.invoiceCreateAdditionalAmountExclVat.addEventListener("input", function () {
           clearInvoiceCreateValidationState();
+          if (!isInvoiceCreateRefundMode()) { clearInvoiceCreateAdditionalIrpfReviewCheck(); }
           updateInvoiceCreateComputedAmounts(state.invoiceCreation.lastEditedAmountMode || "gross");
         });
       }
@@ -2654,6 +3043,9 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         refreshInvoiceCreateActionState();
       });
       elements.invoiceCreateType.addEventListener("change", function () {
+        updateInvoiceDateDefault(true);
+        renderInvoiceCreateDocumentFilePreview();
+        renderInvoiceCreateTypeColors();
         updateInvoiceNameDefault();
         clearInvoiceCreateValidationState();
         refreshInvoiceCreateActionState();

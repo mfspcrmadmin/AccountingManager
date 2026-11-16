@@ -1,0 +1,127 @@
+string standalone.notif_recoverBookingWon(String bookingId, String stageEventId, String mode)
+{
+result = {"success":false,"emails_sent":0,"records_written":0};
+try
+{
+	bookingId = ifnull(bookingId,"").trim();
+	stageEventId = ifnull(stageEventId,"").trim();
+	mode = ifnull(mode,"preview").trim().toLowerCase();
+	if(mode != "preview" && mode != "send")
+	{
+		throw "Use preview or send.";
+	}
+	if(!bookingId.matches("[0-9]{1,19}") || !stageEventId.matches("[0-9]{1,19}"))
+	{
+		throw "Valid booking and historical stage event IDs are required.";
+	}
+	booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+	if(ifnull(booking.get("id"),"").toString() != bookingId)
+	{
+		throw "Booking could not be read.";
+	}
+	result.put("booking_reference",booking.get("MFSP_Reference"));
+	history = standalone.jobs_query("select id, Stage from DealHistory where (id = '" + stageEventId + "' and Potential_Name = '" + bookingId + "') limit 2").toMap();
+	historyRows = ifnull(history.get("data"),List());
+	if(historyRows.size() != 1)
+	{
+		throw "The historical stage event does not belong to this booking.";
+	}
+	stage = ifnull(historyRows.get(0).get("Stage"),"").toString();
+	if(stage != "Pending Res Assignment" && stage != "Pending Assignation")
+	{
+		throw "Historical event is not the Booking Won assignment stage: " + stage;
+	}
+	// Read all visible native emails, including scheduled messages, before recovery.
+	// Fail closed on unreadable results, missing pagination, or excessive history.
+	index = "";
+	complete = false;
+	checked = 0;
+	matches = List();
+	pages = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
+	for each page in pages
+	{
+		query = Map();
+		if(index != "")
+		{
+			query.put("index",index);
+		}
+		response = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/Deals/" + bookingId + "/Emails"
+			type :GET
+			parameters:query
+			connection:"crm_oauth_connection"
+			detailed:true
+		];
+		statusCode = response.get("responseCode");
+		if(statusCode == 204)
+		{
+			complete = true;
+			break;
+		}
+		if(statusCode != 200)
+		{
+			throw "Native email history could not be read (HTTP " + statusCode + "). No email sent.";
+		}
+		payload = response.get("responseText").toString().toMap();
+		if(!payload.containKey("Emails") || payload.get("Emails") == null)
+		{
+			throw "Native email response is incomplete. No email sent.";
+		}
+		for each email in payload.get("Emails")
+		{
+			checked = checked + 1;
+			subject = ifnull(email.get("subject"),"").toString();
+			if(subject.toLowerCase().contains("booking won"))
+			{
+				matches.add({"message_id":email.get("message_id"),"subject":subject,"time":email.get("time"),"sent":email.get("sent"),"status":email.get("status")});
+			}
+		}
+		if(!matches.isEmpty())
+		{
+			result.put("existing_native_emails",matches);
+			result.put("message","A Booking Won email already exists or is scheduled. Review it; recovery blocked.");
+			return result.toString();
+		}
+		if(payload.get("info") == null)
+		{
+			throw "Native email pagination information is missing. No email sent.";
+		}
+		info = payload.get("info");
+		if(info.get("more_records") == false)
+		{
+			complete = true;
+			break;
+		}
+		nextIndex = ifnull(info.get("next_index"),"").toString();
+		if(nextIndex == "" || nextIndex == index)
+		{
+			throw "Native email pagination could not be completed. No email sent.";
+		}
+		index = nextIndex;
+	}
+	if(!complete)
+	{
+		throw "Native email history exceeds the recovery inspection limit. No email sent.";
+	}
+	team = standalone.email_getTeamEmails();
+	context = {"mode":mode,"source_function":"notif_recoverBookingWon","trigger_reason":"booking_won","audience":"Internal","event_id":"stage:" + stageEventId};
+	delivery = standalone.notif_sendLoggedTemplate("Deals",bookingId,"616617000135016204",team,"","",context.toString()).toMap();
+	// Avoid returning the entire rendered request; keep the operational evidence.
+	if(mode == "preview" && delivery.get("proposed_communication") != null)
+	{
+		proposed = delivery.get("proposed_communication");
+		delivery.put("recipient_to",proposed.get("Recipient_To"));
+		delivery.remove("proposed_communication");
+	}
+	delivery.put("booking_reference",booking.get("MFSP_Reference"));
+	delivery.put("native_emails_checked",checked);
+	delivery.put("historical_stage_event_id",stageEventId);
+	return delivery.toString();
+}
+catch(e)
+{
+	result.put("message",e.toString());
+}
+return result.toString();
+}

@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-16",
+  "status": "implemented_locally_not_deployed",
+  "historical_records_modified": false,
+  "live_verification": {
+    "read_only": true,
+    "modules": ["Supplier_Invoices", "Supplier_Payments", "Supplier_Pay_Allocations"],
+    "published_sources_read": ["managesupplierpaymentallocations", "createsupplierpaymentfrominvoices"],
+    "findings": [
+      "Unpaid_Invoiced_Amount is a formula; do not write it.",
+      "Invoice_Edit_Key already exists and is unique on payments and payment allocations.",
+      "Payment_Accounting_Status does not exist on Supplier_Pay_Allocations.",
+      "Published allocation editing used Invoice_Total over Total_Payable_Amount, cached Amount_Paid for availability, and counted all payment statuses as paid."
+    ]
+  },
+  "model": {
+    "invoice_total": "Main VAT-inclusive amount + additional VAT-inclusive amount - main withholding - additional withholding.",
+    "total_payable": "Invoice_Total + Reimbursable_Expense. Each component uses the existing two-decimal rounding rules.",
+    "reserved": "Current allocations whose payment is not Cancelled.",
+    "paid": "Current allocations whose payment is Paid or Reconciled.",
+    "settlement_distribution": "Existing rebuildSupplierSettlementTotals distributes invoice payments by active Inv_Set_Allocations shares, using payable as denominator; credit notes/refunds retain their negative settlement contribution.",
+    "payment_editor": "Preserves existing behavior: Payment_Amount is the absolute signed net of allocations; omitted invoices remain linked and explicit zero unlinks. The UI now labels the resulting payment total, rather than suggesting an unapplied balance is retained.",
+    "administrative_states": "Cancelled/Rejected invoices and locked/exported/reconciled payments block this editor. Invoice financial statuses derive from paid allocations; payment Accounting_Status is not reset by allocation editing. Settlement states follow the existing rebuild function.",
+    "fixed_invoice_relationships": "Invoice editing retains supplier, primary settlement and the existing settlement set; existing server snapshots reject changed relationships during recovery.",
+    "related_operations": "Payment creation synchronizes prepayments/card purchases and preserves recovery until required links complete. Allocation changes to a payment with accounting entries or linked operations are blocked and directed to the existing correction/undo flow."
+  },
+  "changes": [
+    "Supplier invoice registration rejects cancelled/locked settlements and detects external allocations on incomplete invoices even if cached Amount_Paid is zero.",
+    "Invoice editing rejects fractional-cent existing payment allocations; existing tax, withholding, prepayment reservation, payment correction and accounting-entry protections remain in force.",
+    "Payment availability and UI totals prefer Total_Payable_Amount, including reimbursables, over legacy invoice totals/formula snapshots.",
+    "All allocation-manager validations precede writes; complete paginated reads reject duplicates and read failures; affected settlements include active invoice splits and explicitly removed invoices.",
+    "Reconciliation derives paid amounts from live allocation/payment records, updates financial statuses and allocation snapshots, recomputes payment context counts, and never writes the unpaid formula.",
+    "General payment creation journals the immutable request before financial writes, uses existing unique keys for payment/allocation inserts, suppresses duplicate workflow calculations, and retains recovery through reconciliation, operation synchronization and UI refresh failures.",
+    "Prepayment/card payment routes use immutable operation keys and the same server reconciliation; the prepayment journal migrates session recovery to persistent storage and preserves the original payment date on retries.",
+    "Removed unsupported Payment_Accounting_Status writes from payment creation and invoice-deletion payment adjustments.",
+    "Capability probes prevent the new widget from invoking an older backend that does not implement validate_only/reconcile_only.",
+    "No bulk repair, schema change, published function update, widget upload or ZIP replacement was performed."
+  ],
+  "deployment_order": [
+    "Compile and validate the changed Deluge sources in a Zoho test environment first; Node harnesses do not validate the Deluge compiler or actual API behavior.",
+    "supplierInvoiceEdit_read: crm/invoice-edit/supplierInvoiceEdit_read.dg",
+    "supplierInvoiceRegistration_read: crm/supplierInvoiceRegistration_read.dg",
+    "supplierInvoice_register: crm/supplierInvoice_register.dg",
+    "supplierInvoice_edit: crm/invoice-edit/supplierInvoice_edit.dg",
+    "manageSupplierPaymentAllocations: crm/invoice-edit/managesupplierpaymentallocations.dg",
+    "createSupplierPaymentFromInvoices: crm/invoice-edit/createsupplierpaymentfrominvoices.dg",
+    "Upload the widget with payment-save.js loaded before payment-create.js. Coordinate both server create callers: prepayment-workflow.js and operations.js now send operation_key and explicit allocations. Older callers fail closed and must be upgraded."
+  ],
+  "validation": {
+    "focused": "217 tests passed together; two additional lost-insert-response tests passed with the 12-test server suite afterward.",
+    "full_suite": "550 passed / 562 executed in the full regression run; 12 failures reference missing pre-existing _local CRM source files. Two newly added server recovery tests also pass separately.",
+    "scenarios": ["Register invoice and edit before payment", "Partial payment followed by full payment", "One payment across invoices", "Edit amounts, redistribute and unlink allocations", "Reject invoice reduction below paid/reserved amounts", "Recover failed allocation, invoice, settlement and operation updates", "Recover lost payment/allocation insert responses", "Verify settlement membership, signed totals, status rules, duplicate protection and currency guards"],
+    "logs": ["_local/consistency-final-focused.txt", "_local/consistency-server-final.txt", "_local/consistency-regression-final.txt"]
+  },
+  "remaining_verification_and_decisions": [
+    "No real financial records were created or edited for validation. Deluge compilation, hosted widget behavior and end-to-end CRM effects remain unverified.",
+    "Cross-record CRM writes are not an atomic transaction. Browser locks and unique operation keys protect same-operation retries; conditional writes detect many conflicts but do not provide global serialization across different users, external integrations and workflows. Simultaneous distinct payments against one invoice still require a shared server-side locking policy across every writer before claiming strict concurrency guarantees.",
+    "A complete live workflow/blueprint/external-integration inventory was not available. Two guessed legacy calculation function API names returned INVALID_DATA. Review delayed automation against the sources before production activation.",
+    "The complete formula expression for Unpaid_Invoiced_Amount was not exposed by field metadata. Widget calculations use payable minus paid; verify CRM reports and formula semantics separately.",
+    "Retained the existing policy that editing allocations changes the recorded payment amount. Supporting bank payments with unapplied remainders needs an explicit business rule and corresponding accounting treatment.",
+    "Mixed-currency allocations are blocked rather than inventing exchange conversion rules. Existing currency and rates are not rewritten.",
+    "External callers of createSupplierPaymentFromInvoices must supply a stable operation_key and explicit allocations. Review integrations outside this repository before deployment.",
+    "Recovery journals are browser-local, not a cross-device transaction ledger. Do not clear browser storage during an unfinished operation; after storage loss review existing unique-key records before retrying manually."
+  ]
+}

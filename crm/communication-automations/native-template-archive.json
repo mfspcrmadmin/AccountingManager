@@ -1,0 +1,27 @@
+{
+  "checked_on": "2026-11-11",
+  "function": "notif_reconciletemplatecommunication",
+  "function_id": "616617000178129007",
+  "published_source_verified": true,
+  "storage": "Complete subject and HTML in Communications native __email_drafts, using unchanged email_createModuleEmailDraft helper",
+  "subject_saved_independently": true,
+  "content_integrity": "SHA256 and subject checked after reading the stored native draft",
+  "duplicate_control": "Existing matching draft reused; otherwise unique Admin_Process_Jobs.Active_Key reservation; uncertain creation never repeated automatically",
+  "outbound_email_changes": false,
+  "email_attachments_field_changed": false,
+  "bookings_manager_functions_unchanged_verified": [
+    "comm_createcommunicationsforselection",
+    "comm_sendcommunicationdraft",
+    "comm_createfollowupdraft",
+    "comm_getcommunicationsforbooking"
+  ],
+  "widget_compatibility": "The booking viewer already reads native drafts and real recipients from Communication fields. Existing manual draft helpers unchanged; rendered browser acceptance pending.",
+  "live_archive_execution_verified": true,
+  "recovered_communication_id": "616617000178205031",
+  "verified_html_characters": 36812,
+  "verified_draft_id": "d04c057dc27549449102e3676c16f0796ede700d8522e26d03867f00cde0e64f",
+  "crm_record_read_back": "Communication_Status and Render_Status are Sent, Render_Error is empty, archive metadata matches the user's runtime result",
+  "runtime_reuse_test_pending": true,
+  "deleted_test_functions": ["comm_previewquotationarrivalreminders", "notif_inspecttemplatecommunication", "notif_diagnosearchiveaccess"],
+  "recovery_instructions": "Production recovery function retained. Old attachment reservation remains as non-executable history; no test business records deleted."
+}

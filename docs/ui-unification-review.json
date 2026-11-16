@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-20",
+  "status": "implemented_locally_not_published",
+  "starting_point": "The workspace already contained theme tokens, cascade layers, shared controls and UI interactions. This review extends that implementation without replacing existing business modules.",
+  "files_changed": [
+    "app/styles/theme.css",
+    "app/styles/ui-system.css",
+    "app/scripts/ui-system.js",
+    "app/scripts/setup.js",
+    "tests/ui-option-search.browser.cjs",
+    "tests/setup.browser.cjs"
+  ],
+  "improvements": [
+    "Scoped theme base selectors to accounting-widget.",
+    "Unified card status, type and owner controls with existing dropdown styling and floating positioning.",
+    "Improved disabled control contrast and consistent profile option selection styling.",
+    "Accent-insensitive option searches use visible labels, retain selection and omit empty groups.",
+    "Explicit accessible clear buttons; fixed search header and internal result scrolling.",
+    "Local long checkbox and card owner menus gain option-only search above ten options; short lists retain their existing controls.",
+    "Checkbox handlers, values and bulk-selection actions stay attached to their original DOM nodes.",
+    "Profile picker gains keyboard navigation, accent-insensitive search, clear action and viewport-constrained top-layer positioning.",
+    "Open native select menus update when source options change.",
+    "Click-only outside dismissal works alongside mouse, keyboard and native fallback.",
+    "Existing toolbar Enter behavior is preserved; option-search input is isolated from record-search actions."
+  ],
+  "browser_verification": {
+    "environment": "Local headless Microsoft Edge via Playwright; mocked APIs, no live CRM writes.",
+    "passed_suites": [
+      "tests/ui-system.browser.cjs",
+      "tests/ui-option-search.browser.cjs",
+      "tests/setup.browser.cjs",
+      "tests/payment-pagination.browser.cjs",
+      "tests/invoice-pagination.browser.cjs",
+      "tests/operations-progressive.browser.cjs"
+    ],
+    "coverage": [
+      "Seven static main views at 1440, 1024 and 390 pixels, plus forms and operation editors.",
+      "Setup at 1440, 390 and 320 pixels; loading, unavailable permissions, error and stale-response states.",
+      "Accents, visible option labels, groups, disabled options, long names, selection persistence, clear and no results.",
+      "Exact input/change events, multiselect rerenders, dynamically shortened lists and owner selection handlers.",
+      "Escape, arrows, Enter, Tab, outside click, modal focus containment and focus restoration.",
+      "Popover absence simulated to exercise native select fallback.",
+      "Invoices and payments: remote search beyond the first batch, pending inputs, pagination, loading, retries and empty results.",
+      "Operations: accumulated rows, Enter search beyond row 200 and RENFE remote cursor.",
+      "Reduced motion and narrow-viewport menu bounds."
+    ],
+    "screenshots_inspected": [
+      "_local/previews/ui-system/invoices-390.png",
+      "_local/previews/ui-system/searchable-select-390.png",
+      "_local/previews/setup-profile-options-320.png"
+    ]
+  },
+  "unit_verification": {
+    "command": "node --test tests/*.test.js",
+    "tests": 722,
+    "passed": 710,
+    "failed": 12,
+    "log": "_local/ui-unification-regression.txt",
+    "failures": [
+      "11 failures require missing historical files in _local/crm/crm_functions.",
+      "quick-settlement-refresh.test.js: Card Purchase UI delegates payment recovery and confirms an existing payment explicitly. Its isolated fixture throws reading beforePayment from undefined. The test and operations.js were not modified in this review."
+    ]
+  },
+  "limits": [
+    "No live Zoho session, deployment or publication was performed.",
+    "No claim of validating every server payload, permission combination or production record.",
+    "Native multiple-select behavior is retained; actual app multiselect dropdowns use their existing checkbox controls.",
+    "Remote lookup API mechanisms are retained, not replaced with local option searches.",
+    "Old-browser fallback was simulated, not tested in an actual legacy browser.",
+    "Visual coverage does not exhaust every possible dialog and report state."
+  ]
+}

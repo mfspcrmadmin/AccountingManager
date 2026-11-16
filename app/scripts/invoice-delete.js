@@ -8,19 +8,20 @@
     var crm = deps.crm, M = deps.modules, helpers = deps.helpers;
     var storage = deps.storage;
     function id(value) { return String(helpers.getLookupId(value) || ""); }
-    function money(value) { return Math.round((Number(value) || 0) * 100) / 100; }
+    function money(value) { var amount=Number(value == null || value === "" ? 0 : value); if(!Number.isFinite(amount) || Math.abs(amount*100-Math.round(amount*100))>0.000001) {throw new Error("Invalid monetary amount; review the record before deletion.");} return Math.round(amount*100)/100; }
     function unique(values) { return Array.from(new Set(values.filter(Boolean))); }
     function total(invoice) {
-      return money(invoice.Invoice_Total != null ? invoice.Invoice_Total : invoice.Total_Payable_Amount);
+      return money(invoice.Total_Payable_Amount != null ? invoice.Total_Payable_Amount : invoice.Invoice_Total);
     }
-    function locked(record) {
-      return Boolean(record.Zoho_Books_Document_Id || record.Zoho_Books_Payment_ID || record.Posted_At || record.Accounting_Posted_At) ||
-        [record.Accounting_Status, record.Books_Post_Status, record.Status].some(function (value) {
+    function locked(record, module) {
+      return record.Locked__s === true || Boolean(record.Zoho_Books_Document_Id || record.Zoho_Books_Payment_ID || record.Posted_At || (module !== M.invoices && record.Accounting_Posted_At)) ||
+        [module !== M.invoices && record.Accounting_Status, record.Books_Post_Status, record.Status].some(function (value) {
           return /^(posted|posted to books|sent to books|synced|exported|reconciled)$/i.test(String(value || "").trim());
         });
     }
-    function assertUnlocked(record) {
-      if (locked(record)) { throw new Error((record.Name || record.id) + " is posted, exported or reconciled. Reverse it before deleting the invoice."); }
+    function assertUnlocked(record, module) {
+      if (module === M.invoices && (record.Edit_Status === "Pending" || ["Pending", "Ready"].includes(record.Registration_Status))) { throw new Error("Finish the pending invoice registration or correction before deleting this invoice."); }
+      if (locked(record, module)) { throw new Error((record.Name || record.id) + " is posted, exported or reconciled. Reverse it before deleting the invoice."); }
     }
     async function all(module, field, value) {
       var records = [], seen = new Set();
@@ -54,8 +55,8 @@
 
     async function prepare(invoiceId) {
       var invoice = await record(M.invoices, invoiceId);
-      assertUnlocked(invoice);
-      var job = { version: 2, invoiceId: invoiceId, operations: [], cursor: 0, guards: [{ module: M.invoices, id: invoiceId }] };
+      assertUnlocked(invoice, M.invoices);
+      var job = { version: 3, invoiceId: invoiceId, operations: [], cursor: 0, guards: [{ module: M.invoices, id: invoiceId }] };
       var deletes = [], updates = [], deleteKeys = new Set(), entriesToDelete = new Set();
       var invoiceCache = {}; invoiceCache[invoiceId] = invoice;
       async function loadInvoice(value) {
@@ -66,7 +67,7 @@
         var key = module + ":" + item.id;
         if (!deleteKeys.has(key)) { deletes.push({ type: "delete", module: module, id: String(item.id) }); deleteKeys.add(key); }
       }
-      function update(module, item, fields) { updates.push({ type: "update", module: module, id: String(item.id), fields: fields }); }
+      function update(module, item, fields) { var before={}; Object.keys(fields).forEach(function(field){before[field]=item[field] == null ? null : item[field];}); updates.push({ type: "update", module: module, id: String(item.id), fields: fields, before:before }); }
       var allocations = await all(M.payAllocations, "Supplier_Invoice", invoiceId);
       var splits = await all(M.invoiceSettlementAllocations, "Vendor_Invoice", invoiceId);
       var lines = await all(M.invoiceLines, "Supplier_Invoice", invoiceId);
@@ -89,6 +90,7 @@
       var payments = [], deletedPaymentIds = [];
       for (var paymentId of paymentIds) {
         var payment = await record(M.payments, paymentId); assertUnlocked(payment);
+        await reconcileFields({type:"reconcilePayment",module:M.payments,id:paymentId});
         job.guards.push({ module: M.payments, id: paymentId });
         var remaining = (await all(M.payAllocations, "Supplier_Payment", paymentId)).filter(function (a) { return id(a.Supplier_Invoice) !== invoiceId; });
         payments.push({ record: payment, allocations: remaining });
@@ -116,27 +118,17 @@
         if (id(entry.Supplier_Invoice) === invoiceId || belongsToPayment) { assertUnlocked(entry); entriesToDelete.add(String(entry.id)); }
       });
       var invoiceAccountingLines = await all(M.accountingEntryLines, "Supplier_Invoice", invoiceId);
-      for (var entryId of unique(invoiceAccountingLines.map(function (line) { return id(line.Accounting_Entry); }))) {
-        if (!entriesToDelete.has(entryId)) {
-          // An unrelated shared journal must not be silently left unbalanced.
-          throw new Error("Invoice lines belong to shared accounting entry " + entryId + ". Reverse or unlink that entry before deletion.");
-        }
+      if (entriesToDelete.size || invoiceAccountingLines.length) {
+        throw new Error("Existing accounting entries or lines are linked to this invoice or its payments. Review and unlink them before deleting; they will not be deleted or regenerated.");
       }
-      for (var entry of entries.filter(function (e) { return entriesToDelete.has(String(e.id)); })) {
-        job.guards.push({ module: M.accountingEntries, id: String(entry.id) });
-        var entryLines = await all(M.accountingEntryLines, "Accounting_Entry", entry.id);
-        entryLines.forEach(function (line) { remove(M.accountingEntryLines, line); });
-      }
-      invoiceAccountingLines.forEach(function (line) { remove(M.accountingEntryLines, line); });
-      entries.filter(function (e) { return entriesToDelete.has(String(e.id)); }).forEach(function (e) { remove(M.accountingEntries, e); });
       // Preserve credit notes, but remove references to records being deleted.
       for (var credit of await all(M.invoices, "Original_Invoice", invoiceId)) {
-        assertUnlocked(credit); update(M.invoices, credit, { Original_Invoice: null });
+        assertUnlocked(credit, M.invoices); update(M.invoices, credit, { Original_Invoice: null });
       }
       for (var line of lines) {
         for (var creditLine of await all(M.invoiceLines, "Original_Invoice_Line", line.id)) {
           if (id(creditLine.Supplier_Invoice) !== invoiceId) {
-            assertUnlocked(await loadInvoice(id(creditLine.Supplier_Invoice)));
+            assertUnlocked(await loadInvoice(id(creditLine.Supplier_Invoice)), M.invoices);
             update(M.invoiceLines, creditLine, { Original_Invoice_Line: null });
           }
         }
@@ -150,18 +142,7 @@
           // Payment deletion comes after its card links have been cleared.
           continue;
         }
-        var suppliers = unique(rows.map(function (a) { return id(a.Supplier); }));
-        var bookings = unique(rows.map(function (a) { return id(a.Booking); }));
-        var settlements = unique(rows.map(function (a) { return id(a.Supplier_Settlement); }));
-        update(M.payments, p, {
-          Payment_Amount: money(rows.reduce(function (sum, a) { return sum + money(a.Allocated_Amount); }, 0)),
-          Allocation_Count: rows.length, Supplier_Count: suppliers.length, Booking_Count: bookings.length,
-          Settlement_Count: settlements.length, Context_Mode: suppliers.length <= 1 && bookings.length <= 1 && settlements.length <= 1 ? "Single" : "Mixed",
-          Context_Summary: "Suppliers: " + suppliers.length + " | Bookings: " + bookings.length + " | Settlements: " + settlements.length,
-          Accounting_Status: "Pending"
-        });
-        // This allocation picklist has no Pending value in the CRM schema.
-        rows.forEach(function (a) { update(M.payAllocations, a, { Payment_Accounting_Status: null }); });
+        updates.push({ type: "reconcilePayment", module: M.payments, id: String(p.id) });
       }
       for (var deletedPaymentId of deletedPaymentIds) {
         cards = cards.concat(await all("Card_Purchases", "Vendor_Payment", deletedPaymentId));
@@ -182,59 +163,83 @@
         update("Prepayments", prepayment, resetFields);
         if (id(prepayment.Prepayment_Request)) { requestIds.push(id(prepayment.Prepayment_Request)); }
       }
-      // Rebuild remaining invoice balances from all their allocations, including
-      // payments outside this deletion. Formula fields are calculated by CRM.
       for (var relatedInvoiceId of Object.keys(invoiceCache).filter(function (value) { return value !== invoiceId; })) {
+        updates.push({type:"reconcileInvoice",module:M.invoices,id:relatedInvoiceId});
         var relatedInvoice = invoiceCache[relatedInvoiceId];
-        var paid = money((await all(M.payAllocations, "Supplier_Invoice", relatedInvoiceId)).reduce(function (sum, a) { return sum + money(a.Allocated_Amount); }, 0));
-        var fields = { Amount_Paid: paid };
-        if (["Cancelled", "Rejected"].indexOf(relatedInvoice.Status) === -1) {
-          fields.Status = paid > 0 ? (total(relatedInvoice) > 0 && paid >= total(relatedInvoice) ? "Paid" : "Partially Paid") : "Received";
-        }
-        update(M.invoices, relatedInvoice, fields);
         if (id(relatedInvoice.Supplier_Settlement)) { settlementIds.push(id(relatedInvoice.Supplier_Settlement)); }
-      }
-      for (var settlementId of unique(settlementIds)) {
-        var settlement = await record(M.settlements, settlementId);
-        var directInvoices = await all(M.invoices, "Supplier_Settlement", settlementId);
-        var settlementSplits = (await all(M.invoiceSettlementAllocations, "Vendor_Settlement", settlementId)).filter(function (a) { return a.Status !== "Void" && id(a.Vendor_Invoice) !== invoiceId; });
-        var invoiceIds = unique(directInvoices.map(function (i) { invoiceCache[String(i.id)] = i; return String(i.id); }).concat(settlementSplits.map(function (a) { return id(a.Vendor_Invoice); }))).filter(function (value) { return value !== invoiceId; });
-        var gross = 0, creditAmount = 0, settlementPaid = 0;
-        for (var value of invoiceIds) {
-          var inv = await loadInvoice(value);
-          var invoiceSplits = (await all(M.invoiceSettlementAllocations, "Vendor_Invoice", value)).filter(function (a) { return a.Status !== "Void"; });
-          var amount = invoiceSplits.length ? invoiceSplits.filter(function (a) { return id(a.Vendor_Settlement) === settlementId; }).reduce(function (sum, a) { return sum + money(a.Allocated_Amount); }, 0) : total(inv);
-          if (inv.Invoice_Type === "Credit Note") { creditAmount += amount; } else { gross += amount; }
+        for (var split of await all(M.invoiceSettlementAllocations,"Vendor_Invoice",relatedInvoiceId)) {
+          if (split.Status !== "Void" && split.Status !== "Cancelled") { settlementIds.push(id(split.Vendor_Settlement)); }
         }
-        for (var allocation of await all(M.payAllocations, "Supplier_Settlement", settlementId)) {
-          if (id(allocation.Supplier_Invoice) === invoiceId) { continue; }
-          var paidInvoice = id(allocation.Supplier_Invoice) ? await loadInvoice(id(allocation.Supplier_Invoice)) : null;
-          settlementPaid += money(allocation.Allocated_Amount) * (paidInvoice && paidInvoice.Invoice_Type === "Credit Note" ? -1 : 1);
-        }
-        var net = money(gross - creditAmount); settlementPaid = money(settlementPaid);
-        update(M.settlements, settlement, {
-          Gross_Invoice_Amount: money(gross), Credit_Note_Amount: money(creditAmount), Total_Invoice: net, Total_Paid: settlementPaid,
-          Admin_Status: statusForSettlement(settlement, net, settlementPaid), Closure_Review_Status: "Pending review"
-        });
       }
       // Clear inbound references before deleting their targets, then restore
       // derived values. All payloads were prepared before the first write.
-      var unlinkUpdates = updates.filter(function (op) { return op.module === "Card_Purchases" || op.module === "Prepayments" || Object.prototype.hasOwnProperty.call(op.fields, "Original_Invoice") || Object.prototype.hasOwnProperty.call(op.fields, "Original_Invoice_Line"); });
+      var unlinkUpdates = updates.filter(function (op) { return op.module === "Card_Purchases" || op.module === "Prepayments" || Object.prototype.hasOwnProperty.call(op.fields || {}, "Original_Invoice") || Object.prototype.hasOwnProperty.call(op.fields || {}, "Original_Invoice_Line"); });
       job.operations = unlinkUpdates.concat(deletes, updates.filter(function (op) { return unlinkUpdates.indexOf(op) === -1; }), deletedPaymentIds.map(function (value) { return { type: "delete", module: M.payments, id: value }; }));
       unique(requestIds).forEach(function (value) { job.operations.push({ type: "syncRequest", id: value }); });
+      // Cancel only the invoice being deleted so the shared rebuild excludes it.
+      // Keep it available for recovery until every dependent recalculation succeeds.
+      job.operations.push({type:"update",module:M.invoices,id:invoiceId,fields:{Status:"Cancelled"},before:{Status:invoice.Status || null}});
+      job.operations.push({type:"rebuildSettlements",ids:unique(settlementIds)});
       job.operations.push({ type: "delete", module: M.invoices, id: invoiceId });
       return job;
     }
 
+    async function reconcileFields(op) {
+      var current = await record(op.module,op.id); assertUnlocked(current,op.module);
+      var rows = await all(M.payAllocations,op.type === "reconcileInvoice" ? "Supplier_Invoice" : "Supplier_Payment",op.id);
+      rows = rows.filter(function(a){return a.Status !== "Void" && a.Status !== "Cancelled";});
+      var seenInvoices=new Set();
+      for(var row of rows) {
+        if(!id(row.Supplier_Invoice) || !id(row.Supplier_Payment) || money(row.Allocated_Amount)<=0) {throw new Error("Invalid payment allocation; review it before deletion.");}
+        var pair=id(row.Supplier_Invoice)+":"+id(row.Supplier_Payment);
+        if(seenInvoices.has(pair)) {throw new Error("Duplicate payment allocations require review before deletion.");} seenInvoices.add(pair);
+      }
+      if(op.type === "reconcileInvoice") {
+        var paid=0;
+        for(var allocation of rows) {
+          var payment=await record(M.payments,id(allocation.Supplier_Payment));
+          if((payment.Currency || "EUR") !== (current.Currency || "EUR")) {throw new Error("Mixed-currency allocations require review before deletion.");}
+          if(["Paid","Reconciled"].includes(payment.Status)) { paid+=money(allocation.Allocated_Amount); }
+        }
+        paid=money(paid); var values={Amount_Paid:paid};
+        if(!["Cancelled","Rejected"].includes(current.Status)) { values.Status=paid>0?(paid>=total(current)?"Paid":"Partially Paid"):"Received"; }
+        return values;
+      }
+      var net=0,suppliers=[],bookings=[],settlements=[];
+      for(var allocation of rows) {
+        var invoice=await record(M.invoices,id(allocation.Supplier_Invoice));
+        if((invoice.Currency || "EUR") !== (current.Currency || "EUR")) {throw new Error("Mixed-currency allocations require review before deletion.");}
+        net+=money(allocation.Allocated_Amount)*(invoice.Invoice_Type === "Credit Note" ? -1 : 1);
+        suppliers.push(id(invoice.Supplier));bookings.push(id(invoice.Booking));settlements.push(id(invoice.Supplier_Settlement));
+      }
+      suppliers=unique(suppliers);bookings=unique(bookings);settlements=unique(settlements);
+      return {Payment_Amount:Math.abs(money(net)),Movement_Type:net<0?"Supplier Refund":"Outbound Payment",Allocation_Count:rows.length,Supplier_Count:suppliers.length,Booking_Count:bookings.length,Settlement_Count:settlements.length,Context_Mode:suppliers.length<=1&&bookings.length<=1&&settlements.length<=1?"Single":"Mixed",Context_Summary:"Suppliers: "+suppliers.length+" | Bookings: "+bookings.length+" | Settlements: "+settlements.length};
+    }
+    var busy = false;
     async function execute(invoiceId) {
+      if(busy) { throw new Error("Invoice deletion is already running."); }
+      busy = true;
+      try { var task=function(){return executeSaved(invoiceId);}; return await (global.navigator && global.navigator.locks ? global.navigator.locks.request("accountingManager.invoiceDeletion."+invoiceId,task) : task()); } finally { busy = false; }
+    }
+    async function executeSaved(invoiceId) {
       invoiceId = String(invoiceId);
       var key = "accountingManager.invoiceDeletion.v1." + invoiceId;
       var saved = storage.getItem(key);
       var job = saved ? JSON.parse(saved) : await prepare(invoiceId);
-      if (job.version !== 2 || job.invoiceId !== invoiceId) { throw new Error("Invalid invoice deletion recovery data."); }
+      if (job.version !== 3 || job.invoiceId !== invoiceId) { throw new Error("This saved deletion uses an older plan. Review its completed steps before continuing; no new changes were made."); }
       storage.setItem(key, JSON.stringify(job));
+      if(storage.getItem(key) !== JSON.stringify(job)) { throw new Error("Deletion recovery information could not be stored."); }
       try {
         // Posting can have occurred since the first attempt failed. Never use
+        for (var relation of [[M.payAllocations,"Supplier_Invoice"],[M.invoiceSettlementAllocations,"Vendor_Invoice"],[M.invoiceLines,"Supplier_Invoice"],[ns.prepaymentAllocations.module,"Vendor_Invoice"]]) {
+          for (var linked of await all(relation[0],relation[1],invoiceId)) {
+            if (!job.operations.some(function(op){return op.type === "delete" && op.module === relation[0] && op.id === String(linked.id);})) { throw new Error("Invoice relationships changed during deletion. Review the pending operation."); }
+          }
+        }
+        var guardedPaymentIds = job.guards.filter(function(g){return g.module === M.payments;}).map(function(g){return g.id;});
+        var accounting = await all(M.accountingEntries);
+        if (accounting.some(function(entry){return id(entry.Supplier_Invoice) === invoiceId || guardedPaymentIds.some(function(pid){var name=String(entry.Name||"");return name === "Supplier_Payment_"+pid || name.endsWith("-PAY-"+pid) || name.indexOf("PAY-MULTI-")===0 && name.endsWith("-"+pid);});}) || (await all(M.accountingEntryLines,"Supplier_Invoice",invoiceId)).length) { throw new Error("Existing accounting links must be reviewed before deleting. Accounting records are preserved."); }
+        // Recheck posted/locked records before resuming the plan.
         // a stored plan to bypass the accounting lock on a subsequent attempt.
         for (var guard of job.guards || []) {
           var deleted = job.operations.slice(0, job.cursor).some(function (op) {
@@ -242,7 +247,7 @@
           });
           if (!deleted) {
             var live = await crm.getRecord(guard.module, guard.id);
-            if (live && live.id) { assertUnlocked(live); }
+            if (live && live.id) { assertUnlocked(live, guard.module); }
           }
         }
         for (; job.cursor < job.operations.length; job.cursor += 1) {
@@ -251,6 +256,27 @@
             await ns.syncPrepaymentRequest(crm, op.id);
             storage.setItem(key, JSON.stringify(Object.assign({}, job, { cursor: job.cursor + 1 })));
             continue;
+          }
+          if(op.type === "rebuildSettlements") {
+            // A retry recalculates live balances again, not only the settlement total.
+            for(var dependent of job.operations.filter(function(step){return step.type === "reconcileInvoice" || step.type === "reconcilePayment";})) {
+              var freshFields=await reconcileFields(dependent);
+              var fresh=await crm.updateRecord(dependent.module,dependent.id,freshFields,{trigger:[]});
+              var confirmation=helpers.extractRecords(fresh)[0] || fresh || {};
+              if(String(confirmation.code || confirmation.status).toLowerCase() !== "success") { throw new Error("Related balances were not confirmed."); }
+            }
+            if(!op.ids.length) { storage.setItem(key,JSON.stringify(Object.assign({},job,{cursor:job.cursor+1}))); continue; }
+            var rebuilt = await crm.executeFunction("rebuildsuppliersettlementtotals", {settlementIdsString:op.ids.join("|||")});
+            var output = rebuilt && rebuilt.details && rebuilt.details.output;
+            output = typeof output === "string" ? JSON.parse(output) : output;
+            if(!output || output.error !== false || Number(output.warning_count || 0) || Number(output.processed_count == null ? output.updated_count : output.processed_count) !== op.ids.length) { throw new Error(output && output.message || "Settlement recalculation was not confirmed."); }
+            storage.setItem(key,JSON.stringify(Object.assign({},job,{cursor:job.cursor+1}))); continue;
+          }
+          if(op.type === "reconcileInvoice" || op.type === "reconcilePayment") { op.fields = await reconcileFields(op); }
+          if(op.type === "update" && op.before) {
+            var liveTarget=await record(op.module,op.id);assertUnlocked(liveTarget,op.module);
+            function comparable(value){return value && typeof value === "object" && value.id ? String(value.id) : value == null ? null : value;}
+            Object.keys(op.fields).forEach(function(field){var value=comparable(liveTarget[field]);if(value !== comparable(op.before[field]) && value !== comparable(op.fields[field])) {throw new Error("A related record changed during deletion ("+field+"). Review it before resuming.");}});
           }
           var response = op.type === "delete" ? await crm.deleteRecord(op.module, op.id) : await crm.updateRecord(op.module, op.id, op.fields, { trigger: [] });
           var result = helpers.extractRecords(response)[0] || response || {};

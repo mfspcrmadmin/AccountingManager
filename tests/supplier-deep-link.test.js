@@ -46,19 +46,19 @@ test('supplier link waits for both SDK and PageLoad, loads once and keeps Suppli
   for (const first of ['zohoSdkInitialized', 'zohoPageLoadReceived']) {
     const f = startup(target);
     vm.runInContext(first + ' = true;', f.context);
-    await f.context.loadInitialOpenInvoices();
+    await f.context.loadInitialTab();
     assert.deepEqual(f.calls, []);
     vm.runInContext('zohoSdkInitialized = zohoPageLoadReceived = true;', f.context);
-    await f.context.loadInitialOpenInvoices();
-    await f.context.loadInitialOpenInvoices();
+    await f.context.loadInitialTab();
+    await f.context.loadInitialTab();
     assert.deepEqual(f.calls, ['suppliers', target.supplierId, 'financial']);
     assert.equal(f.state.currentTab, 'suppliers');
   }
 });
 
-test('ordinary startup still opens invoices', async () => {
+test('ordinary startup opens suppliers', async () => {
   const f = startup(null);
   vm.runInContext('zohoSdkInitialized = zohoPageLoadReceived = true;', f.context);
-  await f.context.loadInitialOpenInvoices();
-  assert.deepEqual(f.calls, ['invoices']);
+  await f.context.loadInitialTab();
+  assert.deepEqual(f.calls, ['suppliers']);
 });

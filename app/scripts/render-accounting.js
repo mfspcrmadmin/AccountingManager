@@ -47,7 +47,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.accountingEntriesEmpty.textContent = view.emptyMessage;
         elements.accountingEntriesEmpty.hidden = false;
         elements.accountingEntriesTableWrap.hidden = true;
-        elements.accountingEntriesPaginationBar.hidden = true;
         elements.accountingEntriesTableBody.innerHTML = "";
       } else {
         elements.accountingEntriesTableBody.innerHTML = view.records.map(function (entry) {
@@ -68,8 +67,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         elements.accountingEntriesEmpty.hidden = true;
         elements.accountingEntriesTableWrap.hidden = false;
-        elements.accountingEntriesPaginationBar.hidden = view.page <= 1 && !view.hasMore;
-        elements.accountingEntriesPaginationCopy.textContent = view.pageSummary;
       }
 
       bindSortableHeaders(
@@ -81,8 +78,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         onSortChange
       );
 
-      elements.accountingEntriesPrevPage.disabled = state.isLoading || view.page <= 1;
-      elements.accountingEntriesNextPage.disabled = state.isLoading || !view.hasMore;
+      elements.accountingEntriesCount.textContent = view.countLabel;
+      ns.renderProgressiveTable(elements.accountingEntriesTableWrap, elements.accountingEntriesEmpty, view, view.onLoadMore);
     }
 
     function renderAccountingEntryLinesWorkspace(view, onSortChange) {
@@ -102,7 +99,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.accountingEntryLinesEmpty.textContent = view.emptyMessage;
         elements.accountingEntryLinesEmpty.hidden = false;
         elements.accountingEntryLinesTableWrap.hidden = true;
-        elements.accountingEntryLinesPaginationBar.hidden = true;
         elements.accountingEntryLinesTableBody.innerHTML = "";
       } else {
         elements.accountingEntryLinesTableBody.innerHTML = view.records.map(function (line) {
@@ -140,8 +136,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         elements.accountingEntryLinesEmpty.hidden = true;
         elements.accountingEntryLinesTableWrap.hidden = false;
-        elements.accountingEntryLinesPaginationBar.hidden = view.page <= 1 && !view.hasMore;
-        elements.accountingEntryLinesPaginationCopy.textContent = view.pageSummary;
       }
 
       bindSortableHeaders(
@@ -153,8 +147,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         onSortChange
       );
 
-      elements.accountingEntryLinesPrevPage.disabled = state.isLoading || view.page <= 1;
-      elements.accountingEntryLinesNextPage.disabled = state.isLoading || !view.hasMore;
+      elements.accountingEntryLinesCount.textContent = view.countLabel;
+      ns.renderProgressiveTable(elements.accountingEntryLinesTableWrap, elements.accountingEntryLinesEmpty, view, view.onLoadMore);
     }
 
     function renderAccountingAccountsWorkspace(view, onSelected) {
@@ -164,7 +158,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.accountingAccountsEmpty.textContent = view.emptyMessage;
         elements.accountingAccountsEmpty.hidden = false;
         elements.accountingAccountsTableWrap.hidden = true;
-        elements.accountingAccountsPaginationBar.hidden = true;
         elements.accountingAccountsTableBody.innerHTML = "";
       } else {
         elements.accountingAccountsTableBody.innerHTML = view.visibleRecords.map(function (account) {
@@ -188,12 +181,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         elements.accountingAccountsEmpty.hidden = true;
         elements.accountingAccountsTableWrap.hidden = false;
-        elements.accountingAccountsPaginationBar.hidden = view.totalPages <= 1;
-        elements.accountingAccountsPaginationCopy.textContent = "Page " + view.page + " of " + view.totalPages;
       }
 
-      elements.accountingAccountsPrevPage.disabled = state.isLoading || view.page <= 1;
-      elements.accountingAccountsNextPage.disabled = state.isLoading || view.page >= view.totalPages;
+      elements.accountingAccountsCount.textContent = view.countLabel;
+      ns.renderProgressiveTable(elements.accountingAccountsTableWrap, elements.accountingAccountsEmpty, view, view.onLoadMore);
     }
 
     function renderSelectedAccountingAccount(account) {
@@ -233,7 +224,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.accountingRulesEmpty.textContent = view.emptyMessage;
         elements.accountingRulesEmpty.hidden = false;
         elements.accountingRulesTableWrap.hidden = true;
-        elements.accountingRulesPaginationBar.hidden = true;
         elements.accountingRulesTableBody.innerHTML = "";
       } else {
         elements.accountingRulesTableBody.innerHTML = view.visibleRecords.map(function (rule) {
@@ -259,12 +249,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
         elements.accountingRulesEmpty.hidden = true;
         elements.accountingRulesTableWrap.hidden = false;
-        elements.accountingRulesPaginationBar.hidden = view.totalPages <= 1;
-        elements.accountingRulesPaginationCopy.textContent = "Page " + view.page + " of " + view.totalPages;
       }
 
-      elements.accountingRulesPrevPage.disabled = state.isLoading || view.page <= 1;
-      elements.accountingRulesNextPage.disabled = state.isLoading || view.page >= view.totalPages;
+      elements.accountingRulesCount.textContent = view.countLabel;
+      ns.renderProgressiveTable(elements.accountingRulesTableWrap, elements.accountingRulesEmpty, view, view.onLoadMore);
     }
 
     function renderSelectedAccountingRule(rule) {

@@ -5,6 +5,16 @@ const vm = require('node:vm');
 const window = {};
 vm.runInNewContext(fs.readFileSync('app/scripts/invoice-name.js','utf8'), { window });
 const ns = window.AccountingManagerApp;
+test('invoice date defaults are blank for Tickets and Final Invoice and today in Madrid for other types', () => {
+  const now = new Date('2026-10-22T23:30:00Z');
+  for (const type of ['Tickets', 'Final Invoice', '']) {
+    assert.equal(ns.defaultInvoiceDate(type, now), '');
+  }
+  for (const type of ['Proforma', 'Commission', 'Credit Note']) {
+    assert.equal(ns.defaultInvoiceDate(type, now), '2026-10-23');
+    assert.equal(ns.defaultInvoiceDate(type, new Date('2026-01-31T23:30:00Z')), '2026-02-01');
+  }
+});
 const context = { type: 'Tickets', supplierId: 's1', supplierCode: 'SUP-01', bookingId: 'b1', mfsp: 'MFSP123' };
 const api = { async searchRecord() { return { data: [] }; } };
 test('invoice types use their required default formats', async () => {

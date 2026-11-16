@@ -81,8 +81,8 @@
       var page;
       var query = "";
       var selectFields = await resolveCoqlFields(moduleName, fields);
-      var whereClause = settings.whereClause ? " where " + settings.whereClause : "";
-      var orderByClause = settings.orderByClause ? " order by " + settings.orderByClause : "";
+      var whereClause = " where " + (settings.whereClause || "id is not null");
+      var orderByClause = " order by " + (settings.orderByClause || "id asc");
 
       for (page = 0; page < MAX_RECORD_FETCH_PAGES; page += 1) {
         query =
@@ -93,13 +93,13 @@
           " limit " + offset + ", 200";
 
         try {
-          batch = await crm.coql(query);
+          batch = await crm.coql(query, { strict: true });
         } catch (error) {
           throw attachCoqlContextToError(error, {
             moduleName: moduleName,
             query: query,
-            whereClause: settings.whereClause || "",
-            orderByClause: settings.orderByClause || ""
+            whereClause: settings.whereClause || "id is not null",
+            orderByClause: settings.orderByClause || "id asc"
           });
         }
 
@@ -116,6 +116,9 @@
         offset += 200;
       }
 
+      if (settings.requireComplete && page === MAX_RECORD_FETCH_PAGES && batch.length === 200) {
+        throw new Error("Could not load all payment allocations. The payment letter cannot be generated with an incomplete total.");
+      }
       return records;
     }
 
@@ -179,8 +182,8 @@
       var perPage = Math.max(1, Math.min(200, Number(settings.perPage) || 10));
       var limit = perPage + 1;
       var offset = (page - 1) * perPage;
-      var whereClause = settings.whereClause ? " where " + settings.whereClause : "";
-      var orderClause = settings.orderByClause ? " order by " + settings.orderByClause : "";
+      var whereClause = " where " + (settings.whereClause || "id is not null");
+      var orderClause = " order by " + (settings.orderByClause || "id asc");
 
       return resolveCoqlFields(moduleName, fields).then(function (selectFields) {
         return "select " + selectFields.join(", ") +
@@ -192,52 +195,16 @@
     }
 
     async function loadCoqlPage(moduleName, fields, options) {
-      var settings = options || {};
+      var settings = Object.assign({}, options);
       var page = Math.max(1, Number(settings.page) || 1);
-      var perPage = Math.max(1, Math.min(200, Number(settings.perPage) || 10));
+      var perPage = Math.max(1, Math.min(200, Number(settings.perPage) || 50));
+      if ((page - 1) * perPage + perPage >= 100000) { throw new Error("Zoho's pagination limit has been reached. Narrow the filters to continue."); }
+      settings.whereClause = settings.whereClause || "id is not null";
+      settings.orderByClause = settings.orderByClause || "id asc";
+      settings.page = page; settings.perPage = perPage;
       var query = await buildCoqlPageQuery(moduleName, fields, settings);
-      var records;
-      var hasMore = false;
-
-      try {
-        records = await crm.coql(query);
-      } catch (error) {
-        if (
-          settings.orderByClause &&
-          !settings.whereClause &&
-          /missing clause/i.test(String(error && error.message || ""))
-        ) {
-          query = await buildCoqlPageQuery(moduleName, fields, Object.assign({}, settings, {
-            orderByClause: ""
-          }));
-          try {
-            records = await crm.coql(query);
-          } catch (retryError) {
-            throw attachCoqlContextToError(retryError, {
-              moduleName: moduleName,
-              query: query,
-              whereClause: settings.whereClause || "",
-              orderByClause: ""
-            });
-          }
-        } else {
-          throw attachCoqlContextToError(error, {
-            moduleName: moduleName,
-            query: query,
-            whereClause: settings.whereClause || "",
-            orderByClause: settings.orderByClause || ""
-          });
-        }
-      }
-
-      hasMore = records.length > perPage;
-
-      return {
-        records: hasMore ? records.slice(0, perPage) : records,
-        hasMore: hasMore,
-        page: page,
-        perPage: perPage
-      };
+      var records = await crm.coql(query, { strict: true });
+      return { records: records.slice(0, perPage), hasMore: records.length > perPage, page: page, perPage: perPage };
     }
 
     async function buildInvoiceRemoteWhereClause(filters, options) {
@@ -254,19 +221,13 @@
           return value === "Empty" ? "Supplier.Destination is null"
             : "Supplier.Destination = '" + escapeCoqlValue(value) + "'";
         });
-        conditions.push(destinationConditions.length ? buildCoqlLogicalClause("or", destinationConditions) : "id = '__none__'");
+        conditions.push(destinationConditions.length ? buildCoqlLogicalClause("or", destinationConditions) : "id = '0'");
       }
       if (selfEmployed === "true" || selfEmployed === "false") {
         conditions.push("Supplier.Is_Self_Employed = " + selfEmployed);
       }
       var selectedStatuses = getNormalizedStatusFilterValues(filters && filters.statusValues);
       var invoiceView = String(filters && filters.invoiceView || "open").trim().toLowerCase();
-      var viewStatuses = invoiceView === "closed"
-        ? ["Paid", "Cancelled", "Rejected"]
-        : invoiceView === "open"
-        ? ["-None-", "Received", "Partially Paid"]
-        : [];
-      var statusesToLoad;
       var statusFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Status"], "Status");
       var dateFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Date", "Invoice Date"], "Invoice_Date");
       var mfspFieldApi = await resolveFieldApiByCandidates(MODULES.invoices, ["MFSP_Reference", "MFSP Reference"], "MFSP_Reference");
@@ -276,16 +237,18 @@
       if (settings.pendingOnly) {
         conditions.push(buildCoqlOrEqualsClause(statusFieldApi, ["Received", "Partially Paid"]));
       } else {
-        statusesToLoad = selectedStatuses.length && !hasAllStatusFilterValuesSelected(selectedStatuses, INVOICE_STATUS_FILTER_OPTIONS)
-          ? selectedStatuses.filter(function (status) {
-            return invoiceView === "all" || viewStatuses.indexOf(status) !== -1;
-          })
-          : viewStatuses;
-
-        if (selectedStatuses.length && viewStatuses.length && !statusesToLoad.length) {
-          conditions.push("id = '__none__'");
-        } else if (statusesToLoad.length) {
-          conditions.push(buildCoqlOrEqualsClause(statusFieldApi, statusesToLoad));
+        if (invoiceView === "closed") {
+          conditions.push(buildCoqlOrEqualsClause(statusFieldApi, ["Paid", "Cancelled", "Rejected"]));
+        } else if (invoiceView === "open") {
+          conditions.push("(" + statusFieldApi + " is null or " + statusFieldApi + " not in ('Paid', 'Cancelled', 'Rejected'))");
+        }
+        if (Array.isArray(filters && filters.statusValues) && !selectedStatuses.length) {
+          conditions.push("id = '0'");
+        } else if (selectedStatuses.length && !hasAllStatusFilterValuesSelected(selectedStatuses, INVOICE_STATUS_FILTER_OPTIONS)) {
+          var statusConditions = [];
+          if (selectedStatuses.indexOf("-None-") !== -1) { statusConditions.push(statusFieldApi + " is null"); }
+          statusConditions.push(buildCoqlOrEqualsClause(statusFieldApi, selectedStatuses));
+          conditions.push(buildCoqlLogicalClause("or", statusConditions));
         }
       }
 
@@ -317,7 +280,7 @@
       return buildCoqlLogicalClause("and", conditions);
     }
 
-    async function buildInvoiceRemoteOrderByClause(sort) {
+    async function buildInvoiceRemoteOrderByClause(sort, groupBy) {
       var normalizedSort = sort || {};
       var fieldName;
       var direction = normalizedSort.direction === "asc" ? "asc" : "desc";
@@ -326,17 +289,139 @@
         fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Name", "Invoice_Number", "Invoice Number"], "Name");
       } else if (normalizedSort.key === "supplierCode") {
         fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Supplier_Code", "Supplier Code", "TP_Reference", "Connection_Reference", "Supplier_Connection_Reference", "Supplier Connection Reference"], "Supplier_Code");
+      } else if (normalizedSort.key === "mfsp") {
+        fieldName = "MFSP_Reference";
+      } else if (normalizedSort.key === "invoiceType") {
+        fieldName = "Invoice_Type";
       } else if (normalizedSort.key === "status") {
         fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Status"], "Status");
       } else if (normalizedSort.key === "booking") {
         fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Booking", "Booking_Name", "Booking Name", "Deal_Name", "Deal Name"], "Booking");
       } else if (normalizedSort.key === "total") {
-        fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Total", "Invoice Total", "Total_Payable_Amount", "Total Payable Amount"], "Invoice_Total");
+        fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Total_Payable_Amount", "Invoice_Total"], "Total_Payable_Amount");
       } else {
         fieldName = await resolveFieldApiByCandidates(MODULES.invoices, ["Invoice_Date", "Invoice Date"], "Invoice_Date");
       }
 
-      return fieldName + " " + direction;
+      var groupFields = groupBy === "destination" ? ["Supplier.Destination"]
+        : groupBy === "mfsp" ? ["MFSP_Reference"]
+        : groupBy === "supplier" ? ["Supplier_Name", "Supplier"] : [];
+      var terms = groupFields.map(function (field) { return field + " asc"; });
+      if (groupFields.indexOf(fieldName) === -1) { terms.push(fieldName + " " + direction); }
+      terms.push("id asc");
+      return terms.join(", ");
+    }
+
+    async function loadInvoicePage(fields, search) {
+      var perPage = Math.max(1, Math.min(200, Math.floor(Number(search.perPage) || 50)));
+      var page = Math.max(1, Math.floor(Number(search.page) || 1));
+      var offset = (page - 1) * perPage;
+      // Never present the COQL offset ceiling as the end of the result set.
+      if (offset + perPage + 1 > 100000) {
+        throw new Error("Zoho's pagination limit has been reached. Narrow the filters to continue.");
+      }
+      var where = await buildInvoiceRemoteWhereClause(search.filters);
+      var order = await buildInvoiceRemoteOrderByClause(search.sort, search.groupBy);
+      var selected = await resolveCoqlFields(MODULES.invoices, fields);
+      var query = "select " + selected.join(", ") + " from " + MODULES.invoices +
+        " where " + (where || "id is not null") + " order by " + order +
+        " limit " + offset + ", " + (perPage + 1);
+      // One look-ahead row identifies the last batch without a COUNT query.
+      // Do not fall back to a full download or ignore filters on API errors.
+      var records = await crm.coql(query, { strict: true });
+      return { records: records.slice(0, perPage), hasMore: records.length > perPage };
+    }
+
+    // Relationship searches use separate, bounded queries for compatibility
+    // with the embedded CRM SDK. Grouping at most 100 candidate payment IDs
+    // keeps the relationship result complete even with many allocations.
+    async function loadPaymentPage(fields, allocationFields, search) {
+      var filters = search.filters || {};
+      var perPage = Math.max(1, Math.min(100, Math.floor(Number(search.perPage) || 50)));
+      var offset = Math.max(0, Number(search.offset) || 0);
+      if (offset + perPage + 1 > 100000) {
+        throw new Error("Zoho's pagination limit has been reached. Narrow the filters to continue.");
+      }
+      var conditions = [];
+      var view = filters.paymentView || "open";
+      if (view === "open") { conditions.push("Status = 'Pending Payment'"); }
+      if (view === "closed") { conditions.push("Status in ('Paid', 'Cancelled')"); }
+      var statuses = getNormalizedStatusFilterValues(filters.statusValues);
+      if (Array.isArray(filters.statusValues) && !statuses.length) { conditions.push("id = '0'"); }
+      else if (statuses.length && !hasAllStatusFilterValuesSelected(statuses, PAYMENT_STATUS_FILTER_OPTIONS)) {
+        conditions.push(buildCoqlOrEqualsClause("Status", statuses));
+      }
+      if (filters.dateFrom) { conditions.push("Payment_Date >= '" + escapeCoqlValue(filters.dateFrom) + "'"); }
+      if (filters.dateTo) { conditions.push("Payment_Date <= '" + escapeCoqlValue(filters.dateTo) + "'"); }
+      if (String(filters.paymentName || "").trim()) { conditions.push("Name like '%" + escapeCoqlValue(filters.paymentName.trim()) + "%'"); }
+      var base = buildCoqlLogicalClause("and", conditions) || "id is not null";
+      var order = " order by Payment_Date desc, id asc";
+      var selected = await resolveCoqlFields(MODULES.payments, fields);
+      var related = Boolean(String(filters.mfsp || "").trim() || String(filters.supplierCode || "").trim());
+      var collected = [], hasMore;
+      do {
+        var windowSize = perPage - collected.length;
+        if (offset + windowSize + 1 > 100000) {
+          throw new Error("Zoho's pagination limit has been reached. Narrow the filters to continue.");
+        }
+        var candidates = await crm.coql("select " + (related ? "id" : selected.join(", ")) +
+          " from " + MODULES.payments + " where " + base + order + " limit " + offset + ", " + (windowSize + 1), { strict: true });
+        hasMore = candidates.length > windowSize;
+        var records = candidates.slice(0, windowSize);
+        offset += records.length;
+        if (related && records.length) {
+          var ids = records.map(function (record) { return String(record.id); });
+          var allocationScope = buildCoqlOrEqualsClause("Supplier_Payment", ids);
+          var matchingIds = ids.slice();
+          var supplierCodeField = await resolveFieldApiByCandidates(MODULES.suppliers, ["TP_Reference", "Connection_Reference", "Supplier_Code"], "TP_Reference");
+          for (var filter of [["bookingMfsp", filters.mfsp], ["Supplier." + supplierCodeField, filters.supplierCode]]) {
+            if (!String(filter[1] || "").trim()) { continue; }
+            var pattern = "'%" + escapeCoqlValue(filter[1].trim()) + "%'";
+            // The allocation's booking owns this part of a mixed/split payment.
+            // Use the invoice booking only for legacy allocations without one.
+            // Names and copied MFSP fields are not authoritative relationships.
+            // The embedded SDK permits two joined relations per query. Combining
+            // Booking and Supplier_Invoice.Booking uses three, even across OR.
+            var criteria = filter[0] === "bookingMfsp"
+              ? ["Booking.MFSP_Reference like " + pattern,
+                "(Booking is null and Supplier_Invoice.Booking.MFSP_Reference like " + pattern + ")"]
+              : [filter[0] + " like " + pattern];
+            var relatedIds = new Set();
+            for (var criterion of criteria) {
+              var relatedRows = await crm.coql("select Supplier_Payment from " + MODULES.payAllocations +
+                " where (" + allocationScope + " and " + criterion + ") group by Supplier_Payment limit 0, 100", { strict: true });
+              relatedRows.forEach(function (row) { relatedIds.add(String(row.Supplier_Payment && row.Supplier_Payment.id || row.Supplier_Payment || "")); });
+            }
+            matchingIds = matchingIds.filter(function (id) { return relatedIds.has(id); });
+            if (!matchingIds.length) { break; }
+          }
+          // Independent EXISTS-like criteria preserve mixed-payment semantics:
+          // supplier and MFSP may match different allocations of the same payment.
+          records = matchingIds.length ? await crm.coql("select " + selected.join(", ") + " from " + MODULES.payments +
+            " where " + buildCoqlLogicalClause("and", [base, buildCoqlOrEqualsClause("id", matchingIds)]) + order + " limit 0, " + perPage, { strict: true }) : [];
+        }
+        collected = collected.concat(records);
+        // A page is a batch of matching payments, not a batch of candidates.
+        // Keep scanning sparse relationship matches before returning to the UI.
+      } while (related && hasMore && collected.length < perPage);
+      records = collected;
+      var allocations = [];
+      if (records.length) {
+        var allocationSelect = await resolveCoqlFields(MODULES.payAllocations, allocationFields);
+        var scope = buildCoqlOrEqualsClause("Supplier_Payment", records.map(function (record) { return String(record.id); }));
+        var lastId = "";
+        while (true) {
+          var batch = await crm.coql("select " + allocationSelect.join(", ") + " from " + MODULES.payAllocations +
+            " where " + (lastId ? "(" + scope + " and id > '" + escapeCoqlValue(lastId) + "')" : scope) +
+            " order by id asc limit 0, 200", { strict: true });
+          allocations = allocations.concat(batch);
+          if (batch.length < 200) { break; }
+          var nextId = String(batch[batch.length - 1].id);
+          if (nextId === lastId) { throw new Error("CRM repeated an allocation batch."); }
+          lastId = nextId;
+        }
+      }
+      return { records: records, allocations: allocations, hasMore: hasMore, nextOffset: offset };
     }
 
     async function buildPaymentRemoteWhereClause(filters, paymentIds) {
@@ -410,7 +495,7 @@
         conditions.push(mfspFieldApi + " like '%" + escapeCoqlValue(mfsp) + "%'");
       }
 
-      return conditions.filter(Boolean).join(" and ");
+      return buildCoqlLogicalClause("and", conditions);
     }
 
     async function buildAccountingEntriesRemoteOrderByClause(sort) {
@@ -439,7 +524,9 @@
         fieldApi = await resolveFieldApiByCandidates(MODULES.accountingEntries, ["Entry_Date"], "Entry_Date");
       }
 
-      return fieldApi + " " + direction;
+      if (sortKey === "invoice" || sortKey === "account") { fieldApi += ".Name"; }
+      if (sortKey === "supplier") { fieldApi += ".Vendor_Name"; }
+      return fieldApi + " " + direction + ", id asc";
     }
 
     async function buildAccountingEntryLinesRemoteWhereClause(filters) {
@@ -461,7 +548,7 @@
         conditions.push(nameFieldApi + " like '%" + escapeCoqlValue(lineName) + "%'");
       }
 
-      return conditions.filter(Boolean).join(" and ");
+      return buildCoqlLogicalClause("and", conditions);
     }
 
     async function buildAccountingEntryLinesRemoteOrderByClause(sort) {
@@ -486,7 +573,9 @@
         fieldApi = await resolveFieldApiByCandidates(MODULES.accountingEntryLines, ["Source_Date", "Source Date", "Date"], "Source_Date");
       }
 
-      return fieldApi + " " + direction;
+      if (sortKey === "invoice" || sortKey === "account") { fieldApi += ".Name"; }
+      if (sortKey === "supplier") { fieldApi += ".Vendor_Name"; }
+      return fieldApi + " " + direction + ", id asc";
     }
 
     async function buildBookingRemoteWhereClause(filters) {
@@ -526,7 +615,7 @@
       }
 
       if (agency) {
-        conditions.push(agencyFieldApi + " like '%" + escapeCoqlValue(agency) + "%'");
+        conditions.push(agencyFieldApi + ".Account_Name like '%" + escapeCoqlValue(agency) + "%'");
       }
 
       if (selectedStages.length) {
@@ -534,7 +623,7 @@
       }
 
       if (accountingRep) {
-        conditions.push(accountingRepFieldApi + " like '%" + escapeCoqlValue(accountingRep) + "%'");
+        conditions.push(buildCoqlLogicalClause("and", accountingRep.split(/\s+/).map(function (part) { return "(" + accountingRepFieldApi + ".first_name like '%" + escapeCoqlValue(part) + "%' or " + accountingRepFieldApi + ".last_name like '%" + escapeCoqlValue(part) + "%')"; })));
       }
 
       conditions = conditions.filter(Boolean);
@@ -548,7 +637,7 @@
 
     async function buildBookingRemoteOrderByClause() {
       var arrivalDateFieldApi = await resolveFieldApiByCandidates(MODULES.bookings, ["Arrival_Date", "Arrival Date"], "Arrival_Date");
-      return arrivalDateFieldApi + " desc";
+      return arrivalDateFieldApi + " desc, id asc";
     }
 
     async function loadBookingRecordsByIds(ids) {
@@ -662,14 +751,44 @@
       };
     }
 
+    async function loadPaymentAuxPage(key, fields, search) {
+      var f = search.filters || {}, conditions = [];
+      function like(field, value) { if (String(value || "").trim()) { conditions.push(field + " like '%" + escapeCoqlValue(value.trim()) + "%'"); } }
+      if (key === "paymentAllocations") {
+        like("Name", f.reference); like("Supplier_Payment.Name", f.payment);
+        like("Supplier_Invoice.Name", f.invoice); like("Supplier_Settlement.Name", f.supplierCode);
+        if (f.movementType) { conditions.push("Movement_Type = '" + escapeCoqlValue(f.movementType) + "'"); }
+        return loadCoqlPage(MODULES.payAllocations, fields, { page: search.page, perPage: search.perPage,
+          whereClause: buildCoqlLogicalClause("and", conditions), orderByClause: "Allocation_Date desc, id asc" });
+      }
+      if (f.query) { conditions.push("(Name like '%" + escapeCoqlValue(f.query) + "%' or Email like '%" + escapeCoqlValue(f.query) + "%')"); }
+      if (f.status) { conditions.push("Status = '" + escapeCoqlValue(f.status) + "'"); }
+      var base = buildCoqlLogicalClause("and", conditions) || "id is not null";
+      var result = await loadCoqlPage(MODULES.paymentAccounts, fields, { page: search.page, perPage: search.perPage, whereClause: base, orderByClause: "Name asc, id asc" });
+      if ((f.supplierId || f.mfsp) && result.records.length) {
+        var ids = result.records.map(function (r) { return String(r.id); });
+        var scope = buildCoqlOrEqualsClause("Payment_Account", ids);
+        var matching = [base, buildCoqlOrEqualsClause("id", ids)];
+        [["Supplier.Vendor_Name", f.supplierId], ["MFSP_Reference", f.mfsp]].forEach(function (pair) {
+          if (!pair[1]) { return; }
+          matching.push("id in (select Payment_Account from " + MODULES.payAllocations + " where (" + scope + " and " + pair[0] + " like '%" + escapeCoqlValue(pair[1]) + "%') group by Payment_Account limit 100)");
+        });
+        result.records = (await loadCoqlPage(MODULES.paymentAccounts, fields, { page: 1, perPage: search.perPage, whereClause: buildCoqlLogicalClause("and", matching), orderByClause: "Name asc, id asc" })).records;
+      }
+      return result;
+    }
+
     return {
       attachCoqlContextToError: attachCoqlContextToError,
+      loadPaymentAuxPage: loadPaymentAuxPage,
       loadModuleRecords: loadModuleRecords,
       loadRecordsByCoql: loadRecordsByCoql,
       loadRecordsByPagination: loadRecordsByPagination,
       buildCoqlOrEqualsClause: buildCoqlOrEqualsClause,
       buildCoqlPageQuery: buildCoqlPageQuery,
       loadCoqlPage: loadCoqlPage,
+      loadInvoicePage: loadInvoicePage,
+      loadPaymentPage: loadPaymentPage,
       buildInvoiceRemoteWhereClause: buildInvoiceRemoteWhereClause,
       buildInvoiceRemoteOrderByClause: buildInvoiceRemoteOrderByClause,
       buildPaymentRemoteWhereClause: buildPaymentRemoteWhereClause,

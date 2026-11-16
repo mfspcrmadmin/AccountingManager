@@ -1,0 +1,59 @@
+string standalone.invoiceReminder_send(String kind, String recordId, String mode)
+{
+if(mode != "preview" && mode != "send") { throw "Invalid reminder execution mode"; }
+if(mode == "send") { disabledResult = {"eligible":false,"sent":false,"reason":"Sender verification pending; automatic sending is disabled"}; return disabledResult.toString(); }
+plan = standalone.invoiceReminder_plan(kind,recordId).toMap();
+plan.put("sent",false);
+if(mode == "preview" || plan.get("eligible") != true) { return plan.toString(); }
+// The unique Active_Key arbitrates concurrent send attempts. On Hold deliberately
+// excludes these records from the general admin-job retry/recovery scheduler.
+claimId = "";
+sendAttempted = false;
+try
+{
+    data = {"sequence":plan.get("sequence"),"kind":kind,"record_id":recordId,"recipient":plan.get("recipient"),"subject":plan.get("subject"),"model":plan.get("model"),"sent_date":""};
+    claim = {"Active_Key":plan.get("dedup_key"),"Dedup_Key":plan.get("dedup_key"),"Related_Technical_Key":plan.get("history_key"),"Related_Module":plan.get("module"),"Related_Record_ID":recordId,"Booking":plan.get("booking_id"),"Status":"On Hold","Source_Function":"invoiceReminder_send","Trigger_Reason":"Invoice reminder send reserved; do not retry automatically","Payload_JSON":data.toString()};
+    created = zoho.crm.createRecord("Admin_Process_Jobs",claim,{"trigger":List()});
+    if(created.get("id") == null)
+    {
+        plan.put("eligible",false);
+        plan.put("reason","Send reservation was not acquired; no email sent");
+        plan.put("reservation_result",created);
+        return plan.toString();
+    }
+    claimId = created.get("id").toString();
+    // Recheck the target immediately before the irreversible send.
+    target = zoho.crm.getRecordById(plan.get("module"),recordId.toLong());
+    if(target.get("id") == null) { throw "Target could not be rechecked"; }
+    if(kind == "proforma" && (target.get("Invoice_Type") != "Proforma" || target.get("Status") == "Cancelled" || target.get("Status") == "Rejected")) { throw "Proforma changed after preparation"; }
+    if(kind == "service")
+    {
+        booking = zoho.crm.getRecordById("Deals",plan.get("booking_id").toLong());
+        associated = standalone.jobs_query("select id from Supplier_Invoice_Lines where Booking_Service = '" + recordId + "' limit 1").get("data");
+        if(booking.get("Stage") != "Trip Accounting Closure" || !associated.isEmpty()) { throw "Service or booking changed after preparation"; }
+    }
+    recipient = plan.get("recipient").toString();
+    subjectText = plan.get("subject").toString();
+    html = plan.get("html").toString();
+    sendAttempted = true;
+    throw "Sender proveedores@madeforspainandportugal.com is not verified in CRM. No email sent.";
+    plan.put("sent",true);
+    data.put("sent_date",zoho.currenttime.toString("yyyy-MM-dd","Europe/Madrid"));
+    saved = zoho.crm.updateRecord("Admin_Process_Jobs",claimId.toLong(),{"Status":"Done","Completed_At":zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid"),"Payload_JSON":data.toString(),"Trigger_Reason":"Invoice reminder sent","Last_Error":""},{"trigger":List()});
+    if(saved.get("id") == null) { throw "Email sent but completion was not saved; review delivery before retrying"; }
+    plan.put("job_id",claimId);
+    plan.put("reason","Sent");
+}
+catch (error)
+{
+    plan.put("error",true);
+    plan.put("reason",error.toString());
+    plan.put("send_attempted",sendAttempted);
+    plan.put("job_id",claimId);
+    if(claimId != "")
+    {
+        savedError = zoho.crm.updateRecord("Admin_Process_Jobs",claimId.toLong(),{"Last_Error":error.toString(),"Trigger_Reason":"Review reminder outcome before any retry"},{"trigger":List()});
+    }
+}
+return plan.toString();
+}

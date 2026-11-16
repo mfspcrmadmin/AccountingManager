@@ -1,0 +1,94 @@
+string standalone.supplierInvoiceEdit_journal(String invoiceId, String action, String journalJson)
+{
+journal = journalJson.toMap();
+if(!invoiceId.matches("[0-9]+"))
+{
+	throw "Invalid correction storage invoice.";
+}
+mutableFields = "phase,busy_until,stage,cursor,payment_cursor,payment_id,payment_action".toList(",");
+if(action == "load" && journal.get("storage") == "parts_v1")
+{
+	manifest = journal;
+	text = "";
+	index = 0;
+	for each  partId in manifest.get("parts")
+	{
+		index = index + 1;
+		row = zoho.crm.getRecordById("Admin_Process_Jobs",partId.toLong());
+		expectedKey = "invoice-edit-" + invoiceId + "-" + manifest.get("key") + "-" + manifest.get("hash") + "-" + index;
+		if(row.get("Active_Key") != expectedKey || row.get("Source_Function") != "supplierInvoiceEdit_journal" || row.get("Related_Record_ID") != invoiceId || row.get("Payload_JSON") == null)
+		{
+			throw "A correction plan part is missing or changed. No further changes were applied.";
+		}
+		text = text + row.get("Payload_JSON").toMap().get("chunk");
+	}
+	if(text.length() != manifest.get("length") || zoho.encryption.sha256(text) != manifest.get("hash"))
+	{
+		throw "The stored correction plan failed its integrity check.";
+	}
+	journal = text.toMap();
+	if(journal.get("key") != manifest.get("key"))
+	{
+		throw "The correction plan belongs to another operation.";
+	}
+	for each  field in mutableFields
+	{
+		journal.put(field,manifest.get(field));
+	}
+	journal.put("_parts",manifest);
+}
+if(action == "store" && journal.get("_parts") == null && journalJson.length() > 24000)
+{
+	if(journalJson.length() > 2000000)
+	{
+		throw "This correction exceeds the supported plan size. No invoice changes were made.";
+	}
+	hash = zoho.encryption.sha256(journalJson);
+	partIds = List();
+	indexes = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200".toList(",");
+	for each  number in indexes
+	{
+		start = (number.toLong() - 1) * 10000;
+		if(start >= journalJson.length())
+		{
+			break;
+		}
+		end = start + 10000;
+		if(end > journalJson.length())
+		{
+			end = journalJson.length();
+		}
+		chunk = journalJson.subString(start,end);
+		partKey = "invoice-edit-" + invoiceId + "-" + journal.get("key") + "-" + hash + "-" + number;
+		payload = {"chunk":chunk};
+		part = {"Job_Type":"Invoice Edit Plan Part","Status":"Done","Related_Module":"Supplier_Invoices","Related_Record_ID":invoiceId,"Source_Function":"supplierInvoiceEdit_journal","Trigger_Reason":"Immutable correction plan part; not an executable job","Active_Key":partKey,"Payload_JSON":payload.toString()};
+		saved = zoho.crm.createRecord("Admin_Process_Jobs",part,{"trigger":List()});
+		partId = ifnull(saved.get("id"),"").toString();
+		if(partId == "" && saved.get("code") == "DUPLICATE_DATA" && saved.get("details") != null)
+		{
+			partId = ifnull(saved.get("details").get("id"),"").toString();
+		}
+		if(partId == "")
+		{
+			throw "A correction plan part could not be stored. Retry; the invoice has not been changed.";
+		}
+		confirmed = zoho.crm.getRecordById("Admin_Process_Jobs",partId.toLong());
+		if(confirmed.get("Active_Key") != partKey || confirmed.get("Payload_JSON").toMap().get("chunk") != chunk || confirmed.get("Related_Record_ID") != invoiceId)
+		{
+			throw "A correction plan part could not be verified.";
+		}
+		partIds.add(partId);
+	}
+	journal.put("_parts",{"storage":"parts_v1","parts":partIds,"hash":hash,"length":journalJson.length(),"key":journal.get("key")});
+}
+if(action == "encode" && journal.get("_parts") != null)
+{
+	manifest = journal.get("_parts");
+	for each  field in mutableFields
+	{
+		manifest.put(field,journal.get(field));
+	}
+	return manifest.toString();
+}
+return journal.toString();
+}

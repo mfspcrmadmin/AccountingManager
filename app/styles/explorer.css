@@ -1,3 +1,4 @@
+@layer widget-views {
 /* Shared list explorer + record inspector language. */
 :root {
   --radius: 12px;
@@ -130,10 +131,6 @@ body {
   min-width: 128px;
 }
 
-.list-toolbar .field > span,
-.list-toolbar .bookings-stage-filter-field > span {
-  display: none;
-}
 
 .list-toolbar input,
 .list-toolbar select,
@@ -655,4 +652,6 @@ body {
   .selected-payment-counts-grid .activity-stat-card:nth-child(-n + 2) {
     border-bottom: 1px solid rgba(28, 56, 46, 0.08);
   }
+}
+
 }

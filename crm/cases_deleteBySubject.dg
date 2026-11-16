@@ -1,0 +1,121 @@
+string standalone.cases_deleteBySubject(String subjectContains, bool dryRun)
+{
+result = Map();
+result.put("success",false);
+result.put("deleted",0);
+result.put("countComplete",false);
+deleted = 0;
+attempted = 0;
+try
+{
+    text = ifnull(subjectContains,"").trim();
+    // Reject query delimiters and wildcard characters rather than broadening a literal search.
+    if(text == "" || text.contains("'") || text.contains("\\") || text.contains("%") || text.contains("_") || text.contains("\n") || text.contains("\r"))
+    {
+        throw "Indica un texto no vacio, sin comillas simples, barras inversas, %, _ ni saltos de linea.";
+    }
+    if(dryRun == null) { throw "dryRun es obligatorio: true para contar; false para borrar."; }
+    result.put("subjectContains",text);
+    result.put("dryRun",dryRun);
+    ids = List();
+    sample = List();
+    cursor = "0";
+    complete = false;
+    pages = "1,2,3,4,5,6,7,8,9,10".toList(",");
+    for each page in pages
+    {
+        query = Map();
+        query.put("select_query","select id, Subject from Cases where ((Subject like '%" + text + "%') and (id > '" + cursor + "')) order by id asc limit 2000");
+        response = invokeurl
+        [
+            url :"https://www.zohoapis.eu/crm/v8/coql"
+            type :POST
+            parameters:query.toString()
+            headers:{"Content-Type":"application/json"}
+            detailed:true
+            connection:"crm_oauth_connection"
+        ];
+        if(response.get("responseCode") == 204) { complete = true; break; }
+        if(response.get("responseCode") != 200) { throw "Error al consultar Cases: " + response.toString(); }
+        payload = response.get("responseText").toString().toMap();
+        if(payload.get("data") == null || payload.get("info") == null) { throw "Respuesta de consulta incompleta."; }
+        for each row in payload.get("data")
+        {
+            if(row.get("id") == null) { throw "Case sin ID en respuesta."; }
+            cursor = row.get("id").toString();
+            if(ids.contains(cursor)) { throw "ID repetido en paginacion; no se borra nada."; }
+            ids.add(cursor);
+            if(sample.size() < 50) { sample.add(row); }
+        }
+        if(payload.get("info").get("more_records") == false) { complete = true; break; }
+    }
+    result.put("matchedCount",ids.size());
+    result.put("sample",sample);
+    result.put("countComplete",complete);
+    result.put("moreMatches",!complete);
+    if(dryRun)
+    {
+        result.put("success",true);
+        result.put("message","Simulacion: no se ha borrado nada. Compara matchedCount con el filtro Subject contiene de CRM.");
+        if(!complete) { result.put("message","Simulacion: recuento parcial. Se han encontrado 20000 coincidencias y quedan mas. Con dryRun=false se borraran las coincidencias recogidas en esta ejecucion."); }
+        return result.toString();
+    }
+    // Snapshot first, delete afterwards: deleting cannot shift search pages.
+    batch = List();
+    for each caseId in ids
+    {
+        batch.add(caseId);
+        if(batch.size() == 100 || caseId == cursor)
+        {
+            batchIds = "";
+            for each batchId in batch
+            {
+                if(batchIds != "") { batchIds = batchIds + ","; }
+                batchIds = batchIds + batchId;
+            }
+            result.put("lastBatchIds",batch);
+            attempted = attempted + batch.size();
+            deleteResponse = invokeurl
+            [
+                url :"https://www.zohoapis.eu/crm/v8/Cases?ids=" + batchIds + "&wf_trigger=false"
+                type :DELETE
+                connection:"crm_oauth_connection"
+            ];
+            if(deleteResponse.get("data") == null) { throw "Respuesta de borrado inesperada: " + deleteResponse.toString(); }
+            failed = false;
+            confirmedIds = List();
+            for each item in deleteResponse.get("data")
+            {
+                if(item.get("code") == "SUCCESS" && item.get("status") == "success" && item.get("details") != null)
+                {
+                    confirmedId = ifnull(item.get("details").get("id"),"").toString();
+                    if(batch.contains(confirmedId) && !confirmedIds.contains(confirmedId))
+                    {
+                        confirmedIds.add(confirmedId);
+                        deleted = deleted + 1;
+                    }
+                    else { failed = true; }
+                }
+                else { failed = true; }
+            }
+            result.put("deleted",deleted);
+            if(failed || confirmedIds.size() != batch.size())
+            {
+                result.put("lastBatchResponse",deleteResponse);
+                throw "Borrado parcial o respuesta incompleta. Se detienen los siguientes lotes. Revisa lastBatchIds y lastBatchResponse antes de repetir dryRun.";
+            }
+            batch = List();
+        }
+    }
+    result.put("success",true);
+    result.put("message","Borrado completado.");
+    if(!complete) { result.put("message","Lote completado. Quedaban mas coincidencias al consultar; repite la funcion con el mismo texto para continuar."); }
+}
+catch(e)
+{
+    result.put("message",e.toString());
+}
+result.put("deleted",deleted);
+result.put("attempted",attempted);
+return result.toString();
+}

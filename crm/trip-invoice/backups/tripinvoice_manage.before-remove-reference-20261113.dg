@@ -1,0 +1,503 @@
+string standalone.tripInvoice_manage(String bookingId, String action, String invoiceDate, String amountBasis, String expectedSnapshot)
+{
+result = {"success":false};
+try 
+{
+	if(!bookingId.matches("^[0-9]+$") || !"inspect,preview,issue,collections-preview,collections-apply,link-original,pdf-prepare,pdf-archive".toList(",").contains(action))
+	{
+		throw "Invalid trip invoice request.";
+	}
+	if(action == "pdf-prepare" || action == "pdf-archive")
+	{
+		return standalone.tripInvoice_pdf(bookingId,action,expectedSnapshot);
+	}
+	booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+	if(booking.get("id") == null)
+	{
+		throw "The Booking is unavailable.";
+	}
+	if(action == "link-original")
+	{
+		selection = expectedSnapshot.toMap();
+		creditId = ifnull(selection.get("credit_id"),"").toString();
+		originalId = ifnull(selection.get("original_id"),"").toString();
+		if(!creditId.matches("^[0-9]+$") || !originalId.matches("^[0-9]+$") || creditId == originalId)
+		{
+			throw "Choose a valid original invoice.";
+		}
+		credit = zoho.crm.getRecordById("Invoices",creditId.toLong());
+		original = zoho.crm.getRecordById("Invoices",originalId.toLong());
+		if(credit.get("id") == null || original.get("id") == null || ifnull(credit.get("Deal_Name__s"),Map()).get("id") != bookingId || ifnull(original.get("Deal_Name__s"),Map()).get("id") != bookingId)
+		{
+			throw "Both documents must belong to this Booking.";
+		}
+		if(original.get("Invoice_Date") == null || credit.get("Invoice_Date") == null || original.get("Invoice_Date") > credit.get("Invoice_Date"))
+		{
+			throw "The original invoice date must not be later than the credit note date.";
+		}
+		if(!"Credit Note,Credit Notes".toList(",").contains(ifnull(credit.get("Type"),"")) || original.get("Type") != "Invoice" || ifnull(original.get("Grand_Total"),0).toDecimal() <= 0 || credit.get("Currency") != original.get("Currency"))
+		{
+			throw "The original must be a positive sales invoice in the same currency as the credit note.";
+		}
+		if(credit.get("Original_Sales_Invoice") != null && credit.get("Original_Sales_Invoice").get("id") != originalId)
+		{
+			throw "This credit note already has a different original invoice. Review it in CRM.";
+		}
+		if(credit.get("Modified_Time") != selection.get("credit_modified") || original.get("Modified_Time") != selection.get("original_modified"))
+		{
+			throw "The documents changed. Reopen the invoice review before linking.";
+		}
+		patch = {"id":creditId,"Original_Sales_Invoice":originalId};
+		patches = List();
+		patches.add(patch);
+		patchBody = {"data":patches,"trigger":List()};
+		patched = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/Invoices/" + creditId
+			type :PUT
+			parameters:patchBody.toString()
+			headers:{"Content-Type":"application/json","If-Unmodified-Since":credit.get("Modified_Time")}
+			detailed:true
+			connection:"crm_oauth_connection"
+		];
+		patchedPayload = patched.get("responseText").toString().toMap();
+		if(patched.get("responseCode") != 200 || patchedPayload.get("data") == null || patchedPayload.get("data").get(0).get("code") != "SUCCESS")
+		{
+			throw "The original invoice link was not confirmed. Refresh and review again.";
+		}
+		result.put("success",true);
+		result.put("original_linked",true);
+		return result.toString();
+	}
+	existing = standalone.tripInvoice_readRelated("Invoices",bookingId).toMap();
+	if(existing.get("success") != true)
+	{
+		throw existing.get("message");
+	}
+	documents = existing.get("records");
+	if(documents.size() > 1)
+	{
+		result.put("success",true);
+		result.put("existing",true);
+		result.put("multiple",true);
+		result.put("documents",documents);
+		result.put("message","This Booking has multiple invoice documents. Review invoices and credit notes; no new invoice was created.");
+		return result.toString();
+	}
+	invoice = Map();
+	if(existing.get("records").size() == 1)
+	{
+		invoice = existing.get("records").get(0);
+	}
+	if(booking.get("Sales_Invoice") != null)
+	{
+		linkedInvoice = zoho.crm.getRecordById("Invoices",booking.get("Sales_Invoice").get("id").toLong());
+		if(linkedInvoice.get("id") == null || ifnull(linkedInvoice.get("Deal_Name__s"),Map()).get("id") != bookingId)
+		{
+			throw "The saved sales invoice link is unavailable or belongs to another Booking. Review it in CRM.";
+		}
+		if(invoice.get("id") != null && invoice.get("id") != linkedInvoice.get("id"))
+		{
+			throw "The saved invoice link differs from the Booking sales invoice. Review in CRM.";
+		}
+		invoice = linkedInvoice;
+	}
+	if(invoice.get("id") != null && ifnull(invoice.get("Type"),"Invoice") != "Invoice")
+	{
+		result.put("success",true);
+		result.put("existing",true);
+		result.put("multiple",true);
+		result.put("documents",documents);
+		result.put("message","The Booking has a credit note. Review its original invoice before issuing another document.");
+		return result.toString();
+	}
+	if(action == "collections-preview" || action == "collections-apply")
+	{
+		if(invoice.get("id") == null || invoice.get("Invoice_Origin") != "Accounting Manager" || invoice.get("Trip_Booking_Key") != "BOOKING-" + bookingId)
+		{
+			throw "Automatic collection updates only apply to invoices issued by Accounting Manager. Review historical invoices in their original workflow.";
+		}
+		if(invoice.get("Currency") != "EUR")
+		{
+			throw "Collection currency needs review. No exchange rate was assumed.";
+		}
+		if(ifnull(invoice.get("Collection_Source"),"").contains("Historical manual confirmation"))
+		{
+			throw "Historical collection evidence is preserved. Reconcile any new detailed receipts in CRM before replacing this manual confirmation.";
+		}
+		collections = standalone.tripInvoice_collections(bookingId,invoice.get("id").toString()).toMap();
+		if(collections.get("success") != true)
+		{
+			throw collections.get("message");
+		}
+		evidence = collections.get("evidence");
+		collectionSnapshotData = {"invoice":invoice.get("id"),"modified":invoice.get("Modified_Time"),"evidence":evidence};
+		collectionSnapshot = collectionSnapshotData.toString();
+		result.put("success",true);
+		result.put("existing",true);
+		result.put("collections_preview",true);
+		result.put("invoice_id",invoice.get("id"));
+		result.put("invoice_number",invoice.get("Subject"));
+		result.put("invoice_date",invoice.get("Invoice_Date"));
+		result.put("amount",invoice.get("Grand_Total"));
+		result.put("currency",invoice.get("Currency"));
+		result.put("collections",collections);
+		result.put("origin",invoice.get("Invoice_Origin"));
+		result.put("collections_status","Verified");
+		result.put("collected_amount",collections.get("paid"));
+		result.put("refunded_amount",collections.get("refunded"));
+		result.put("net_paid",collections.get("net"));
+		result.put("balance_due",(invoice.get("Grand_Total").toDecimal() - collections.get("net").toDecimal()).round(2));
+		result.put("snapshot",collectionSnapshot);
+		if(action == "collections-preview")
+		{
+			return result.toString();
+		}
+		if(expectedSnapshot == "" || expectedSnapshot != collectionSnapshot)
+		{
+			throw "The invoice or receipts changed. Review collections again before saving.";
+		}
+		changes = {"Collected_Amount":collections.get("paid"),"Refunded_Amount":collections.get("refunded"),"Total_Paid_Amount":collections.get("net"),"Collection_Source":collections.get("source"),"Collection_Evidence":evidence.toString(),"Collections_Status":"Verified","Collections_Checked_At":zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss","UTC") + "+00:00"};
+		if(collections.get("links").size() > 0)
+		{
+			changes.put("Payment_Requests",collections.get("links"));
+		}
+		changes.put("id",invoice.get("id"));
+		changeRows = List();
+		changeRows.add(changes);
+		updateBody = {"data":changeRows,"trigger":List()};
+		updateResult = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/Invoices/" + invoice.get("id")
+			type :PUT
+			parameters:updateBody.toString()
+			headers:{"Content-Type":"application/json","If-Unmodified-Since":invoice.get("Modified_Time")}
+			detailed:true
+			connection:"crm_oauth_connection"
+		];
+		updatePayload = updateResult.get("responseText").toString().toMap();
+		if(updateResult.get("responseCode") != 200 || updatePayload.get("data") == null || updatePayload.get("data").get(0).get("code") != "SUCCESS")
+		{
+			throw "The invoice collections update was not confirmed. Refresh and review again.";
+		}
+		result.put("collections_preview",false);
+		result.put("collections_saved",true);
+		return result.toString();
+	}
+	if(invoice.get("id") == null && ifnull(booking.get("Sales_Invoice_Number"),"") != "")
+	{
+		throw "The Booking already has an invoice number but its invoice is unavailable. Review it in CRM before invoicing.";
+	}
+	if(invoice.get("id") == null)
+	{
+		if(ifnull(booking.get("Closure_Status"),"") != "Closure Completed")
+		{
+			throw "Complete Trip closure before invoicing this Booking.";
+		}
+		if(booking.get("Balance_Amount") == null || booking.get("Balance_Amount").toDecimal() != 0)
+		{
+			throw "Balance Due Amount must be zero before invoicing.";
+		}
+		related = standalone.tripInvoice_readRelated("Supplier_Settlements",bookingId).toMap();
+		if(related.get("success") != true)
+		{
+			throw related.get("message");
+		}
+		activeCount = 0;
+		relatedRows = related.get("records");
+		for each  settlement in relatedRows
+		{
+			if(ifnull(settlement.get("Admin_Status"),"").toLowerCase() != "no services")
+			{
+				activeCount = activeCount + 1;
+				if(ifnull(settlement.get("Closure_Review_Status"),"") != "Reviewed")
+				{
+					throw "All active settlements must be reviewed before invoicing.";
+				}
+			}
+		}
+		if(activeCount == 0)
+		{
+			throw "No active reviewed settlements were found.";
+		}
+		if(booking.get("Account_Name") == null || booking.get("Sales_Price_inc_Taxes") == null || ifnull(booking.get("Currency"),"") == "")
+		{
+			throw "The Booking needs a client, Sales Price and currency before invoicing.";
+		}
+		if(booking.get("Currency") != "EUR")
+		{
+			throw "Invoice collections need a currency review. No exchange rate was assumed.";
+		}
+		historicalConfirmation = Map();
+		collections = standalone.tripInvoice_collections(bookingId,"").toMap();
+		if(collections.get("success") != true)
+		{
+			if(collections.get("historical_eligible") != true)
+			{
+				throw collections.get("message");
+			}
+			if(action == "inspect")
+			{
+				result.put("success",true);
+				result.put("existing",false);
+				result.put("historical_required",true);
+				result.put("historical_amount",collections.get("historical_amount"));
+				result.put("detailed_net",ifnull(collections.get("net"),0));
+				if(collections.get("evidence") != null)
+				{
+					result.put("collections",collections);
+				}
+				result.put("client",booking.get("Account_Name"));
+				result.put("mfsp",booking.get("MFSP_Reference"));
+				result.put("sales_price",booking.get("Sales_Price_inc_Taxes"));
+				result.put("commission",booking.get("Final_Commission"));
+				result.put("currency",booking.get("Currency"));
+				result.put("balance",booking.get("Balance_Amount"));
+				return result.toString();
+			}
+			if(expectedSnapshot == "")
+			{
+				throw "Explicit historical payment confirmation is required.";
+			}
+			historicalInput = expectedSnapshot.toMap().get("historical_confirmation");
+			if(historicalInput == null || historicalInput.get("confirmed") != true || historicalInput.get("amount") == null || historicalInput.get("amount").toDecimal().round(2) != collections.get("historical_amount").toDecimal())
+			{
+				throw "Confirm the exact historical Booking payment amount before reviewing the invoice.";
+			}
+			historicalOrigin = ifnull(historicalInput.get("origin"),"").toString().trim();
+			historicalReference = ifnull(historicalInput.get("reference"),"").toString().trim();
+			historicalUser = ifnull(zoho.loginuser,"").toString();
+			if(historicalOrigin.length() < 3 || historicalOrigin.length() > 200 || historicalReference.length() < 3 || historicalReference.length() > 500 || historicalUser == "")
+			{
+				throw "Historical payment confirmation requires its origin, a supporting reference and an authenticated user.";
+			}
+			historicalConfirmation = {"confirmed":true,"amount":collections.get("historical_amount"),"origin":historicalOrigin,"reference":historicalReference,"confirmed_by":historicalUser};
+			detailedPaid = ifnull(collections.get("paid"),0).toDecimal();
+			detailedRefunded = ifnull(collections.get("refunded"),0).toDecimal();
+			historicalRecords = ifnull(ifnull(collections.get("evidence"),Map()).get("records"),List());
+			historicalRecords.add({"source":"Historical manual confirmation","id":bookingId,"status":"Manually confirmed","amount_eur":collections.get("historical_amount"),"confirmation":historicalConfirmation});
+			collectionSource = "Historical manual confirmation";
+			if(detailedPaid > 0)
+			{
+				collectionSource = collections.get("source") + " + Historical manual confirmation";
+			}
+			combinedPaid = (detailedPaid + collections.get("historical_amount").toDecimal()).round(2);
+			combinedNet = (combinedPaid - detailedRefunded).round(2);
+			historicalEvidence = {"source":collectionSource,"currency":"EUR","paid":combinedPaid,"refunded":detailedRefunded,"net":combinedNet,"detailed_paid":detailedPaid,"detailed_refunded":detailedRefunded,"historical_amount":collections.get("historical_amount"),"booking_modified":booking.get("Modified_Time"),"records":historicalRecords};
+			collections = {"success":true,"source":collectionSource,"paid":combinedPaid,"refunded":detailedRefunded,"net":combinedNet,"evidence":historicalEvidence,"links":ifnull(collections.get("links"),List())};
+		}
+		if(collections.get("evidence").toString().length() > 30000)
+		{
+			throw "The combined collection evidence exceeds the invoice field capacity. No evidence was truncated.";
+		}
+		result.put("collections",collections);
+		if(collections.get("net").toDecimal() != booking.get("Sales_Price_inc_Taxes").toDecimal().round(2))
+		{
+			throw "Confirmed net collections differ from Sales Price. Reconcile receipts and refunds before invoicing.";
+		}
+		if(action == "inspect")
+		{
+			result.put("success",true);
+			result.put("existing",false);
+			result.put("client",booking.get("Account_Name"));
+			result.put("mfsp",booking.get("MFSP_Reference"));
+			result.put("sales_price",booking.get("Sales_Price_inc_Taxes"));
+			result.put("commission",booking.get("Final_Commission"));
+			result.put("currency",booking.get("Currency"));
+			return result.toString();
+		}
+		if(amountBasis != "gross")
+		{
+			throw "Sales invoices use the full Booking Sales Price.";
+		}
+		if(!invoiceDate.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") || invoiceDate.toDate("yyyy-MM-dd").toString("yyyy-MM-dd") != invoiceDate)
+		{
+			throw "Choose a valid invoice date.";
+		}
+		gross = booking.get("Sales_Price_inc_Taxes").toDecimal();
+		commission = ifnull(booking.get("Final_Commission"),0).toDecimal();
+		amount = gross;
+		amount = amount.round(2);
+		if(amount <= 0)
+		{
+			throw "A sales invoice requires a positive amount. Review zero or negative trips separately.";
+		}
+		snapshotData = {"booking":bookingId,"modified":booking.get("Modified_Time"),"date":invoiceDate,"basis":amountBasis,"amount":amount,"currency":booking.get("Currency"),"client":booking.get("Account_Name").get("id"),"settlements":relatedRows,"collections":collections.get("evidence"),"historical_confirmation":historicalConfirmation};
+		snapshot = snapshotData.toString();
+		result.put("snapshot",snapshot);
+		result.put("booking_id",bookingId);
+		result.put("mfsp",booking.get("MFSP_Reference"));
+		result.put("client",booking.get("Account_Name"));
+		result.put("sales_price",gross);
+		result.put("commission",commission);
+		result.put("amount",amount);
+		result.put("currency",booking.get("Currency"));
+		result.put("invoice_date",invoiceDate);
+		result.put("series","FV-" + invoiceDate.subString(0,4) + "-000001");
+		if(action == "preview")
+		{
+			result.put("success",true);
+			result.put("existing",false);
+			return result.toString();
+		}
+		if(expectedSnapshot == "" || snapshot != expectedSnapshot)
+		{
+			throw "The Booking or its settlements changed. Generate a new preview before invoicing.";
+		}
+		if(ifnull(collections.get("source"),"").contains("Historical manual confirmation"))
+		{
+			historicalEvidence = collections.get("evidence");
+			historicalEvidence.put("confirmed_at",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss","UTC") + "+00:00");
+			confirmedRecords = historicalEvidence.get("records");
+			for each  confirmedRecord in confirmedRecords
+			{
+				if(confirmedRecord.get("source") == "Historical manual confirmation")
+				{
+					savedConfirmation = confirmedRecord.get("confirmation");
+					savedConfirmation.put("confirmed_at",historicalEvidence.get("confirmed_at"));
+					confirmedRecord.put("confirmation",savedConfirmation);
+				}
+			}
+			collections.put("evidence",historicalEvidence);
+		}
+		year = invoiceDate.subString(0,4).toLong();
+		query = {"select_query":"select Trip_Invoice_Sequence from Invoices where Trip_Invoice_Year = " + year + " order by Trip_Invoice_Sequence desc limit 1"};
+		sequenceResponse = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/coql"
+			type :POST
+			parameters:query.toString()
+			headers:{"Content-Type":"application/json"}
+			detailed:true
+			connection:"crm_oauth_connection"
+		];
+		sequence = 1;
+		if(sequenceResponse.get("responseCode") == 200)
+		{
+			sequencePayload = sequenceResponse.get("responseText").toString().toMap();
+			if(sequencePayload.get("data") == null || sequencePayload.get("data").size() != 1)
+			{
+				throw "Could not read the invoice sequence.";
+			}
+			sequence = sequencePayload.get("data").get(0).get("Trip_Invoice_Sequence").toLong() + 1;
+		}
+		else if(sequenceResponse.get("responseCode") != 204)
+		{
+			throw "Could not read the invoice sequence.";
+		}
+		attempts = "1,2,3,4,5,6,7,8,9,10".toList(",");
+		for each  attempt in attempts
+		{
+			if(sequence > 999999)
+			{
+				throw "The annual invoice series is exhausted.";
+			}
+			digits = "000000" + sequence;
+			number = "FV-" + year + "-" + digits.subString(digits.length() - 6,digits.length());
+			line = {"Product_Name":{"id":"616617000025032722"},"Quantity":1,"List_Price":amount,"Description":"Trip " + ifnull(booking.get("MFSP_Reference"),bookingId),"MFSP_Reference":booking.get("MFSP_Reference")};
+			lines = List();
+			lines.add(line);
+			data = {"Subject":number,"Invoice_Date":invoiceDate,"Due_Date":invoiceDate,"Deal_Name__s":bookingId,"Account_Name":booking.get("Account_Name").get("id"),"Currency":booking.get("Currency"),"Type":"Invoice","Tax":0,"Invoiced_Items":lines,"Trip_Invoice_Number":number,"Trip_Booking_Key":"BOOKING-" + bookingId,"Trip_Invoice_Year":year,"Trip_Invoice_Sequence":sequence,"Agent_commission":commission,"Invoice_Origin":"Accounting Manager","Booking_MFSP":booking.get("MFSP_Reference"),"Collected_Amount":collections.get("paid"),"Refunded_Amount":collections.get("refunded"),"Total_Paid_Amount":collections.get("net"),"Collection_Source":collections.get("source"),"Collections_Status":"Verified","Collection_Evidence":collections.get("evidence").toString(),"Collections_Checked_At":zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ss","UTC") + "+00:00"};
+			if(collections.get("links").size() > 0)
+			{
+				data.put("Payment_Requests",collections.get("links"));
+			}
+			records = List();
+			records.add(data);
+			createBody = {"data":records,"trigger":List()};
+			createResponse = invokeurl
+			[
+				url :"https://www.zohoapis.eu/crm/v8/Invoices"
+				type :POST
+				parameters:createBody.toString()
+				headers:{"Content-Type":"application/json"}
+				detailed:true
+				connection:"crm_oauth_connection"
+			];
+			createPayload = createResponse.get("responseText").toString().toMap();
+			if(createPayload.get("data") == null || createPayload.get("data").size() != 1)
+			{
+				throw "Invoice creation was not confirmed. Retry this Booking to check whether it was created.";
+			}
+			created = createPayload.get("data").get(0);
+			if(created.get("code") == "SUCCESS" && created.get("status") == "success" && ifnull(created.get("details"),Map()).get("id") != null)
+			{
+				invoice = zoho.crm.getRecordById("Invoices",created.get("details").get("id").toLong());
+				break;
+			}
+			if(created.get("code") != "DUPLICATE_DATA")
+			{
+				throw "Invoice creation was not confirmed: " + created + ". Retry the same Booking and date to recover safely.";
+			}
+			duplicateId = ifnull(ifnull(created.get("details"),Map()).get("id"),"").toString();
+			if(duplicateId != "")
+			{
+				duplicate = zoho.crm.getRecordById("Invoices",duplicateId.toLong());
+				if(ifnull(duplicate.get("Deal_Name__s"),Map()).get("id") == bookingId)
+				{
+					invoice = duplicate;
+					break;
+				}
+			}
+			recovered = standalone.tripInvoice_readRelated("Invoices",bookingId).toMap();
+			if(recovered.get("success") != true)
+			{
+				throw "Could not check concurrent invoice creation. Retry this Booking.";
+			}
+			if(recovered.get("records").size() > 1)
+			{
+				throw "Multiple sales invoices found. Review in CRM.";
+			}
+			if(recovered.get("records").size() == 1)
+			{
+				invoice = recovered.get("records").get(0);
+				break;
+			}
+			sequence = sequence + 1;
+		}
+		if(invoice.get("id") == null)
+		{
+			throw "Invoice numbering is busy. Retry this Booking; no duplicate will be created.";
+		}
+	}
+	result.put("success",true);
+	result.put("existing",true);
+	result.put("origin",invoice.get("Invoice_Origin"));
+	result.put("collections_status",invoice.get("Collections_Status"));
+	result.put("collection_source",invoice.get("Collection_Source"));
+	result.put("collections_checked_at",invoice.get("Collections_Checked_At"));
+	result.put("collected_amount",invoice.get("Collected_Amount"));
+	result.put("refunded_amount",invoice.get("Refunded_Amount"));
+	result.put("net_paid",invoice.get("Total_Paid_Amount"));
+	result.put("balance_due",invoice.get("Balance_Due"));
+	result.put("invoice_id",invoice.get("id"));
+	result.put("invoice_number",invoice.get("Subject"));
+	result.put("invoice_date",invoice.get("Invoice_Date"));
+	result.put("amount",invoice.get("Grand_Total"));
+	result.put("currency",invoice.get("Currency"));
+	result.put("historical",invoice.get("Invoice_Origin") != "Accounting Manager");
+	result.put("booking_link_missing",ifnull(booking.get("Sales_Invoice"),Map()).get("id") != invoice.get("id") || booking.get("Sales_Invoice_Number") != invoice.get("Subject") || booking.get("Sales_Invoice_Date") != invoice.get("Invoice_Date"));
+	if(action == "issue" && invoice.get("Invoice_Origin") == "Accounting Manager" && invoice.get("Trip_Booking_Key") == "BOOKING-" + bookingId)
+	{
+		try 
+		{
+			link = zoho.crm.updateRecord("Deals",bookingId.toLong(),{"Sales_Invoice":invoice.get("id"),"Sales_Invoice_Number":invoice.get("Subject"),"Sales_Invoice_Date":invoice.get("Invoice_Date")},{"trigger":List()});
+			if(link.get("id") == null)
+			{
+				throw "Booking link update was not confirmed.";
+			}
+			result.put("booking_link_missing",false);
+		}
+		catch (linkError)
+		{
+			result.put("warning","The invoice exists, but its Booking link could not be saved. Retry this Booking to restore the link; do not create a second invoice.");
+		}
+	}
+}
+catch (e)
+{
+	result.put("success",false);
+	result.put("message",e.toString());
+}
+return result.toString();
+}

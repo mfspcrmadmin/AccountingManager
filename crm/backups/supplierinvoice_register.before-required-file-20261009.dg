@@ -1,0 +1,412 @@
+string standalone.supplierInvoice_register(String operationKey, String requestJson)
+{
+// Suppliers registration v1. Never creates payments or rewrites an existing invoice.
+result = {"success":false,"retryable":true,"invoice_id":"","phase":"validate"};
+invoiceId = "";
+try 
+{
+	if(!operationKey.matches("[a-f0-9-]{36}") || requestJson.length() > 12000)
+	{
+		throw "Invalid registration request.";
+	}
+	request = requestJson.toMap();
+	supplierId = ifnull(request.get("supplier_id"),"").toString();
+	invoiceInput = request.get("invoice");
+	allocations = request.get("allocations");
+	if(!supplierId.matches("[0-9]+") || invoiceInput == null || allocations == null || allocations.isEmpty())
+	{
+		result.put("retryable",false);
+		throw "A supplier and at least one existing settlement are required.";
+	}
+	lookup = standalone.supplierInvoiceRegistration_read("Supplier_Invoices","Registration_Key",operationKey).toMap();
+	if(lookup.get("success") != true)
+	{
+		throw lookup.get("message");
+	}
+	existingInvoices = lookup.get("records");
+	if(existingInvoices.size() > 1)
+	{
+		throw "Duplicate operation keys require review.";
+	}
+	plan = Map();
+	invoiceRecord = Map();
+	if(existingInvoices.size() == 1)
+	{
+		invoiceRecord = existingInvoices.get(0);
+		invoiceId = invoiceRecord.get("id").toString();
+		result.put("invoice_id",invoiceId);
+		plan = invoiceRecord.get("Registration_Request").toString().toMap();
+		if(plan.get("input") != requestJson)
+		{
+			throw "This operation already belongs to different invoice data. The existing invoice was not changed.";
+		}
+		if(invoiceRecord.get("Registration_Status") == "Complete")
+		{
+			result.put("success",true);
+			result.put("retryable",false);
+			result.put("message","Invoice already registered.");
+			return result.toString();
+		}
+		if(invoiceRecord.get("Status") != "Received" || ifnull(invoiceRecord.get("Amount_Paid"),0).toDecimal() != 0)
+		{
+			throw "The incomplete invoice has changed or has payments. Review it before resuming registration.";
+		}
+	}
+	// An explicit rejection before insert allows the widget to unlock its form.
+	result.put("retryable",invoiceId != "");
+	name = ifnull(invoiceInput.get("Name"),"").toString().trim();
+	invoiceType = ifnull(invoiceInput.get("Invoice_Type"),"").toString();
+	invoiceDate = ifnull(invoiceInput.get("Invoice_Date"),"").toString();
+	fileId = ifnull(request.get("file_id"),"").toString();
+	if(name == "" || name.length() > 120 || !invoiceDate.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") || !"Proforma,Final Invoice,Tickets,Commission".toList(",").contains(invoiceType))
+	{
+		throw "Invoice number, date and a valid invoice type are required.";
+	}
+	checkedDate = invoiceDate.toDate("yyyy-MM-dd");
+	if(checkedDate.toString("yyyy-MM-dd") != invoiceDate)
+	{
+		throw "Invalid invoice date.";
+	}
+	if(invoiceType == "Final Invoice" && fileId == "")
+	{
+		throw "Upload the invoice document before registering a Final Invoice.";
+	}
+	if(fileId != "" && !fileId.matches("[A-Za-z0-9_-]+"))
+	{
+		throw "Invalid invoice document ID.";
+	}
+	monetaryFields = "Invoice_Amount_Excl_VAT,Invoice_Amount_Incl_VAT,VAT_Amount,IRPF_Amount,Additional_Amount_Excl_VAT,Additional_Amount_Incl_VAT,Additional_VAT_Amount,Additional_IRPF_Amount,Reimbursable_Expense,Invoice_Total,Total_Payable_Amount".toList(",");
+	rateFields = "VAT_percentage,IRPF_percentage,Additional_VAT_percentage,Additional_IRPF_percentage".toList(",");
+	values = Map();
+	for each  fieldName in monetaryFields
+	{
+		value = ifnull(invoiceInput.get(fieldName),0).toDecimal();
+		if(value < 0 || value != value.round(2))
+		{
+			throw "Invalid amount in " + fieldName + ". Use non-negative amounts with at most two decimals.";
+		}
+		values.put(fieldName,value);
+	}
+	for each  fieldName in rateFields
+	{
+		value = ifnull(invoiceInput.get(fieldName),0).toDecimal();
+		if(value < 0 || value > 100 || value != value.round(2))
+		{
+			throw "Invalid percentage in " + fieldName + ".";
+		}
+		values.put(fieldName,value);
+	}
+	net = values.get("Invoice_Amount_Excl_VAT");
+	gross = values.get("Invoice_Amount_Incl_VAT");
+	vatRate = values.get("VAT_percentage");
+	if(request.get("amount_mode") != "net" && request.get("amount_mode") != "gross")
+	{
+		throw "Invalid invoice amount mode.";
+	}
+	if(gross <= 0)
+	{
+		throw "The invoice amount must be greater than zero.";
+	}
+	if(request.get("amount_mode") == "net")
+	{
+		if(gross != (net * (1 + vatRate / 100)).round(2))
+		{
+			throw "The invoice base and VAT-inclusive amount do not agree.";
+		}
+	}
+	else
+	{
+		if(net != (gross / (1 + vatRate / 100)).round(2))
+		{
+			throw "The invoice base and VAT-inclusive amount do not agree.";
+		}
+	}
+	additionalBase = values.get("Additional_Amount_Excl_VAT");
+	additionalGross = (additionalBase * (1 + values.get("Additional_VAT_percentage") / 100)).round(2);
+	irpf = (net * values.get("IRPF_percentage") / 100).round(2);
+	additionalIrpf = (additionalBase * values.get("Additional_IRPF_percentage") / 100).round(2);
+	total = (gross + additionalGross - irpf - additionalIrpf).round(2);
+	payable = (total + values.get("Reimbursable_Expense")).round(2);
+	if(values.get("VAT_Amount") != (gross - net).round(2) || values.get("IRPF_Amount") != irpf || values.get("Additional_Amount_Incl_VAT") != additionalGross || values.get("Additional_VAT_Amount") != (additionalGross - additionalBase).round(2) || values.get("Additional_IRPF_Amount") != additionalIrpf || values.get("Invoice_Total") != total || values.get("Total_Payable_Amount") != payable || total <= 0 || payable <= 0)
+	{
+		throw "Invoice tax amounts and totals do not agree. Review the form before registering.";
+	}
+	// Read failures remain retryable; validation failures never lead to a write.
+	result.put("retryable",true);
+	supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+	if(supplier.get("id") == null)
+	{
+		throw "Could not verify the supplier.";
+	}
+	if((irpf > 0 || additionalIrpf > 0) && supplier.get("Is_Self_Employed") != true)
+	{
+		result.put("retryable",invoiceId != "");
+		throw "IRPF requires a self-employed supplier.";
+	}
+	settlementIds = List();
+	settlementRecords = Map();
+	allocated = 0.0;
+	primarySettlementId = "";
+	primaryLookup = invoiceInput.get("Supplier_Settlement");
+	if(primaryLookup != null)
+	{
+		primarySettlementId = ifnull(primaryLookup.get("id"),"").toString();
+	}
+	for each  allocation in allocations
+	{
+		settlementId = ifnull(allocation.get("settlement_id"),"").toString();
+		amount = ifnull(allocation.get("amount"),0).toDecimal();
+		if(!settlementId.matches("[0-9]+") || settlementIds.contains(settlementId) || amount <= 0 || amount != amount.round(2))
+		{
+			result.put("retryable",invoiceId != "");
+			throw "Each settlement must have one positive allocation with at most two decimals.";
+		}
+		settlement = zoho.crm.getRecordById("Supplier_Settlements",settlementId.toLong());
+		if(settlement.get("id") == null)
+		{
+			throw "Could not verify settlement " + settlementId;
+		}
+		if(settlement.get("Supplier") == null || settlement.get("Supplier").get("id").toString() != supplierId || settlement.get("Booking") == null || ifnull(settlement.get("Currency"),"EUR") != "EUR")
+		{
+			result.put("retryable",invoiceId != "");
+			throw "A settlement must belong to this supplier, have a booking and use EUR.";
+		}
+		booking = zoho.crm.getRecordById("Deals",settlement.get("Booking").get("id").toLong());
+		if(booking.get("id") == null)
+		{
+			throw "Could not verify the settlement booking.";
+		}
+		if(invoiceId == "" && ifnull(settlement.get("Total_Invoice"),0).toDecimal() + amount > ifnull(settlement.get("Total_Service_Cost"),0).toDecimal())
+		{
+			confirmed = ifnull(request.get("confirmed_excess"),List());
+			if(!confirmed.contains(settlementId))
+			{
+				result.put("retryable",false);
+				throw "Settlement " + settlementId + " exceeds its service cost. Review and confirm the excess before registering.";
+			}
+		}
+		if(settlementId == primarySettlementId)
+		{
+			primaryBooking = booking;
+		}
+		settlementIds.add(settlementId);
+		settlementRecords.put(settlementId,settlement);
+		allocated = allocated + amount;
+	}
+	if(!settlementIds.contains(primarySettlementId) || allocated.round(2) != payable)
+	{
+		result.put("retryable",invoiceId != "");
+		throw "Select the primary settlement and allocate the entire Total Payable Amount, including reimbursable expenses.";
+	}
+	if(invoiceId == "")
+	{
+		// Snapshot informational service lines before writing the invoice. Their cost
+		// is not used to compute invoice allocations; partial invoices remain allowed.
+		plannedLines = List();
+		for each  settlementId in settlementIds
+		{
+			servicesResult = standalone.supplierInvoiceRegistration_read("Booking_Services","Supplier_Settlement",settlementId).toMap();
+			if(servicesResult.get("success") != true)
+			{
+				throw servicesResult.get("message");
+			}
+			for each  service in servicesResult.get("records")
+			{
+				if(service.get("Status_EZUS") != "Cancelled" && service.get("Status_EZUS") != "Canceled")
+				{
+					serviceLine = {"Booking_Service":{"id":service.get("id")},"Amount":ifnull(service.get("Total_Purchase_Price"),0).toDecimal().round(2),"Line_Type":"Normal"};
+					if(service.get("Service_Date") != null)
+					{
+						serviceLine.put("Service_Date",service.get("Service_Date"));
+					}
+					plannedLines.add(serviceLine);
+				}
+			}
+		}
+		plan = {"input":requestJson,"lines":plannedLines};
+		if(plan.toString().length() > 30000)
+		{
+			result.put("retryable",false);
+			throw "This invoice has too many service details for a recoverable registration. Split the registration before saving.";
+		}
+		payload = values.toString().toMap();
+		payload.put("Name",name);
+		payload.put("Supplier",{"id":supplierId});
+		payload.put("Supplier_Name",supplier.get("Vendor_Name"));
+		payload.put("Supplier_Code",ifnull(supplier.get("TP_Reference"),""));
+		payload.put("Ezus_Supplier_Reference",ifnull(supplier.get("Ezus_Supplier_API"),""));
+		payload.put("Supplier_Settlement",{"id":primarySettlementId});
+		payload.put("Booking",{"id":primaryBooking.get("id")});
+		payload.put("MFSP_Reference",ifnull(primaryBooking.get("MFSP_Reference"),""));
+		payload.put("Invoice_Date",invoiceDate);
+		payload.put("Invoice_Type",invoiceType);
+		payload.put("Currency","EUR");
+		payload.put("Status","Received");
+		payload.put("Amount_Paid",0);
+		payload.put("Registration_Key",operationKey);
+		payload.put("Registration_Request",plan.toString());
+		payload.put("Registration_Status","Pending");
+		if(fileId != "")
+		{
+			payload.put("Invoice_File",{{"File_Id__s":fileId}});
+		}
+		result.put("phase","create_invoice");
+		body = {"data":{payload},"trigger":{"workflow"}};
+		createResponse = invokeurl
+		[
+			url :"https://www.zohoapis.eu/crm/v8/Supplier_Invoices"
+			type :POST
+			parameters:body.toString()
+			headers:{"Content-Type":"application/json"}
+			connection:"crm_oauth_connection"
+		];
+		if(createResponse.get("data") == null || createResponse.get("data").isEmpty())
+		{
+			throw "CRM did not confirm invoice creation. Retry the same operation.";
+		}
+		created = createResponse.get("data").get(0);
+		details = ifnull(created.get("details"),Map());
+		candidateId = ifnull(details.get("id"),"").toString();
+		if(created.get("code") == "DUPLICATE_DATA" && candidateId != "")
+		{
+			candidate = zoho.crm.getRecordById("Supplier_Invoices",candidateId.toLong());
+			if(candidate.get("id") == null)
+			{
+				throw "Could not verify the existing invoice. Retry the same operation.";
+			}
+			if(candidate.get("Registration_Key") != operationKey)
+			{
+				result.put("retryable",false);
+				throw "Invoice number already exists in CRM (" + candidateId + "). No new invoice was created. Review that invoice instead of changing its number to retry.";
+			}
+			invoiceId = candidateId;
+			result.put("invoice_id",invoiceId);
+			plan = candidate.get("Registration_Request").toString().toMap();
+			if(plan.get("input") != requestJson)
+			{
+				throw "The operation key was already used with different invoice data.";
+			}
+		}
+		else if(created.get("status") == "success" && candidateId != "")
+		{
+			invoiceId = candidateId;
+			result.put("invoice_id",invoiceId);
+		}
+		else
+		{
+			// Only explicit CRM rejections permit a new corrected request.
+			if(created.get("status") == "error")
+			{
+				result.put("retryable",false);
+			}
+			throw "Invoice creation was not confirmed: " + created.toString();
+		}
+	}
+	result.put("retryable",true);
+	// A workflow or manual edit must not silently change the invoice being resumed.
+	currentInvoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	if(currentInvoice.get("id") == null || currentInvoice.get("Registration_Key") != operationKey || currentInvoice.get("Status") != "Received" || ifnull(currentInvoice.get("Amount_Paid"),0).toDecimal() != 0)
+	{
+		throw "The invoice could not be verified or has changed. Review it before resuming registration.";
+	}
+	if(currentInvoice.get("Supplier") == null || currentInvoice.get("Supplier").get("id").toString() != supplierId || currentInvoice.get("Supplier_Settlement") == null || currentInvoice.get("Supplier_Settlement").get("id").toString() != primarySettlementId || currentInvoice.get("Booking") == null || currentInvoice.get("Booking").get("id").toString() != primaryBooking.get("id").toString())
+	{
+		throw "The invoice associations have changed. Review the existing invoice; no replacement was created.";
+	}
+	if(currentInvoice.get("Name") != name || currentInvoice.get("Invoice_Type") != invoiceType || currentInvoice.get("Invoice_Date") != invoiceDate || currentInvoice.get("Currency") != "EUR")
+	{
+		throw "The invoice details have changed. Review the existing invoice before resuming.";
+	}
+	for each  fieldName in values.keys()
+	{
+		if(ifnull(currentInvoice.get(fieldName),0).toDecimal() != values.get(fieldName).toDecimal())
+		{
+			throw "The saved invoice amount has changed: " + fieldName;
+		}
+	}
+	if(invoiceType == "Final Invoice" && (currentInvoice.get("Invoice_File") == null || currentInvoice.get("Invoice_File").isEmpty()))
+	{
+		throw "The saved invoice document is missing. Restore it before resuming registration.";
+	}
+	result.put("phase","allocations");
+	for each  allocation in allocations
+	{
+		settlementId = allocation.get("settlement_id").toString();
+		allocationKey = invoiceId + "-" + settlementId;
+		allocationValues = {"Name":allocationKey,"Vendor_Invoice":{"id":invoiceId},"Vendor_Settlement":{"id":settlementId},"Allocated_Amount":allocation.get("amount"),"Allocation_Date":invoiceDate,"Status":"Active","Allocation_Source":"Manual","Currency":"EUR"};
+		saved = standalone.supplierInvoiceRegistration_ensureRecord("Inv_Set_Allocations",allocationKey,allocationValues).toMap();
+		if(saved.get("success") != true)
+		{
+			throw saved.get("message");
+		}
+	}
+	result.put("phase","lines");
+	for each  plannedLine in plan.get("lines")
+	{
+		lineKey = invoiceId + "-" + plannedLine.get("Booking_Service").get("id");
+		plannedLine.put("Name",lineKey);
+		plannedLine.put("Supplier_Invoice",{"id":invoiceId});
+		plannedLine.put("Currency","EUR");
+		saved = standalone.supplierInvoiceRegistration_ensureRecord("Supplier_Invoice_Lines",lineKey,plannedLine).toMap();
+		if(saved.get("success") != true)
+		{
+			throw saved.get("message");
+		}
+	}
+	// Reject additional manual allocations instead of completing an overallocated invoice.
+	confirmedAllocations = standalone.supplierInvoiceRegistration_read("Inv_Set_Allocations","Vendor_Invoice",invoiceId).toMap();
+	if(confirmedAllocations.get("success") != true)
+	{
+		throw confirmedAllocations.get("message");
+	}
+	activeCount = 0;
+	activeAmount = 0.0;
+	for each  savedAllocation in confirmedAllocations.get("records")
+	{
+		if(savedAllocation.get("Status") == "Active")
+		{
+			activeCount = activeCount + 1;
+			activeAmount = activeAmount + ifnull(savedAllocation.get("Allocated_Amount"),0).toDecimal();
+		}
+	}
+	if(activeCount != allocations.size() || activeAmount.round(2) != payable)
+	{
+		throw "The invoice allocation total has changed. Review existing allocations before resuming.";
+	}
+	result.put("phase","settlement_totals");
+	ready = zoho.crm.updateRecord("Supplier_Invoices",invoiceId.toLong(),{"Registration_Status":"Ready"},{"trigger":List()});
+	if(ready.get("id") == null)
+	{
+		throw "Could not confirm that the invoice allocations are ready.";
+	}
+	settlementIdsString = "";
+	for each  settlementId in settlementIds
+	{
+		if(settlementIdsString != "")
+		{
+			settlementIdsString = settlementIdsString + "|||";
+		}
+		settlementIdsString = settlementIdsString + settlementId;
+	}
+	rebuild = standalone.rebuildSupplierSettlementTotals(settlementIdsString).toMap();
+	if(rebuild.get("error") != false)
+	{
+		throw "Invoice saved; settlement totals remain pending. " + ifnull(rebuild.get("message"),"");
+	}
+	finished = zoho.crm.updateRecord("Supplier_Invoices",invoiceId.toLong(),{"Registration_Status":"Complete"},{"trigger":List()});
+	if(finished.get("id") == null)
+	{
+		throw "Invoice saved; could not confirm completion of registration.";
+	}
+	result.put("success",true);
+	result.put("retryable",false);
+	result.put("phase","complete");
+	result.put("message","Invoice registered. No payment was created.");
+	result.put("warnings",ifnull(rebuild.get("warnings"),List()));
+}
+catch (e)
+{
+	result.put("message",e.toString());
+}
+return result.toString();
+}

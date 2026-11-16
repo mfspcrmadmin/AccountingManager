@@ -1,0 +1,102 @@
+string standalone.creator_getRenfePayments(string status, string paymentDateFrom, string paymentDateTo, string searchText)
+{
+result = {"success":false};
+params = {"max_records":200,"field_config":"all"};
+headers = Map();
+text = ifnull(searchText,"").trim();
+cursor = "";
+// Keep the existing function arguments compatible with older widgets.
+if(text.startsWith("{"))
+{
+	try 
+	{
+		request = text.toMap();
+		if(request.get("protocol") == "renfe-pages-v1")
+		{
+			text = ifnull(request.get("query"),"").toString();
+			cursor = ifnull(request.get("cursor"),"").toString();
+		}
+	}
+	catch (parseError)
+	{
+		// A literal search beginning with { remains a literal search.
+	}
+}
+criteria = "";
+if(text.trim() != "")
+{
+	text = text.trim().replaceAll("\"","").replaceAll("\\\\","");
+	criteria = "(MFSP_Reference.contains(\"" + text + "\") || Booking_Name.contains(\"" + text + "\") || Localizador_Ticket_RENFE.contains(\"" + text + "\"))";
+}
+try 
+{
+	if(ifnull(paymentDateFrom,"") != "")
+	{
+		fromDate = paymentDateFrom.toDate("yyyy-MM-dd").toString("dd-MMM-yyyy");
+		if(criteria != "")
+		{
+			criteria = criteria + " && ";
+		}
+		criteria = criteria + "Requested_Date >= \"" + fromDate + "\"";
+	}
+	if(ifnull(paymentDateTo,"") != "")
+	{
+		toDate = paymentDateTo.toDate("yyyy-MM-dd").toString("dd-MMM-yyyy");
+		if(criteria != "")
+		{
+			criteria = criteria + " && ";
+		}
+		criteria = criteria + "Requested_Date <= \"" + toDate + "\"";
+	}
+	if(criteria != "")
+	{
+		params.put("criteria",criteria);
+	}
+	if(cursor != "")
+	{
+		headers.put("record_cursor",cursor);
+	}
+	response = invokeurl
+	[
+		url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/All_Renfe_Payments"
+		type :GET
+		parameters:params
+		headers:headers
+		detailed:true
+		connection:"administrationmanager"
+	];
+	body = response.get("responseText").toString().toMap();
+	code = ifnull(body.get("code"),0).toLong();
+	if(code != 3000 && code != 3100)
+	{
+		result.put("message","Creator RENFE query failed: " + ifnull(body.get("message"),"Unknown response") + " (" + code + ")");
+		return result.toString();
+	}
+	records = List();
+	for each  payment in ifnull(body.get("data"),List())
+	{
+		record = {"id":payment.get("ID").toString(),"requested_date":ifnull(payment.get("Requested_Date"),""),"requested_by":ifnull(payment.get("Requested_By"),""),"booking_mfsp":ifnull(payment.get("MFSP_Reference"),""),"booking_name":ifnull(payment.get("Booking_Name"),""),"ticket_locator":ifnull(payment.get("Localizador_Ticket_RENFE"),""),"amount":ifnull(payment.get("Total_Tickets_Amount"),0),"observations":ifnull(payment.get("Observations"),"")};
+		records.add(record);
+	}
+	responseHeaders = ifnull(response.get("responseHeader"),ifnull(response.get("responseHeaders"),Map()));
+	nextCursor = "";
+	for each  headerName in responseHeaders.keys()
+	{
+		if(headerName.toLowerCase() == "record_cursor")
+		{
+			nextCursor = ifnull(responseHeaders.get(headerName),"").toString();
+		}
+	}
+	if(nextCursor != "" && (nextCursor == cursor || records.isEmpty()))
+	{
+		result.put("message","Creator returned an invalid continuation cursor. Refresh the search.");
+		return result.toString();
+	}
+	result = {"success":true,"records":records,"has_more":nextCursor != "","next_cursor":nextCursor};
+}
+catch (e)
+{
+	result.put("message","Creator RENFE payments could not be queried: " + e.toString());
+}
+return result.toString();
+}

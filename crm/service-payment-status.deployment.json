@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-16",
+  "status": "local_pending_deployment",
+  "historical_records_modified": false,
+  "rules_confirmed": {
+    "scope": "Only Booking_Services referenced by Supplier_Invoice_Lines participate in each invoice payment state.",
+    "fully_paid": "All active ordinary invoices containing the service are paid in full, irrespective of settlement service cost.",
+    "prepayments": "Services linked through Prepayment_Request_Services retain their current request-driven logic."
+  },
+  "refunds": "Enabled: actual Paid/Reconciled allocations on linked active credit notes produce Partially Refunded; Refunded requires every linked active credit note to be fully refunded. Refund states take precedence once money is returned. An unpaid credit note alone does not change the ordinary payment status. Cancellation/deletion/correction recomputes from current records. Prepayment services retain their existing rule.",
+  "deployment_order": [
+    "crm/supplierInvoiceRegistration_read.dg",
+    "crm/invoice-edit/supplierInvoiceEdit_write.dg",
+    "crm/syncSupplierServicePaymentStatus.dg",
+    "crm/rebuildSupplierSettlementTotals.dg"
+  ],
+  "activation": "Every successful settlement rebuild invokes service synchronization, even if settlement totals did not change. Caller receives an error if synchronization is incomplete and can retry.",
+  "verification": {
+    "automated_tests_passed": 120,
+    "live_crm_compile": false,
+    "live_financial_mutations": false,
+    "coverage": "Full/partial/unpaid, multiple invoice lines and invoices, prepayment/refund exclusions, cancellation/deletion, validation/read failures and retry after partial write. Refund partial/full progression, invoice amount correction, pending/cancelled payments, cancelled credit notes, deleted allocations/lines, multiple credit notes, reconciled refunds, refund overallocations and partial-write recovery."
+  },
+  "limits": [
+    "Does not infer service coverage from a settlement when an invoice has no service lines.",
+    "Supplier invoice creation currently includes all settlement services as invoice lines.",
+    "Direct CRM changes only propagate when their existing flow invokes the canonical settlement rebuild; no new workflows are deployed here.",
+    "No bulk historical backfill."
+  ]
+}

@@ -1,0 +1,137 @@
+string standalone.ensureSupplierPaymentAccount(String supplierId, String accountingAccountId)
+{
+res = {"error":true,"message":"","payment_account_id":"","created":false,"selection_required":true};
+// Compatibility: accountingAccountId remains an argument, but account configuration
+// Existing Payment_Accounts are preserved; missing accounts can use supplier bank details.
+try 
+{
+	supplierId = ifnull(supplierId,"").toString().trim();
+	if(!supplierId.matches("[0-9]+"))
+	{
+		throw "Choose a valid supplier.";
+	}
+	supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+	if(supplier == null || supplier.get("id") == null || !supplier.containKey("Default_Payment_Account"))
+	{
+		throw "Supplier or default payment account information could not be read.";
+	}
+	defaultId = ifnull(ifnull(supplier.get("Default_Payment_Account"),Map()).get("id"),"").toString().trim();
+	candidates = List();
+	if(defaultId != "")
+	{
+		defaultAccount = zoho.crm.getRecordById("Payment_Accounts",defaultId.toLong());
+		if(defaultAccount == null || defaultAccount.get("id") == null)
+		{
+			throw "The supplier default payment account could not be read. Review or select a separate payment account.";
+		}
+		candidates.add(defaultAccount);
+	}
+	else
+	{
+		candidates = zoho.crm.searchRecords("Payment_Accounts","(Owner_Supplier:equals:" + supplierId + ")",1,200);
+		if(candidates == null || candidates.size() >= 200)
+		{
+			throw "The supplier payment account search is incomplete. Select an account explicitly.";
+		}
+	}
+	eligible = List();
+	for each  account in candidates
+	{
+		if(account.get("id") == null)
+		{
+			throw "The supplier payment account search failed.";
+		}
+		ownerId = ifnull(ifnull(account.get("Owner_Supplier"),Map()).get("id"),"").toString();
+		method = ifnull(account.get("Method_Type"),"").toString().trim();
+		iban = ifnull(account.get("IBAN"),"").toString().trim();
+		hasMethod = "Bank Transfer,Airwallex,Card,Cash,SION,Other".toList(",").contains(method);
+		bankReady = method != "Bank Transfer" || iban != "";
+		if(ownerId == supplierId && account.get("Owner_Type") == "Supplier" && account.get("Status") == "Active" && account.get("Allowed_For_Supplier_Payments") == true && account.get("Locked__s") != true && hasMethod && bankReady)
+		{
+			eligible.add(account);
+		}
+	}
+	if(eligible.size() == 0)
+	{
+		if(defaultId != "")
+		{
+			throw "The supplier default payment account is inactive, incomplete or unavailable. Review or select a separate payment account.";
+		}
+		if(candidates.size() != 0)
+		{
+			throw "Existing supplier payment accounts are inactive, incomplete or unavailable. Review them before creating another account.";
+		}
+		sourceIban = ifnull(supplier.get("Account_Number"),"").toString().replaceAll("\\s","").toUpperCase();
+		beneficiary = ifnull(supplier.get("Tax_Name"),"").toString().trim();
+		if(beneficiary == "") { beneficiary = ifnull(supplier.get("Vendor_Name"),"").toString().trim(); }
+		if(sourceIban == "" || beneficiary == "")
+		{
+			throw "No supplier payment account exists. Complete the supplier bank account and beneficiary name, or select a separate payment account.";
+		}
+		if(!sourceIban.matches("[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}"))
+		{
+			throw "The supplier bank account is not in IBAN format. Review Account_Number before creating a payment account.";
+		}
+		accountCurrency = ifnull(supplier.get("Currency"),"").toString();
+		if(!"EUR,USD".toList(",").contains(accountCurrency)) { throw "Review the supplier currency before creating a payment account."; }
+		// Recheck before creation; do not create after a failed or incomplete read.
+		latestSupplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+		if(latestSupplier.get("id") == null || latestSupplier.get("Locked__s") == true || latestSupplier.get("Default_Payment_Account") != null || latestSupplier.get("Account_Number") != supplier.get("Account_Number") || latestSupplier.get("Tax_Name") != supplier.get("Tax_Name") || latestSupplier.get("Vendor_Name") != supplier.get("Vendor_Name") || latestSupplier.get("Currency") != supplier.get("Currency"))
+		{
+			throw "Supplier details changed or are unavailable. Reload before trying again.";
+		}
+		latestAccounts = zoho.crm.searchRecords("Payment_Accounts","(Owner_Supplier:equals:" + supplierId + ")",1,200);
+		if(latestAccounts == null || latestAccounts.size() != 0) { throw "Supplier payment accounts changed or could not be checked. Reload and review before trying again."; }
+		createMap = {"Name":(beneficiary + " | " + sourceIban).left(120),"Bank_Account_Name":beneficiary,"IBAN":sourceIban,"Owner_Type":"Supplier","Owner_Supplier":supplierId,"Method_Type":"Bank Transfer","Status":"Active","Allowed_For_Supplier_Payments":true,"Currency":accountCurrency};
+		// Accounting mapping is optional and is only assigned on the new account.
+		accountingAccountId = ifnull(accountingAccountId,"").toString().trim();
+		if(accountingAccountId != "")
+		{
+			if(!accountingAccountId.matches("[0-9]+")) { throw "Invalid accounting account identifier."; }
+			createMap.put("Accounting_Account",accountingAccountId);
+		}
+		res.put("requires_crm_review",true);
+		createdAccount = zoho.crm.createRecord("Payment_Accounts",createMap,{"trigger":List()});
+		if(createdAccount == null || createdAccount.get("id") == null)
+		{
+			throw "Payment account creation was not confirmed. Review Payment Accounts in CRM before retrying.";
+		}
+		res.put("created",true);
+		res.put("created_payment_account_id",createdAccount.get("id").toString());
+		eligible.add({"id":createdAccount.get("id")});
+	}
+	if(eligible.size() != 1)
+	{
+		throw "Several active supplier payment accounts exist. Select the account to use or set a default.";
+	}
+	accountId = eligible.get(0).get("id").toString();
+	// Re-read the selected account to detect changes since the search.
+	account = zoho.crm.getRecordById("Payment_Accounts",accountId.toLong());
+	if(account == null || account.get("id") == null)
+	{
+		throw "The selected payment account could not be read.";
+	}
+	ownerId = ifnull(ifnull(account.get("Owner_Supplier"),Map()).get("id"),"").toString();
+	method = ifnull(account.get("Method_Type"),"").toString().trim();
+	iban = ifnull(account.get("IBAN"),"").toString().trim();
+	hasMethod = "Bank Transfer,Airwallex,Card,Cash,SION,Other".toList(",").contains(method);
+	if(ownerId != supplierId || account.get("Owner_Type") != "Supplier" || account.get("Status") != "Active" || account.get("Allowed_For_Supplier_Payments") != true || account.get("Locked__s") == true || !hasMethod || method == "Bank Transfer" && iban == "")
+	{
+		throw "The selected supplier payment account changed or is unavailable. Review it before paying.";
+	}
+	res.put("error",false);
+	res.put("selection_required",false);
+	res.put("payment_account_id",accountId);
+	res.put("accounting_account_id",ifnull(ifnull(account.get("Accounting_Account"),Map()).get("id"),"").toString());
+	res.put("requires_crm_review",false);
+	res.put("message",if(res.get("created") == true,"Supplier payment account created from supplier bank details.","Existing supplier payment account ready."));
+}
+catch (e)
+{
+	res.put("error",true);
+	res.put("selection_required",true);
+	res.put("payment_account_id","");
+	res.put("message",e.toString());
+}
+return res.toString();
+}

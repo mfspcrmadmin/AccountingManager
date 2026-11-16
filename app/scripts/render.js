@@ -46,6 +46,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var isPaymentLetterBusy = Boolean(state.paymentLetter && state.paymentLetter.isBusy);
 
       elements.loadSupplier.disabled = state.isLoading;
+      var searchClear = global.document.getElementById('clear-supplier-search');
+      if (searchClear) { searchClear.hidden = !elements.supplierSearch.value; }
       elements.createInvoiceFromSupplier.disabled = state.isLoading || !state.supplierId;
       if (elements.createRefundFromSupplier) {
         elements.createRefundFromSupplier.disabled = state.isLoading || !state.supplierId;
@@ -82,6 +84,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.selectedInvoiceDelete.disabled = state.isLoading || isInvoiceDeletionBusy || !hasSelectedInvoice;
       }
       if (elements.selectedInvoiceSyncAccounting) {
+        elements.selectedInvoiceSyncAccounting.hidden = ns.ACCOUNTING_ENTRY_GENERATION_ENABLED !== true;
         elements.selectedInvoiceSyncAccounting.disabled = state.isLoading || isInvoiceDeletionBusy || isInvoiceAccountingBusy || !hasSelectedInvoice;
         elements.selectedInvoiceSyncAccounting.textContent = isInvoiceAccountingBusy && state.invoiceAccounting.action === "sync"
           ? "Syncing..."
@@ -142,6 +145,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.selectedPaymentDelete.disabled = state.isLoading || isPaymentLetterBusy || isPaymentAccountingBusy || !hasSelectedPayment;
       }
       if (elements.selectedPaymentSyncAccounting) {
+        elements.selectedPaymentSyncAccounting.hidden = ns.ACCOUNTING_ENTRY_GENERATION_ENABLED !== true;
         elements.selectedPaymentSyncAccounting.disabled = state.isLoading || isPaymentLetterBusy || isPaymentAccountingBusy || !hasSelectedPayment;
         elements.selectedPaymentSyncAccounting.textContent = isPaymentAccountingBusy && state.paymentAccounting.action === "sync"
           ? "Syncing..."
@@ -466,14 +470,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     function hideSearchResults() {
       elements.searchResultsCard.hidden = true;
+      elements.supplierSearch.setAttribute("aria-expanded", "false");
       elements.searchResultsCount.textContent = "0 matches";
       elements.searchResultsBody.innerHTML = '<tr><td colspan="3" class="table-empty">No suppliers found.</td></tr>';
     }
 
     function showSupplierSearchEmpty() {
-      elements.searchResultsCard.hidden = false;
-      elements.searchResultsCount.textContent = "0 matches";
-      elements.searchResultsBody.innerHTML = '<tr><td colspan="3" class="table-empty">No suppliers found. Try another name or reference.</td></tr>';
+      hideSearchResults();
+      feedback.show("No suppliers found", { tone: "neutral" }, "supplier-search");
     }
 
     function renderSearchResults(records, onSelected) {
@@ -483,13 +487,13 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       elements.searchResultsCard.hidden = false;
+      elements.supplierSearch.setAttribute("aria-expanded", "true");
       elements.searchResultsCount.textContent = records.length + (records.length === 1 ? " match" : " matches");
       elements.searchResultsBody.innerHTML = records.map(function (record) {
         return [
           '<tr class="is-clickable" tabindex="0" data-supplier-id="' + helpers.escapeHtml(record.id) + '">',
-          "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.name) || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.connectionReference) || "-") + "</td>",
-          "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.ezusReference) || "-") + "</td>",
+          "  <td colspan=\"3\"><strong>" + helpers.escapeHtml(helpers.getCandidateValue(record, fieldCandidates.supplier.name) || "-") + "</strong><small>" +
+            helpers.escapeHtml([helpers.getCandidateValue(record, fieldCandidates.supplier.connectionReference), helpers.getCandidateValue(record, fieldCandidates.supplier.ezusReference)].filter(Boolean).join(" · ")) + "</small></td>",
           "</tr>"
         ].join("");
       }).join("");
@@ -497,6 +501,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       Array.prototype.forEach.call(elements.searchResultsBody.querySelectorAll("tr[data-supplier-id]"), function (row) {
         row.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") { event.preventDefault(); row.click(); }
+          if (event.key === "Escape") { event.preventDefault(); hideSearchResults(); elements.supplierSearch.focus(); }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            var next = event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling;
+            if (next) { next.focus(); } else if (event.key === "ArrowUp") { elements.supplierSearch.focus(); }
+          }
         });
         row.addEventListener("click", function () {
           var supplierId = row.getAttribute("data-supplier-id");
@@ -773,6 +783,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var supplierInvoiceSortLabels = {
         invoice: "Invoice",
         status: "Status",
+        invoiceType: "Invoice Type",
         date: "Invoice Date",
         booking: "Booking",
         total: "Total",
@@ -787,6 +798,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             helpers.getInvoiceDisplayNumber(right, fieldCandidates),
             supplierInvoiceSort.direction
           );
+        }
+
+        if (supplierInvoiceSort.key === "invoiceType") {
+          return compareSupplierActivityValues(left.Invoice_Type, right.Invoice_Type, supplierInvoiceSort.direction);
         }
 
         if (supplierInvoiceSort.key === "status") {
@@ -876,6 +891,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           '<tr class="supplier-activity-detail-trigger" data-supplier-activity-invoice-id="' + helpers.escapeHtml(invoice.id) + '">',
           "  <td>" + helpers.escapeHtml(helpers.getInvoiceDisplayNumber(invoice, fieldCandidates)) + "</td>",
           '  <td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(invoice.Status)) + '">' + helpers.escapeHtml(invoice.Status || "-") + "</span></td>",
+          "  <td>" + invoicesRenderer.formatInvoiceTypeBadge(invoice) + "</td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(invoice.Invoice_Date)) + "</td>",
           "  <td>" + helpers.escapeHtml(invoice._supplierPaymentDates == null ? "Unavailable" : (invoice._supplierPaymentDates.map(function (date) { return helpers.formatDate(date); }).join(", ") || "-")) + "</td>",
           "  <td>" + helpers.escapeHtml(helpersApi && helpersApi.getInvoiceBooking ? helpersApi.getInvoiceBooking(invoice) : (helpers.getLookupDisplayValue(invoice, fieldCandidates.invoice.booking) || "-")) + "</td>",
@@ -889,11 +905,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       elements.supplierPaymentsTableBody.innerHTML = payments.map(function (payment) {
         return [
           '<tr class="supplier-activity-detail-trigger" data-supplier-activity-payment-id="' + helpers.escapeHtml(payment.id) + '">',
+          '<td><button type="button" class="button secondary compact-action-button supplier-letter-preview-button" data-supplier-payment-letter="' + helpers.escapeHtml(payment.id) + '" title="Preview payment letter" aria-label="Preview payment letter for ' + helpers.escapeHtml(payment.Name || payment.id) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg></button></td>',
           "  <td>" + helpers.escapeHtml(helpers.getCandidateValue(payment, fieldCandidates.payment.reference) || payment.Name || "Untitled payment") + "</td>",
           '  <td><span class="status-pill ' + helpers.escapeHtml(helpers.getStatusTone(payment.Status)) + '">' + helpers.escapeHtml(payment.Status || "-") + "</span></td>",
           "  <td>" + helpers.escapeHtml(helpers.formatDate(payment.Payment_Date)) + "</td>",
           "  <td>" + helpers.escapeHtml(helpersApi && helpersApi.getPaymentBooking ? helpersApi.getPaymentBooking(payment) : "-") + "</td>",
-          "  <td>-</td>",
+          "  <td>" + helpers.escapeHtml(payment._supplierAccountDisplay || ns.paymentAccountLabel(payment)) + "</td>",
           '  <td class="numeric-cell">' + helpers.escapeHtml(helpers.formatCurrency(helpers.getPaymentAmount(payment, fieldCandidates))) + "</td>",
           "</tr>"
         ].join("");
@@ -918,7 +935,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       }
 
       if (showingInvoices) {
-        elements.supplierInvoicesEmpty.textContent = "No related invoices were found for this supplier.";
+        elements.supplierInvoicesEmpty.textContent = "No invoices for this supplier.";
         elements.supplierInvoicesEmpty.hidden = invoices.length > 0;
         elements.supplierInvoicesTableWrap.hidden = invoices.length === 0;
         elements.supplierPaymentsEmpty.hidden = true;
@@ -926,7 +943,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return;
       }
 
-      elements.supplierPaymentsEmpty.textContent = "No related payments were found for this supplier.";
+      elements.supplierPaymentsEmpty.textContent = "No payments for this supplier.";
       elements.supplierPaymentsEmpty.hidden = payments.length > 0;
       elements.supplierPaymentsTableWrap.hidden = payments.length === 0;
       elements.supplierInvoicesEmpty.hidden = true;
@@ -936,11 +953,6 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
     function renderSupplierActivityDetailPopup(detail) {
       var isInvoice = detail && detail.type === "invoice";
       var record = detail && detail.record;
-      var relatedRecords = isInvoice ? detail.lines : detail && detail.allocations;
-      var summary;
-      var relatedTitle;
-      var relatedHeaders;
-      var relatedRows;
 
       if (!elements.supplierActivityDetailPopup) {
         return;
@@ -956,38 +968,97 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         ? helpers.getInvoiceDisplayNumber(record, fieldCandidates)
         : (helpers.getCandidateValue(record, fieldCandidates.payment.reference) || record.Name || "Payment");
 
-      summary = isInvoice ? [
-        ["Status", record.Status || "-"],
-        ["Date", helpers.formatDate(record.Invoice_Date)],
-        ["Booking", helpers.getLookupDisplayValue(record, fieldCandidates.invoice.booking) || "-"],
-        ["Total", helpers.formatCurrency(helpers.getInvoiceTotalAmount(record, fieldCandidates))],
-        ["Paid", helpers.formatCurrency(record.Amount_Paid)],
-        ["Pending", helpers.formatCurrency(helpers.getInvoicePendingAmount(record, fieldCandidates))]
-      ] : [
-        ["Status", record.Status || "-"],
-        ["Date", helpers.formatDate(record.Payment_Date)],
-        ["Type", helpers.getCandidateValue(record, fieldCandidates.payment.movementType) || "-"],
-        ["Payment account", helpers.getLookupName(record.Payment_Account) || "-"],
-        ["Amount", helpers.formatCurrency(helpers.getPaymentAmount(record, fieldCandidates))]
-      ];
-      relatedTitle = isInvoice ? "Invoice lines" : "Payment allocations";
-      relatedHeaders = isInvoice ? ["Service date", "Service", "Amount"] : ["Invoice", "Booking", "Amount", "Date"];
-      relatedRows = (relatedRecords || []).map(function (item) {
-        return isInvoice
-          ? "<tr><td>" + helpers.escapeHtml(helpers.formatDate(item.Service_Date)) + "</td><td>" + helpers.escapeHtml(helpers.getLookupName(item.Booking_Service) || item.Name || "-") + "</td><td class=\"numeric-cell\">" + helpers.escapeHtml(helpers.formatCurrency(item.Amount)) + "</td></tr>"
-          : "<tr><td>" + helpers.escapeHtml(helpers.getLookupName(item.Supplier_Invoice) || item.Name || "-") + "</td><td>" + helpers.escapeHtml(helpers.getLookupName(item.Booking) || "-") + "</td><td class=\"numeric-cell\">" + helpers.escapeHtml(helpers.formatCurrency(item.Allocated_Amount)) + "</td><td>" + helpers.escapeHtml(helpers.formatDate(item.Allocation_Date)) + "</td></tr>";
-      }).join("");
+      elements.supplierActivityDetailPopup.classList.toggle("is-invoice", isInvoice);
+      elements.supplierActivityDetailPopup.classList.toggle("is-payment", !isInvoice);
+      if (elements.supplierActivityDetailStatus) {
+        elements.supplierActivityDetailStatus.hidden = false;
+        elements.supplierActivityDetailStatus.textContent = record.Status || "-";
+        elements.supplierActivityDetailStatus.classList.toggle("is-paid", record.Status === "Paid");
+      }
+      if (isInvoice) {
+        renderSupplierInvoiceDetail(detail);
+        return;
+      }
 
-      elements.supplierActivityDetailContent.innerHTML = detail.isLoading
-        ? '<div class="empty-state">Loading related information...</div>'
-        : '<div class="supplier-activity-detail-summary">' + summary.map(function (item) {
-          return "<div><span>" + helpers.escapeHtml(item[0]) + "</span><strong>" + helpers.escapeHtml(item[1]) + "</strong></div>";
-        }).join("") + "</div>" +
-          '<section class="supplier-activity-detail-section"><h3>' + relatedTitle + " (" + relatedRecords.length + ")</h3>" +
-          (relatedRecords.length
-            ? '<div class="table-wrap"><table class="results-table mini-results-table"><thead><tr>' + relatedHeaders.map(function (label) { return "<th>" + label + "</th>"; }).join("") + "</tr></thead><tbody>" + relatedRows + "</tbody></table></div>"
-            : '<div class="empty-state">No related records found.</div>') +
-          "</section>";
+      renderSupplierPaymentDetail(detail);
+    }
+
+    function renderSupplierPaymentDetail(detail) {
+      var previousScroll = elements.supplierActivityDetailContent.querySelector(".supplier-invoice-lines-scroll");
+      var scrollTop = previousScroll ? previousScroll.scrollTop : 0;
+      if (previousScroll && previousScroll._progressiveTable && previousScroll._progressiveTable.observer) { previousScroll._progressiveTable.observer.disconnect(); }
+
+      var record = detail.record, escape = helpers.escapeHtml;
+      var amount = helpers.firstValue(record, fieldCandidates.payment.amount);
+      var allocations = detail.allocations || [];
+      function money(value) {
+        return value === null || value === undefined || value === "" ? "-" : helpers.formatCurrency(value);
+      }
+      function lookup(display, fallback) {
+        return '<span' + (display && display.error ? ' class="lookup-unavailable"' : '') + '>' + escape(display ? display.text : fallback) + '</span>';
+      }
+      var accountFallback = ns.paymentAccountLabel(record, detail.isLoading);
+      elements.supplierActivityDetailContent.innerHTML =
+        '<div class="supplier-payment-amount"><span>Payment amount</span><strong>' + escape(money(amount)) + '</strong></div>' +
+        '<dl class="supplier-invoice-identification supplier-payment-identification"><div><dt>Payment date</dt><dd>' + escape(helpers.formatDate(record.Payment_Date)) +
+        '</dd></div><div><dt>Payment type</dt><dd>' + escape(helpers.getCandidateValue(record, fieldCandidates.payment.movementType) || "-") +
+        '</dd></div><div><dt>Payment account</dt><dd>' + lookup(detail.accountDisplay, accountFallback) + '</dd></div></dl>' +
+        '<section class="supplier-invoice-lines supplier-payment-allocations"><h3>Payment allocations <span class="supplier-invoice-count">' + (detail.isLoading || detail.error ? '' : allocations.length + ' loaded') + '</span></h3>' +
+        (detail.isLoading ? '<div class="empty-state" role="status">Loading payment allocations...</div>' : detail.error ? '<div class="empty-state" role="alert">' + escape(detail.error) + '</div>' : allocations.length ?
+          '<div class="supplier-invoice-lines-scroll" tabindex="0" role="region" aria-label="Payment allocations"><table><colgroup><col style="width:30%"><col style="width:32%"><col style="width:17%"><col style="width:21%"></colgroup><thead><tr><th scope="col">Invoice</th><th scope="col">Booking</th><th scope="col">Date</th><th scope="col">Allocated amount</th></tr></thead><tbody>' +
+          allocations.map(function (allocation) {
+            return '<tr><td>' + lookup(allocation._invoiceDisplay, 'Invoice unavailable') + '</td><td>' + lookup(allocation._bookingDisplay, 'Booking unavailable') + '</td><td>' + escape(helpers.formatDate(allocation.Allocation_Date)) + '</td><td>' + escape(money(allocation.Allocated_Amount)) + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty-state">No related records found.</div>') + '</section>';
+      if (detail.table) {
+        var section = elements.supplierActivityDetailContent.querySelector(".supplier-invoice-lines");
+        var wrap = section.querySelector(".supplier-invoice-lines-scroll");
+        if (!wrap) { wrap = global.document.createElement("div"); wrap.className = "supplier-invoice-lines-scroll"; section.appendChild(wrap); }
+        var empty = section.querySelector(".empty-state");
+        ns.renderProgressiveTable(wrap, empty, detail.table, detail.table.onLoadMore);
+        wrap.scrollTop = scrollTop;
+      }
+
+    }
+
+    function renderSupplierInvoiceDetail(detail) {
+      var previousScroll = elements.supplierActivityDetailContent.querySelector(".supplier-invoice-lines-scroll");
+      var scrollTop = previousScroll ? previousScroll.scrollTop : 0;
+      if (previousScroll && previousScroll._progressiveTable && previousScroll._progressiveTable.observer) { previousScroll._progressiveTable.observer.disconnect(); }
+
+      var record = detail.record;
+      var fields = fieldCandidates.invoice;
+      var escape = helpers.escapeHtml;
+      var totalValue = helpers.firstValue(record, fields.totalAmount.concat(fields.amount));
+      var paidValue = helpers.firstValue(record, fields.amountPaid);
+      var pendingValue = helpers.firstValue(record, fields.unpaidAmount);
+      var hasTotal = totalValue !== "";
+      var hasPending = pendingValue !== "" || (hasTotal && paidValue !== "");
+      var pending = hasPending ? helpers.getInvoicePendingAmount(record, fieldCandidates) : null;
+      var lines = detail.lines || [];
+      function money(value) {
+        return value === null || value === undefined || value === "" ? "-" : helpers.formatCurrency(value);
+      }
+      elements.supplierActivityDetailContent.innerHTML =
+        '<dl class="supplier-invoice-identification"><div><dt>Invoice date</dt><dd>' + escape(helpers.formatDate(record.Invoice_Date)) +
+        '</dd></div><div><dt>Booking</dt><dd>' + escape(helpers.getLookupDisplayValue(record, fields.booking) || "-") + '</dd></div></dl>' +
+        '<dl class="supplier-invoice-totals"><div class="invoice-total"><dt>Invoice total</dt><dd>' + escape(money(hasTotal ? helpers.getInvoiceTotalAmount(record, fieldCandidates) : null)) +
+        '</dd></div><div><dt>Paid</dt><dd>' + escape(money(paidValue)) +
+        '</dd></div><div class="' + (pending > 0 ? 'has-pending' : '') + '"><dt>Pending</dt><dd>' + escape(money(pending)) + '</dd></div></dl>' +
+        '<section class="supplier-invoice-lines"><h3>Invoice lines <span class="supplier-invoice-count">' + (detail.isLoading ? '' : lines.length + ' loaded') + '</span></h3>' +
+        (detail.isLoading ? '<div class="empty-state">Loading related information...</div>' : lines.length ?
+          '<div class="supplier-invoice-lines-scroll" tabindex="0" role="region" aria-label="Invoice lines"><table><colgroup><col style="width:20%"><col style="width:60%"><col style="width:20%"></colgroup><thead><tr><th scope="col">Service date</th><th scope="col">Service</th><th scope="col">Amount</th></tr></thead><tbody>' +
+          lines.map(function (line) {
+            return '<tr><td>' + escape(helpers.formatDate(line.Service_Date)) + '</td><td>' + escape(line._serviceProductDescription || "-") + '</td><td>' + escape(money(line.Amount)) + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty-state">No related records found.</div>') + '</section>';
+      if (detail.table) {
+        var section = elements.supplierActivityDetailContent.querySelector(".supplier-invoice-lines");
+        var wrap = section.querySelector(".supplier-invoice-lines-scroll");
+        if (!wrap) { wrap = global.document.createElement("div"); wrap.className = "supplier-invoice-lines-scroll"; section.appendChild(wrap); }
+        var empty = section.querySelector(".empty-state");
+        ns.renderProgressiveTable(wrap, empty, detail.table, detail.table.onLoadMore);
+        wrap.scrollTop = scrollTop;
+      }
+
     }
 
     function renderBookingsWorkspace(view) {
@@ -1042,7 +1113,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             return [
               '<label class="bookings-stage-option">',
               '  <input type="checkbox" data-booking-stage-value="' + helpers.escapeHtml(option.value) + '"' + (isChecked ? " checked" : "") + '>',
-              '  <span>' + helpers.escapeHtml(option.label) + "</span>",
+              '  <span class="status-pill ' + helpers.getBookingStatusTone(option.value) + '">' + helpers.escapeHtml(option.label) + "</span>",
               "</label>"
             ].join("");
           }).join("")
@@ -1060,10 +1131,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         {"key": "actions", "label": "Actions", "defaultWidth": 44},
         {"key": "closureStatus", "label": "Closure Status", "defaultWidth": 200},
         {"key": "mfsp", "label": "MFSP", "defaultWidth": 140},
-        {"key": "name", "label": "Booking Name", "defaultWidth": 250},
+        {"key": "name", "label": "Booking Name", "defaultWidth": 250, "flex": true},
         {"key": "arrivalDate", "label": "Arrival Date", "defaultWidth": 140},
         {"key": "departureDate", "label": "Departure Date", "defaultWidth": 140},
-        {"key": "agency", "label": "Agency", "defaultWidth": 200},
+        {"key": "agency", "label": "Agency", "defaultWidth": 200, "flex": true},
         {"key": "consortia", "label": "Consortia", "defaultWidth": 170},
         {"key": "iataCode", "label": "IATA Code", "defaultWidth": 130},
         {"key": "stage", "label": "Stage", "defaultWidth": 220},
@@ -1077,7 +1148,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         {"key": "totalRefundAmount", "label": "Total Refund Amount", "defaultWidth": 170},
         {"key": "totalRequestedAmount", "label": "Total Requested Amount", "defaultWidth": 200},
         {"key": "agentCommissionAmount", "label": "Agent Commission Amount", "defaultWidth": 210},
-        {"key": "accountingRep", "label": "Accounting Rep", "defaultWidth": 190}
+        {"key": "accountingRep", "label": "Accounting Rep", "defaultWidth": 190, "flex": true}
       ];
       ns.tableColumns.configure("bookings", bookingColumns, function () { renderBookingsWorkspace(view); });
       var visibleBookingColumns = ns.tableColumns.visibleOrder("bookings");
@@ -1091,9 +1162,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         elements.bookingsEmpty.hidden = false;
         elements.bookingsTableWrap.hidden = true;
         elements.bookingsTableBody.innerHTML = "";
-        if (elements.bookingsPaginationBar) {
-          elements.bookingsPaginationBar.hidden = true;
-        }
+        ns.renderProgressiveTable(elements.bookingsTableWrap, elements.bookingsEmpty, view, view.onLoadMore);
         return;
       }
 
@@ -1110,7 +1179,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
             '    <button type="button" data-booking-row-action="trip-closure">Trip Closure</button>' +
             '    <button type="button" data-booking-row-action="pay-agent-commission">Pay Agent Commission</button>' +
             "  </div></details></td>",
-          closureStatus: '  <td><button type="button" class="status-pill booking-closure-status-button ' + helpers.escapeHtml(helpers.getStatusTone(closureStatusValue)) + '" data-booking-row-action="trip-closure" title="Open trip closure">' + helpers.escapeHtml(closureStatusValue) + "</button></td>",
+          closureStatus: '  <td><button type="button" class="status-pill booking-closure-status-button ' + helpers.escapeHtml(helpers.getBookingStatusTone(closureStatusValue)) + '" data-booking-row-action="trip-closure" title="Open trip closure">' + helpers.escapeHtml(closureStatusValue) + "</button></td>",
           mfsp: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.mfsp)) + "</td>",
           name: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.name)) + "</td>",
           arrivalDate: "  <td>" + helpers.escapeHtml(view.formatters.date(record, bookingCandidates.arrivalDate)) + "</td>",
@@ -1118,7 +1187,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           agency: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.agency)) + "</td>",
           consortia: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.consortia)) + "</td>",
           iataCode: "  <td>" + helpers.escapeHtml(view.formatters.text(record, bookingCandidates.iataCode)) + "</td>",
-          stage: "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getStatusTone(stageValue)) + "\">" + helpers.escapeHtml(stageValue) + "</span></td>",
+          stage: "  <td><span class=\"status-pill " + helpers.escapeHtml(helpers.getBookingStatusTone(stageValue)) + "\">" + helpers.escapeHtml(stageValue) + "</span></td>",
           travellersNumber: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.number(record, bookingCandidates.travellersNumber)) + "</td>",
           salesPrice: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.salesPrice)) + "</td>",
           purchasePrice: '  <td class="numeric-cell">' + helpers.escapeHtml(view.formatters.currency(record, bookingCandidates.purchasePrice)) + "</td>",
@@ -1136,18 +1205,8 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
       elements.bookingsEmpty.hidden = true;
       elements.bookingsTableWrap.hidden = false;
-      if (elements.bookingsPaginationBar) {
-        elements.bookingsPaginationBar.hidden = view.page <= 1 && !view.hasMore;
-      }
-      if (elements.bookingsPaginationCopy) {
-        elements.bookingsPaginationCopy.textContent = view.pageSummary;
-      }
-      if (elements.bookingsPrevPage) {
-        elements.bookingsPrevPage.disabled = state.isLoading || view.page <= 1;
-      }
-      if (elements.bookingsNextPage) {
-        elements.bookingsNextPage.disabled = state.isLoading || !view.hasMore;
-      }
+      ns.renderProgressiveTable(elements.bookingsTableWrap, elements.bookingsEmpty, view, view.onLoadMore);
+
     }
 
     function renderInvoicesWorkspace(view, onInvoiceChecked, onInvoiceSelected, onToggleAll, onSortChange, onInvoiceDetailTabChange, onInvoiceOpenNative, onInvoiceFilesNeeded, onShowAttachmentsChange) {

@@ -1,0 +1,165 @@
+{
+  "status": "functions_fields_and_oauth_verified_widget_upload_pending",
+  "scope": "Create Invoice from Suppliers; excludes Credit Notes, Prepayments and Card Purchases",
+  "production_metadata_checked_on": "2026-10-08",
+  "field_requests": [
+    {
+      "module": "Supplier_Invoices",
+      "fields": [
+        {
+          "field_label": "Registration Key",
+          "api_name": "Registration_Key",
+          "data_type": "text",
+          "length": 100,
+          "unique": {
+            "case_sensitive": false
+          }
+        },
+        {
+          "field_label": "Registration Request",
+          "api_name": "Registration_Request",
+          "data_type": "textarea",
+          "length": 32000,
+          "textarea": {
+            "type": "large"
+          }
+        },
+        {
+          "field_label": "Registration Status",
+          "api_name": "Registration_Status",
+          "data_type": "text",
+          "length": 50
+        }
+      ]
+    },
+    {
+      "module": "Inv_Set_Allocations",
+      "fields": [
+        {
+          "field_label": "Registration Key",
+          "api_name": "Registration_Key",
+          "data_type": "text",
+          "length": 100,
+          "unique": {
+            "case_sensitive": false
+          }
+        }
+      ]
+    },
+    {
+      "module": "Supplier_Invoice_Lines",
+      "fields": [
+        {
+          "field_label": "Registration Key",
+          "api_name": "Registration_Key",
+          "data_type": "text",
+          "length": 100,
+          "unique": {
+            "case_sensitive": false
+          }
+        }
+      ]
+    }
+  ],
+  "function_order": [
+    {
+      "action": "create",
+      "api_name": "supplierinvoiceregistration_read",
+      "file": "supplierInvoiceRegistration_read.dg"
+    },
+    {
+      "action": "create",
+      "api_name": "supplierinvoiceregistration_ensurerecord",
+      "file": "supplierInvoiceRegistration_ensureRecord.dg"
+    },
+    {
+      "action": "update",
+      "api_name": "rebuildsuppliersettlementtotals",
+      "file": "rebuildSupplierSettlementTotals.dg"
+    },
+    {
+      "action": "create",
+      "api_name": "supplierinvoice_register",
+      "file": "supplierInvoice_register.dg",
+      "arguments": [
+        "operationKey",
+        "requestJson"
+      ],
+      "widget_oauth_access_required": true
+    }
+  ],
+  "release_checks": [
+    "Compile and exercise the functions in a Zoho test environment; Node tests emulate control flow and do not validate Deluge compilation or actual CRM API behavior.",
+    "Verify crm_oauth_connection, function caller permissions, field read/write access and OAuth REST access from the embedded widget. Do not expose helpers as public API-key endpoints.",
+    "Create fields before functions, preserve the existing globally unique Supplier_Invoices.Name and verify all three Registration_Key uniqueness constraints before enabling the widget.",
+    "Compare rebuildsuppliersettlementtotals with the latest published source before updating. The sole intended change excludes Registration_Key invoices in Pending registration from totals.",
+    "Review invoice workflows, blueprints and external automations. Creation must not trigger payments or accounting posting, and incomplete registrations must not be processed automatically.",
+    "Test actual file upload and atomic Invoice_File insertion; read back the file and reject any workflow changes to invoice amounts or associations.",
+    "Test browser localStorage and Web Locks inside the Zoho widget, including two tabs, reload, lost responses and failed refresh.",
+    "Publish the widget only after these backend dependencies pass. The existing dist/AccountingManager.zip was not rebuilt by this change."
+  ],
+  "invariants": {
+    "states": "Pending: invoice exists but children are incomplete; Ready: children confirmed and totals can be rebuilt; Complete: registration and totals confirmed.",
+    "payments": "Received with Amount_Paid=0; this endpoint never creates payment records.",
+    "allocations": "Active allocations sum to Total_Payable_Amount, including Reimbursable_Expense; multiple invoices per settlement remain possible.",
+    "lines": "Service lines preserve informational service purchase costs and are not the source of invoice totals.",
+    "retry": "Reuse the original operationKey and exact requestJson. Never generate another key after an ambiguous response. Keep registration fields and records when restoring a previous widget build.",
+    "direct_crm_inserts": "Settlement validation is mandatory in the new endpoint. Other integrations and direct CRM inserts still require a separate module-level validation review; this change does not make the CRM lookup globally mandatory."
+  },
+  "production_deployed_on": "2026-10-08",
+  "verification": {
+    "functions_active": true,
+    "code_verified": true,
+    "registration_unique_constraints_verified": true,
+    "local_tests_passed": 29,
+    "invoice_creation_executed": false,
+    "widget_published": false,
+    "widget_oauth_verified": true,
+    "widget_zip_validated": true
+  },
+  "published_functions": [
+    {
+      "api_name": "supplierinvoiceregistration_read",
+      "id": "616617000174096020",
+      "state": "active",
+      "rest_api_mode": [
+        "None"
+      ]
+    },
+    {
+      "api_name": "supplierinvoiceregistration_ensurerecord",
+      "id": "616617000174098014",
+      "state": "active",
+      "rest_api_mode": [
+        "None"
+      ]
+    },
+    {
+      "api_name": "rebuildsuppliersettlementtotals",
+      "id": "616617000163724050",
+      "state": "active",
+      "rest_api_mode": [
+        "Oauth"
+      ]
+    },
+    {
+      "api_name": "supplierinvoice_register",
+      "id": "616617000174090009",
+      "state": "active",
+      "rest_api_mode": [
+        "Oauth"
+      ]
+    }
+  ],
+  "remaining_activation": {
+    "action": "Upload dist/AccountingManager.zip to the existing AccountingManager widget in Zoho CRM, then validate the Suppliers Create Invoice flow in the embedded widget.",
+    "widget_upload_pending": true,
+    "real_invoice_test_executed": false
+  },
+  "rollback_backup": "backups/rebuildSupplierSettlementTotals.before-registration.dg",
+  "widget_artifact": {
+    "path": "dist/AccountingManager.zip",
+    "sha256": "068127ec94d6551cb08cbcd5be4d47947bd0a3d7cc0434ed4d8eabcc7b786227",
+    "matches_workspace": true
+  }
+}

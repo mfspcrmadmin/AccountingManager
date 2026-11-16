@@ -1,0 +1,23 @@
+{
+  "checked_on": "2026-11-11",
+  "function_api_name": "comm_previewquotationarrivalreminders",
+  "function_id": "616617000178133015",
+  "state": "deleted_after_testing",
+  "category": "Standalone",
+  "argument": "afterId: blank or 0 for first page; next_after_id for continuation",
+  "mode": "read-only preview",
+  "page_size": 100,
+  "published_source_read_back": true,
+  "source_readback_notes": "CRM normalized spacing and redundant parentheses; all 205 nonblank lines compared.",
+  "runtime_execution_verified": true,
+  "runtime_execution_limitation": "CRM connector exposes no execute-function action. Browser execution unavailable in this session.",
+  "candidate_query_verified": true,
+  "candidate_count": 2,
+  "candidate_dedup_lookup_verified": true,
+  "existing_candidate_communications": 0,
+  "emails_sent": 0,
+  "communications_created": 0,
+  "schedule_created": false,
+  "sender": null,
+  "next_step": "Preview removed at user request. Quotation reminder sending remains unimplemented."
+}

@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-14",
+  "functions": {
+    "supplierinvoice_convertfinal": "616617000174786234",
+    "supplierinvoice_edit": "616617000174359025"
+  },
+  "published_and_read_back": true,
+  "live_conversion_executed": false,
+  "widget_upload_required": true,
+  "additional_function_auth_required": false,
+  "scope": "Convert proforma number, type, date and document; update copied Card Purchases number and existing unposted Accounting Entries header only.",
+  "financial_modules_recalculated": [],
+  "legacy_pending_edits": "Retain original recovery plan and explicit saved-document recovery.",
+  "tests": "70 automated tests; browser checks at 1440, 390 and 320 px with readonly amounts, manual number and replacement file.",
+  "zip_generated": false
+}

@@ -1,0 +1,312 @@
+string standalone.notif_sendLoggedTemplate(String moduleApiName, String recordId, String templateId, String toRecipients, String ccRecipients, String bccRecipients, String contextJson)
+{
+res = {"success":false,"response":"","message":"","delivery_status":"not_sent","communication_id":"","emails_sent":0};
+communicationId = "";
+sendAttempted = false;
+accepted = false;
+finalState = "Failed";
+outcome = Map();
+try
+{
+	context = Map();
+	if(ifnull(contextJson,"").trim() != "")
+	{
+		context = contextJson.toMap();
+	}
+	mode = ifnull(context.get("mode"),"send").toString();
+	if(mode != "send" && mode != "preview" && mode != "record_only")
+	{
+		throw "Unsupported delivery mode.";
+	}
+	moduleApiName = ifnull(moduleApiName,"").trim();
+	recordId = ifnull(recordId,"").trim();
+	templateId = ifnull(templateId,"").trim();
+	if(!moduleApiName.matches("[A-Za-z][A-Za-z0-9_]*") || !recordId.matches("[0-9]{1,19}") || !templateId.matches("[0-9]{1,19}"))
+	{
+		throw "Valid moduleApiName, recordId and templateId are required.";
+	}
+	if(context.get("event_error") != null)
+	{
+		throw "Transition event could not be identified: " + context.get("event_error");
+	}
+	sourceRecord = zoho.crm.getRecordById(moduleApiName,recordId.toLong());
+	if(ifnull(sourceRecord.get("id"),"").toString() != recordId)
+	{
+		throw "Source record could not be read.";
+	}
+	sourceFunction = ifnull(context.get("source_function"),"notif_sendEmailViaTemplate").toString();
+	reason = ifnull(context.get("trigger_reason"),"Native CRM template requested").toString();
+	if(sourceFunction.length() > 255 || reason.length() > 255)
+	{
+		throw "Notification context exceeds field limits.";
+	}
+	recipientInputs = {"to":ifnull(toRecipients,""),"cc":ifnull(ccRecipients,""),"bcc":ifnull(bccRecipients,"")};
+	mailData = {"from":{"email":"crmadmin@madeforspainandportugal.com"},"template":{"id":templateId},"org_email":true};
+	normalized = Map();
+	channels = {"to","cc","bcc"};
+	for each channel in channels
+	{
+		addresses = List();
+		apiAddresses = List();
+		rawAddresses = recipientInputs.get(channel).toString().toList(",");
+		for each rawAddress in rawAddresses
+		{
+			address = rawAddress.trim().toLowerCase();
+			if(address != "")
+			{
+				if(!address.matches("[^ @,;<>]+@[^ @,;<>]+[.][^ @,;<>]+"))
+				{
+					throw "Invalid " + channel + " recipient: " + address;
+				}
+				if(!addresses.contains(address))
+				{
+					addresses.add(address);
+				}
+			}
+		}
+		addresses.sort(true);
+		for each address in addresses
+		{
+			apiAddresses.add({"email":address});
+		}
+		normalizedText = addresses.toString(",");
+		if(normalizedText.length() > 2000)
+		{
+			throw "Recipient list exceeds archival field limits.";
+		}
+		normalized.put(channel,normalizedText);
+		if(!apiAddresses.isEmpty())
+		{
+			mailData.put(channel,apiAddresses);
+		}
+	}
+	if(ifnull(normalized.get("to"),"") == "")
+	{
+		throw "At least one To recipient is required.";
+	}
+	eventId = ifnull(context.get("event_id"),"").toString();
+	if(eventId == "" && moduleApiName == "Deals")
+	{
+		historyRequest = {"select_query":"select id, Stage from DealHistory where Potential_Name = '" + recordId + "' order by Modified_Time desc, id desc limit 1"};
+		historyPayload = standalone.jobs_query(historyRequest.get("select_query")).toMap();
+		historyRows = ifnull(historyPayload.get("data"),List());
+		if(historyRows.size() != 1)
+		{
+			throw "No unique booking stage event.";
+		}
+		eventId = "stage:" + historyRows.get(0).get("id").toString();
+	}
+	if(eventId == "")
+	{
+		sourceVersion = ifnull(sourceRecord.get("Modified_Time"),"").toString();
+		if(sourceVersion == "")
+		{
+			throw "A stable source version or explicit event_id is required.";
+		}
+		eventId = "record_version:" + sourceVersion;
+	}
+	fingerprint = moduleApiName + "|" + recordId + "|" + templateId + "|" + eventId;
+	key = "native_template:" + zoho.encryption.sha256(fingerprint);
+	requestFingerprint = zoho.encryption.sha256(mailData.toString());
+	res.put("dedup_key",key);
+	res.put("mode",mode);
+	lookupRequest = {"select_query":"select id, Communication_Status, Delivery_Result_JSON, Provider_Message_ID, Render_Model_JSON from Communications where Dedup_Key = '" + key + "' limit 2"};
+	lookupPayload = standalone.jobs_query(lookupRequest.get("select_query")).toMap();
+	existing = ifnull(lookupPayload.get("data"),List());
+	if(!existing.isEmpty())
+	{
+		if(existing.size() != 1)
+		{
+			throw "Duplicate Communications found; manual review required.";
+		}
+		prior = existing.get(0);
+		res.put("communication_id",prior.get("id"));
+		priorModel = ifnull(prior.get("Render_Model_JSON"),"{}").toString().toMap();
+		if(ifnull(priorModel.get("request_fingerprint"),"") != requestFingerprint)
+		{
+			res.put("delivery_status","blocked");
+			res.put("message","This event already has a different request. Review the existing Communication; no email sent.");
+			return res.toString();
+		}
+		priorStatus = ifnull(prior.get("Communication_Status"),"Unknown").toString();
+		res.put("delivery_status",priorStatus.toLowerCase());
+		res.put("duplicate",true);
+		res.put("message","A request already exists for this event. No email sent again.");
+		res.put("success",priorStatus == "Sent");
+		res.put("provider_message_id",ifnull(prior.get("Provider_Message_ID"),""));
+		return res.toString();
+	}
+	model = {"event_id":eventId,"request_fingerprint":requestFingerprint,"source_modified_time":sourceRecord.get("Modified_Time"),"mail_request":mailData,"source_function":sourceFunction,"trigger_reason":reason};
+	recordName = ifnull(sourceRecord.get("MFSP_Reference"),ifnull(sourceRecord.get("Name"),ifnull(sourceRecord.get("Deal_Name"),recordId))).toString();
+	if(recordName.length() > 255)
+	{
+		recordName = recordName.subString(0,255);
+	}
+	row = {"Name":"Native template " + templateId + " - " + recordId,"Related_Module":moduleApiName,"Related_Record_ID":recordId,"Related_Record_Name":recordName,"Source_Function":sourceFunction,"Trigger_Reason":reason,"Dedup_Key":key,"Execution_Mode":"Automatic","Communication_Type":"Email","Communication_Purpose":"System Notification","Communication_Status":"Queued","Delivery_Action":"Original","Render_Status":"Pending","Sender_Email":"crmadmin@madeforspainandportugal.com","Recipient_To":normalized.get("to"),"Recipient_CC":normalized.get("cc"),"Recipient_BCC":normalized.get("bcc"),"Native_Template_ID":templateId,"Render_Model_JSON":model.toString()};
+	if(moduleApiName == "Deals")
+	{
+		row.put("Booking",recordId);
+	}
+	else if(sourceRecord.get("Booking") != null)
+	{
+		row.put("Booking",sourceRecord.get("Booking").get("id"));
+	}
+	if(context.get("audience") != null)
+	{
+		row.put("Audience",context.get("audience"));
+	}
+	if(mode == "preview")
+	{
+		res.put("success",true);
+		res.put("proposed_communication",row);
+		res.put("message","Preview only. No record created and no email sent.");
+		return res.toString();
+	}
+	options = {"trigger":List()};
+	// Only the invocation with a confirmed successful CREATE may continue.
+	// A lost create response or unique-key conflict never authorizes sending.
+	created = zoho.crm.createRecord("Communications",row,options);
+	communicationId = ifnull(created.get("id"),"").toString();
+	if(communicationId == "")
+	{
+		throw "Request creation was not confirmed. No email sent. Review Dedup_Key before retrying: " + created;
+	}
+	res.put("communication_id",communicationId);
+	if(mode == "record_only")
+	{
+		res.put("success",true);
+		res.put("delivery_status","queued");
+		res.put("message","Request recorded only. No email sent; existing requests are never automatically resumed.");
+		return res.toString();
+	}
+	confirmed = zoho.crm.getRecordById("Communications",communicationId.toLong());
+	if(ifnull(confirmed.get("Dedup_Key"),"") != key || ifnull(confirmed.get("Communication_Status"),"") != "Queued")
+	{
+		throw "Queued request could not be verified. No email sent.";
+	}
+	started = zoho.crm.updateRecord("Communications",communicationId.toLong(),{"Communication_Status":"Sending"},options);
+	if(ifnull(started.get("id"),"").toString() != communicationId)
+	{
+		throw "Sending reservation was not confirmed. No email sent.";
+	}
+	confirmed = zoho.crm.getRecordById("Communications",communicationId.toLong());
+	if(ifnull(confirmed.get("Dedup_Key"),"") != key || ifnull(confirmed.get("Communication_Status"),"") != "Sending")
+	{
+		throw "Sending reservation could not be reread. No email sent.";
+	}
+	// From this point onward, exceptions are UNKNOWN, never a safe resend.
+	sendAttempted = true;
+	mailRows = List();
+	mailRows.add(mailData);
+	requestBody = {"data":mailRows};
+	transport = standalone.notif_sendNativeTemplateRaw(moduleApiName,recordId,templateId,normalized.get("to"),normalized.get("cc"),normalized.get("bcc")).toMap();
+	response = transport.get("response");
+	mailResponse = {"responseCode":200,"responseText":response};
+	outcome.put("transport_result",transport);
+	outcome.put("response",mailResponse.get("responseText"));
+	res.put("response",mailResponse.get("responseText"));
+	responsePayload = mailResponse.get("responseText").toString().toMap();
+	responseRows = ifnull(responsePayload.get("data"),List());
+	finalState = "Unknown";
+	messageId = "";
+	rejectionCodes = {"INVALID_DATA","MANDATORY_NOT_FOUND","NO_PERMISSION","NOT_ALLOWED","LIMIT_EXCEEDED","EMAIL_OPT_OUT","RECORD_LOCKED","INVALID_EMAIL","FILE_SIZE_EXCEEDS"};
+	if(responseRows.size() == 1)
+	{
+		delivery = responseRows.get(0);
+		if(delivery.get("status") == "success" && delivery.get("code") == "SUCCESS")
+		{
+			accepted = true;
+			finalState = "Sent";
+			messageId = ifnull(ifnull(delivery.get("details"),Map()).get("message_id"),"").toString();
+		}
+		else if(delivery.get("status") == "error" && rejectionCodes.contains(ifnull(delivery.get("code"),"")) )
+		{
+			finalState = "Failed";
+		}
+	}
+	outcome.put("state",finalState);
+	outcome.put("message_id",messageId);
+	outcome.put("request_fingerprint",requestFingerprint);
+	outcomeText = outcome.toString();
+	if(outcomeText.length() > 32000)
+	{
+		shortOutcome = {"state":finalState,"message_id":messageId,"note":"Provider response exceeds archival field limit; omitted."};
+		outcomeText = shortOutcome.toString();
+	}
+	finish = {"Communication_Status":finalState,"Delivery_Result_JSON":outcomeText,"Delivery_Error":""};
+	if(accepted)
+	{
+		finish.put("Sent_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid"));
+		if(messageId != "" && messageId.length() <= 255)
+		{
+			finish.put("Provider_Message_ID",messageId);
+		}
+	}
+	else
+	{
+		finish.put("Delivery_Error",if(finalState == "Failed","CRM explicitly rejected the email. Review Delivery Result JSON.","Email outcome could not be confirmed. Review before any resend."));
+	}
+	res.put("success",accepted);
+	res.put("delivery_status",finalState.toLowerCase());
+	res.put("provider_message_id",messageId);
+	res.put("emails_sent",if(accepted,1,0));
+	res.put("message",if(accepted,"CRM accepted the email request; recipient delivery is not confirmed.",finish.get("Delivery_Error")));
+	saved = zoho.crm.updateRecord("Communications",communicationId.toLong(),finish,options);
+	if(ifnull(saved.get("id"),"").toString() != communicationId)
+	{
+		// Persist the already known evidence once more. Never call send_mail again.
+		saved = zoho.crm.updateRecord("Communications",communicationId.toLong(),finish,options);
+	}
+	if(ifnull(saved.get("id"),"").toString() != communicationId)
+	{
+		res.put("reconciliation_required",true);
+		res.put("warning","Delivery result could not be saved. Do not resend; review this Communication and the returned provider response.");
+		return res.toString();
+	}
+	if(accepted && messageId != "")
+	{
+		archive = standalone.notif_reconcileTemplateCommunication(communicationId).toMap();
+		res.put("content_archive",archive);
+	}
+}
+catch (e)
+{
+	res.put("message",e.toString());
+	res.put("communication_id",communicationId);
+	if(sendAttempted)
+	{
+		res.put("success",accepted);
+		res.put("delivery_status",if(accepted,"sent","unknown"));
+		res.put("reconciliation_required",true);
+		res.put("warning","Do not resend automatically. Review the Communication and provider evidence.");
+	}
+	if(communicationId != "")
+	{
+		try
+		{
+			errorState = if(sendAttempted,if(accepted,"Sent","Unknown"),"Failed");
+			evidence = {"Communication_Status":errorState,"Delivery_Error":e.toString()};
+			if(outcome.toString().length() <= 32000 && !outcome.isEmpty())
+			{
+				evidence.put("Delivery_Result_JSON",outcome.toString());
+			}
+			if(accepted)
+			{
+				evidence.put("Sent_At",zoho.currenttime.toString("yyyy-MM-dd'T'HH:mm:ssXXX","Europe/Madrid"));
+				if(outcome.get("message_id") != null && outcome.get("message_id").toString().length() <= 255)
+				{
+					evidence.put("Provider_Message_ID",outcome.get("message_id"));
+				}
+			}
+			errorSaved = zoho.crm.updateRecord("Communications",communicationId.toLong(),evidence,{"trigger":List()});
+			res.put("result_saved",ifnull(errorSaved.get("id"),"").toString() == communicationId);
+		}
+		catch (saveError)
+		{
+			res.put("result_saved",false);
+			res.put("save_error",saveError.toString());
+		}
+	}
+}
+return res.toString();
+}

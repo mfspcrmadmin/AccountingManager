@@ -27,6 +27,7 @@
     }
 
     async function bootstrapRecentSuppliers() {
+      var revision = searchRevision;
       var renderer = deps.renderer.withFeedbackTarget ? deps.renderer.withFeedbackTarget("supplier-bootstrap") : deps.renderer;
       renderer.setLoading(true, "Loading suppliers...");
 
@@ -36,7 +37,7 @@
         renderer.renderSupplierOptions();
       } catch (error) {
         debugError("bootstrapRecentSuppliers failed", error);
-        renderer.showError("Could not load the initial supplier list from Zoho CRM.");
+        if (revision === searchRevision) { renderer.showError("Could not load the initial supplier list from Zoho CRM. Try searching again."); }
       } finally {
         renderer.setLoading(false);
       }
@@ -76,49 +77,84 @@
       return state.supplierIndex[rawValue] || state.supplierIndex[rawValue.toLowerCase()] || null;
     }
 
+    var searchBusy = false;
+    var workspaceBusy = false;
+    var searchRevision = 0;
+
+    function clearSearchMessages() {
+      renderer.showError("");
+      renderer.showNotice("");
+      if (renderer.withFeedbackTarget) {
+        var supplierFeedback = renderer.withFeedbackTarget("suppliers");
+        supplierFeedback.showError("");
+        supplierFeedback.showNotice("");
+      }
+    }
+
+    if (elements.supplierSearch.addEventListener) {
+      elements.supplierSearch.addEventListener("input", function () {
+        searchRevision += 1;
+        renderer.hideSearchResults();
+        clearSearchMessages();
+      });
+      elements.supplierSearch.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") { searchRevision += 1; renderer.hideSearchResults(); }
+        if (event.key === "ArrowDown" && elements.searchResultsCard && !elements.searchResultsCard.hidden) {
+          var first = elements.searchResultsBody.querySelector("tr[data-supplier-id]");
+          if (first) { event.preventDefault(); first.focus(); }
+        }
+      });
+      if (global.document) {
+        global.document.addEventListener("pointerdown", function (event) {
+          if (!event.target.closest(".supplier-search-area")) { renderer.hideSearchResults(); }
+        });
+      }
+    }
+
     async function onLoadSupplierClick() {
+      if (searchBusy || workspaceBusy) { return; }
       var rawValue = elements.supplierSearch.value.trim();
       var supplier = getSupplierFromSearch();
-      var matches;
-
-      renderer.showError("");
-
+      var revision = ++searchRevision;
+      clearSearchMessages();
+      renderer.hideSearchResults();
       if (!rawValue) {
-        renderer.hideSearchResults();
         renderer.showError("Enter a supplier name, CIF/NIF, connection reference or Ezus reference.");
         return;
       }
-
-      if (!supplier) {
-        renderer.setLoading(true, "Searching suppliers...");
-        try {
-          matches = await searchSuppliers(rawValue);
-        } finally {
-          renderer.setLoading(false);
+      searchBusy = true;
+      renderer.setLoading(true, "Searching suppliers...");
+      try {
+        if (!supplier) {
+          var matches = await searchSuppliers(rawValue);
+          if (revision !== searchRevision) { return; }
+          if (matches.length > 1) {
+            renderer.renderSearchResults(matches, function (match) {
+              if (workspaceBusy || revision !== searchRevision) { return; }
+              cacheSupplierLookup(match);
+              elements.supplierSearch.value = getSupplierSearchDisplayValue(match);
+              renderer.hideSearchResults();
+              loadSupplierWorkspace(match.id);
+            });
+            return;
+          }
+          supplier = matches[0] || null;
         }
-
-        if (matches.length > 1) {
-          renderer.showNotice("More than one supplier matches that search. Choose the correct one below.");
-          renderer.renderSearchResults(matches, function (match) {
-            cacheSupplierLookup(match);
-            elements.supplierSearch.value = getSupplierSearchDisplayValue(match);
-            renderer.hideSearchResults();
-            loadSupplierWorkspace(match.id);
-          });
+        if (!supplier) {
+          renderer.showSupplierSearchEmpty();
           return;
         }
-
-        supplier = matches[0] || null;
+        cacheSupplierLookup(supplier);
+        await loadSupplierWorkspace(supplier.id);
+      } catch (error) {
+        if (revision === searchRevision) {
+          debugError("supplier search failed", error);
+          renderer.showError(error.message || "Could not search suppliers. Try again.");
+        }
+      } finally {
+        searchBusy = false;
+        renderer.setLoading(false);
       }
-
-      if (!supplier) {
-        renderer.showSupplierSearchEmpty();
-        return;
-      }
-
-      cacheSupplierLookup(supplier);
-      renderer.hideSearchResults();
-      await loadSupplierWorkspace(supplier.id);
     }
 
     async function searchSuppliers(rawQuery) {
@@ -127,6 +163,7 @@
       var requests = [];
       var results = [];
       var recentMatches;
+      var failures = 0;
 
       if (!query) {
         return [];
@@ -134,11 +171,13 @@
 
       getSupplierSearchFieldApis().forEach(function (fieldApi) {
         requests.push(crm.searchRecord(MODULES.suppliers, "(" + fieldApi + ":equals:" + escaped + ")").catch(function () {
+          failures += 1;
           return [];
         }));
 
         if (query.length >= 2) {
           requests.push(crm.searchRecord(MODULES.suppliers, "(" + fieldApi + ":starts_with:" + escaped + ")").catch(function () {
+            failures += 1;
             return [];
           }));
         }
@@ -146,6 +185,7 @@
 
       if (query.length >= 2) {
         requests.push(crm.searchWord(MODULES.suppliers, query).catch(function () {
+          failures += 1;
           return [];
         }));
       }
@@ -158,6 +198,10 @@
         return helpers.matchesSupplierQuery(record, query, FIELD_CANDIDATES);
       });
       results = results.concat(recentMatches);
+
+      if (failures === requests.length && !results.length) {
+        throw new Error("Could not search suppliers in Zoho CRM. Check your connection and try again.");
+      }
 
       return helpers.sortSuppliersByQuery(
         helpers.dedupeById(results).filter(function (record) {
@@ -178,6 +222,11 @@
     }
 
     async function loadSupplierWorkspace(supplierId) {
+      if (workspaceBusy) { return; }
+      workspaceBusy = true;
+      var revision = searchRevision;
+      clearSearchMessages();
+      renderer.hideSearchResults();
       var invoiceResult;
       var paymentResult;
       var previousSupplierId = String(state.supplierId || "").trim();
@@ -205,7 +254,7 @@
         }
 
         cacheSupplierLookup(state.supplier);
-        elements.supplierSearch.value = getSupplierSearchDisplayValue(state.supplier);
+        if (revision === searchRevision) { elements.supplierSearch.value = getSupplierSearchDisplayValue(state.supplier); }
         state.supplierInfoTab = "basic";
         invoiceResult = loadInvoicesForSupplier(supplierId);
         paymentResult = loadPaymentsForSupplier(supplierId);
@@ -227,11 +276,6 @@
         }
 
         renderAll();
-        renderer.showNotice(
-          (state.supplierInvoices.length || state.supplierPayments.length)
-            ? "Supplier loaded. Use the integrated invoice form or review related activity on the right."
-            : "Supplier loaded. This supplier does not have related invoices or payments yet."
-        );
       } catch (error) {
         debugError("loadSupplierWorkspace failed", error, {
           supplierId: supplierId
@@ -244,14 +288,16 @@
         state.invoiceCreation.isOpen = false;
         resetInvoiceCreateSettlementState();
         renderAll();
-        renderer.showError(error.message || "Could not load the supplier workspace.");
+        if (revision === searchRevision) { renderer.showError(error.message || "Could not load the supplier workspace."); }
       } finally {
+        workspaceBusy = false;
         renderer.setLoading(false);
       }
     }
 
     function clearSupplierWorkspace(options) {
-      var settings = options || {};
+      searchRevision += 1;
+      clearSearchMessages();
 
       state.supplier = null;
       state.supplierId = "";
@@ -267,12 +313,6 @@
       elements.supplierSearch.value = "";
       renderer.hideSearchResults();
       renderAll();
-
-      if (settings.showNotice !== false) {
-        renderer.showNotice("Supplier closed. Search another one when you want.", {
-          tone: "success"
-        });
-      }
     }
 
     function onCloseSupplierWorkspaceClick() {

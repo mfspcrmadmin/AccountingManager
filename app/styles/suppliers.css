@@ -1,23 +1,56 @@
+@layer widget-views {
 /* Scoped supplier workspace. All navigation and identity stay in document flow. */
 #tab-suppliers { --supplier-accent: #a84b12; color: #26313d; background: #fff; }
 #tab-suppliers [hidden] { display: none !important; }
 #tab-suppliers .suppliers-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-#tab-suppliers .suppliers-rail { display: block; position: static; inset: auto; z-index: auto; width: auto; min-width: 0; padding: 16px 20px; border: 0; border-bottom: 1px solid #e3e5e8; border-radius: 0; box-shadow: none; background: #fff; overflow: visible; container-type: normal; }
-#tab-suppliers #search-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 16px 28px; padding: 0; border: 0; background: #fff; box-shadow: none; position: static; }
-#tab-suppliers .supplier-page-title { margin: 0; font-size: 22px; font-weight: 650; color: #26313d; }
+#tab-suppliers .suppliers-rail { display: block; position: static; inset: auto; z-index: 2; width: auto; min-width: 0; padding: 16px 0; border: 0; border-bottom: 1px solid #e3e5e8; border-radius: 0; box-shadow: none; background: #fff; overflow: visible; container-type: normal; }
+#tab-suppliers #search-panel { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 12px 24px; width: 100%; padding: 0; border: 0; background: #fff; box-shadow: none; position: static; }
+#tab-suppliers .supplier-rail-section-heading { margin: 0; padding: 0; }
+#tab-suppliers .supplier-page-title { margin: 0; font-size: 18px; font-weight: 650; color: #26313d; }
+#tab-suppliers .supplier-search-area { position: relative; flex: 0 1 440px; width: 440px; max-width: 100%; min-width: 0; }
 #tab-suppliers .suppliers-rail .supplier-rail-search { display: flex; flex-wrap: nowrap; flex: 0 1 440px; align-items: center; gap: 0; width: 440px; max-width: 100%; min-width: 0; margin: 0; padding: 0 4px; border: 1px solid #aeb5be; border-radius: 7px; background: #fff; box-shadow: none; }
-#tab-suppliers .suppliers-rail .supplier-rail-search:focus-within { outline: 2px solid var(--supplier-accent); outline-offset: 2px; }
-#tab-suppliers .supplier-toolbar-field { display: block; flex: 1; min-width: 0; width: auto; margin: 0; }
-#tab-suppliers #supplier-search { width: 100%; min-width: 0; min-height: 38px; padding: 8px; border: 0; border-radius: 0; background: #fff; color: #26313d; font-size: 12px; box-shadow: none; outline: none; }
+#tab-suppliers .suppliers-rail .supplier-rail-search:focus-within { outline: none; border-color: #c57949; box-shadow: 0 0 0 2px #b6531618; }
+#tab-suppliers .supplier-search-actions { display: flex; align-items: center; flex: 0 0 72px; justify-content: flex-end; width: 72px; }
+#tab-suppliers #clear-supplier-search[hidden] { display: inline-flex !important; visibility: hidden; pointer-events: none; }
+#tab-suppliers #load-supplier.is-searching > svg { display: none; }
+#tab-suppliers #load-supplier .inline-feedback-spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid #e3e5e8; border-top-color: var(--supplier-accent); border-radius: 50%; animation: inline-feedback-spin .8s linear infinite; }
+#tab-suppliers .supplier-toolbar-field { display: block; flex: 1; min-width: 0; width: auto; margin: 0; background: #fff; }
+#tab-suppliers #supplier-search { width: 100%; min-width: 0; min-height: 42px; padding: 10px 14px; border: 0; border-radius: 0; background: #fff; color: #26313d; font-size: 12px; box-shadow: none; outline: none; }
 #tab-suppliers #supplier-search::-webkit-search-cancel-button { display: none; }
-#tab-suppliers #load-supplier, #tab-suppliers .supplier-search-clear { display: inline-flex; justify-content: center; align-items: center; flex: 0 0 34px; width: 34px; min-width: 34px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 4px; background: #fff; box-shadow: none; color: #56616d; cursor: pointer; }
-#tab-suppliers .supplier-search-clear { font-size: 20px; }
-#tab-suppliers #search-results-card { position: static; width: 100%; max-height: none; padding: 12px 0 0; margin-top: 12px; overflow: visible; }
-#tab-suppliers #search-results-card .table-wrap { max-height: none; overflow: auto; }
-#tab-suppliers .supplier-onboarding { display: block; min-height: 0; padding: 12px 0 0; border: 0; border-radius: 0; background: #fff; }
+#tab-suppliers #load-supplier, #tab-suppliers .supplier-search-clear { display: inline-flex; justify-content: center; align-items: center; flex: 0 0 36px; width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 4px; background: #fff; box-shadow: none; color: #56616d; cursor: pointer; }
+#tab-suppliers .supplier-search-clear { color: #7b8490; line-height: 1; }
+#tab-suppliers .supplier-search-actions button svg { display: block; flex: 0 0 18px; width: 18px; height: 18px; }
+#tab-suppliers #load-supplier { color: var(--supplier-accent); }
+#tab-suppliers #load-supplier:hover:not(:disabled) { background: #fff3e8; }
+#tab-suppliers #clear-supplier-search:hover { background: #f3f4f6; color: #56616d; }
+#tab-suppliers .supplier-search-actions button:active:not(:disabled) { background: #f7e6d7; }
+#tab-suppliers .supplier-search-actions button:focus-visible { outline: 2px solid #c57949; outline-offset: -2px; }
+/* Keep browser autocomplete enabled while covering its UA background tint. */
+#tab-suppliers #supplier-search:is(:autofill, :-webkit-autofill) {
+  -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+  box-shadow: 0 0 0 1000px #fff inset !important;
+  transition: none;
+  -webkit-text-fill-color: #26313d;
+  caret-color: #26313d;
+}
+#tab-suppliers #search-results-card { position: absolute; inset: calc(100% + 6px) 0 auto; z-index: 20; width: 100%; max-height: 320px; padding: 8px; margin: 0; border: 1px solid #dfe3e8; border-radius: 6px; background: #fff; overflow: auto; box-shadow: none; }
+#tab-suppliers #search-results-card .panel-header { margin: 0 0 6px; padding: 0; }
+#tab-suppliers #search-results-card .table-wrap { max-height: none; overflow: visible; border: 0; }
+#tab-suppliers #search-results-card table { min-width: 0; width: 100%; table-layout: fixed; }
+#tab-suppliers #search-results-card thead { display: none; }
+#tab-suppliers #search-results-card td { white-space: normal; overflow-wrap: anywhere; padding: 9px 8px; }
+#tab-suppliers #search-results-card td strong { display: block; color: #26313d; font-size: 13px; font-weight: 600; }
+#tab-suppliers #search-results-card td small { display: block; margin-top: 3px; color: #687380; font-size: 11px; }
+#tab-suppliers #supplier-search-feedback:empty { display: none; }
+#tab-suppliers #supplier-search-feedback > .inline-feedback { margin: 6px 0 0; padding: 6px 8px; font-size: 12px; border-radius: 4px; }
+#tab-suppliers #supplier-search-feedback .inline-feedback[data-tone="error"]::before { content: '!'; display: inline-flex; justify-content: center; align-items: center; flex: 0 0 16px; height: 16px; border: 1px solid currentColor; border-radius: 50%; font-weight: 700; }
+#tab-suppliers .supplier-onboarding { display: block; min-height: 0; padding: 0; border: 0; border-radius: 0; background: #fff; }
 #tab-suppliers .supplier-onboarding p { margin: 0; font-size: 13px; color: #626c78; }
 #tab-suppliers .supplier-main-shell, #tab-suppliers .supplier-context-panel, #tab-suppliers .supplier-info-shell { min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: #fff; box-shadow: none; overflow: visible; }
 #tab-suppliers .supplier-main-shell.is-empty { display: none; }
+#tab-suppliers #supplier-feedback-rail { flex: 1 1 260px; min-width: 0; }
+#tab-suppliers #supplier-feedback-rail:not(:has(> .inline-feedback:not([hidden]))) { display: none; }
+#tab-suppliers #supplier-feedback-rail > .inline-feedback { margin: 0; align-items: flex-start; }
 #tab-suppliers .supplier-summary-header { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; align-items: start; gap: 16px; position: static; margin: 0; padding: 0 0 16px; border: 0; background: #fff; }
 #tab-suppliers .supplier-summary-title-block { min-width: 0; }
 #tab-suppliers #supplier-header-name { max-width: 100%; white-space: normal; overflow-wrap: anywhere; margin: 0; font-size: 23px; line-height: 1.3; font-weight: 650; color: #26313d; }
@@ -81,9 +114,10 @@
   #tab-suppliers #close-supplier-workspace { grid-row: 1; grid-column: 2; }
 }
 @media (max-width: 620px) {
-  #tab-suppliers .suppliers-rail { padding: 14px 12px; }
+  #tab-suppliers .suppliers-rail { padding: 16px 0; }
   #tab-suppliers #search-panel { gap: 12px; }
   #tab-suppliers .suppliers-rail .supplier-rail-search { flex-basis: 100%; width: 100%; }
+  #tab-suppliers .supplier-search-area { flex-basis: 100%; width: 100%; }
   #tab-suppliers .supplier-info-panels { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   #tab-suppliers .supplier-financial-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; }
   #tab-suppliers .supplier-financial-summary .activity-stat-card { padding: 0 12px; border-bottom: 0; }
@@ -106,3 +140,40 @@
 .supplier-account-editor-status { display: block; min-height: 17px; margin-top: 2px; font-size: 11px; line-height: 17px; font-weight: normal; }
 .supplier-account-editor.has-error .supplier-account-editor-status { color: var(--danger); }
 .supplier-account-editor.has-error input[data-account-value] { border-color: var(--danger); }
+
+/* Supplier-scoped payment letter preview; native dialog retains table state and focus. */
+.supplier-letter-preview-button { width: 36px; height: 36px; padding: 8px; }
+.supplier-letter-preview-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+#supplier-payment-letter-preview { width: min(860px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); box-sizing: border-box; overflow: auto; border: 1px solid #dbe3ef; border-radius: 16px; padding: 24px; color: #1f2937; background: #f8fafc; box-shadow: 0 20px 70px #14202e40; }
+#supplier-payment-letter-preview::backdrop { background: #14202e80; }
+#supplier-payment-letter-preview .panel-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+#supplier-payment-letter-preview footer { margin-top: 20px; justify-content: flex-end; }
+.supplier-letter-sheet { background: white; border: 1px solid #dbe3ef; border-radius: 10px; overflow: hidden; }
+.supplier-letter-heading { padding: 20px; background: #eaf2ff; }
+.supplier-letter-heading h3 { margin: 8px 0; font-size: 22px; }
+.supplier-letter-heading p { margin: 8px 0; overflow-wrap: anywhere; }
+#supplier-payment-letter-preview table { width: 100%; }
+#supplier-payment-letter-preview .supplier-letter-invoice { white-space: normal; overflow-wrap: anywhere; min-width: 140px; max-width: 340px; text-overflow: clip; }
+#supplier-payment-letter-preview tfoot { background: #f0f5fc; font-weight: 700; }
+@media (max-width: 600px) { #supplier-payment-letter-preview { padding: 14px; } }
+
+#supplier-payment-letter-preview[open] { display: flex; flex-direction: column; }
+#supplier-payment-letter-preview > .panel-header { flex-direction: row; flex: 0 0 auto; }
+#supplier-payment-letter-preview [data-letter-content] { overflow: auto; min-height: 0; }
+#supplier-payment-letter-preview footer { flex: 0 0 auto; }
+#supplier-payment-letter-preview table { min-width: 600px; table-layout: fixed; }
+#supplier-payment-letter-preview th:first-child { width: 40%; }
+#supplier-payment-letter-preview tfoot th { width: auto; }
+.supplier-letter-total { padding-top: 8px; border-top: 1px solid #cbdcf4; }
+
+.supplier-letter-recipient { background: white; border: 1px solid #dbe3ef; border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+.supplier-letter-recipient fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.supplier-letter-recipient-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.supplier-letter-recipient label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; min-width: 0; }
+.supplier-letter-recipient input { min-width: 0; width: 100%; box-sizing: border-box; }
+.supplier-letter-recipient [data-letter-contact-list] { overflow-x: auto; margin-top: 12px; }
+#supplier-payment-letter-preview .payment-letter-contacts-table { table-layout: auto; }
+#supplier-payment-letter-preview .payment-letter-contacts-table th:first-child { width: auto; }
+#supplier-payment-letter-preview footer { flex-wrap: wrap; }
+
+}

@@ -22,130 +22,48 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       return "entries";
     }
 
+    var keys = { entries: "accountingEntries", lines: "accountingEntryLines", accounts: "accountingAccounts", rules: "accountingRules" };
+    var queries = {};
+    Object.keys(keys).forEach(function (tab) {
+      var key = keys[tab], view = state.views[key];
+      queries[key] = ns.createProgressiveQuery({
+        view: view,
+        getRecords: function () { return view.browserRecords || []; },
+        setRecords: function (records) { view.browserRecords = records; if (tab === "entries" || tab === "lines") { state.records[key] = records; } else { var byId = new Map(state.records[key].map(function (r) { return [String(r.id), r]; })); records.forEach(function (r) { byId.set(String(r.id), r); }); state.records[key] = Array.from(byId.values()); } },
+        fetch: function (query) { return deps.fetchPage(key, query); },
+        render: renderAll,
+        resetScroll: function () { var wrap = deps.elements[key + "TableWrap"]; if (wrap) { wrap.scrollTop = 0; } }
+      });
+    });
+    function refresh(key, apply) {
+      var view = state.views[key];
+      if (apply || !view.appliedFilters) { view.appliedFilters = cloneFilterState(view.filters || {}); }
+      return queries[key].reset({ filters: view.appliedFilters, sort: view.sort || { key: "date", direction: "desc" }, perPage: view.perPage || 50 });
+    }
+    function cancel() { Object.keys(queries).forEach(function (key) { queries[key].cancel(); }); }
     async function setAccountingTab(tabName) {
-      var normalizedTab = normalizeAccountingTab(tabName);
-
-      state.accountingTab = normalizedTab;
-      renderAll();
-
-      if (state.currentTab === "accounting" && (normalizedTab === "accounts" || normalizedTab === "rules")) {
-        await ensureTabDataLoaded("accounting");
-        renderAll();
-      }
+      cancel();
+      state.accountingTab = normalizeAccountingTab(tabName);
+      return refresh(keys[state.accountingTab]);
     }
-
-    async function refreshAccountingAccountsTabData() {
-      renderer.showError("");
-      renderer.showNotice("Refreshing accounting accounts...", {
-        isLoading: true
+    function refreshAccountingAccountsTabData() { return refresh("accountingAccounts"); }
+    function loadAccountingEntriesTabData() { return refresh("accountingEntries", true); }
+    function refreshAccountingEntriesTabData() { return refresh("accountingEntries"); }
+    function loadAccountingEntryLinesTabData() { return refresh("accountingEntryLines", true); }
+    function refreshAccountingEntryLinesTabData() { return refresh("accountingEntryLines"); }
+    function refreshAccountingRulesTabData() { return refresh("accountingRules"); }
+    function progressiveView(key, result) {
+      var view = state.views[key];
+      return Object.assign(result, {
+        loadingInitial: view.loadingInitial, loadingMore: view.loadingMore,
+        loadError: view.loadError, hasMore: view.hasMore, onLoadMore: queries[key].more,
+        countLabel: (view.browserRecords || []).length + " records loaded"
       });
-      renderer.setLoading(true, "Refreshing accounting accounts...");
-      renderAll();
-
-      try {
-        state.loaded.accountingAccounts = false;
-        state.records.accountingAccounts = [];
-        await ensureAccountingAccountsLoaded();
-        renderAll();
-      } catch (error) {
-        renderer.showError(error.message || "Could not refresh accounting accounts.");
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
-    }
-
-    async function loadAccountingEntriesTabData(options) {
-      var settings = options || {};
-
-      if (!settings.preservePage) {
-        state.views.accountingEntries.page = 1;
-        state.views.accountingEntries.appliedFilters = cloneFilterState(state.views.accountingEntries.filters);
-      }
-      await refreshAccountingEntriesTabData();
-    }
-
-    async function refreshAccountingEntriesTabData() {
-      renderer.showError("");
-      renderer.showNotice("Loading accounting entries...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, "Loading accounting entries...");
-      renderAll();
-
-      try {
-        state.loaded.accountingEntries = false;
-        state.views.accountingEntries.hasMore = false;
-        state.records.accountingEntries = [];
-        await ensureAccountingEntriesLoaded();
-        state.views.accountingEntries.hasLoaded = true;
-        renderAll();
-      } catch (error) {
-        renderer.showError(error.message || "Could not load accounting entries.");
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
-    }
-
-    async function loadAccountingEntryLinesTabData(options) {
-      var settings = options || {};
-
-      if (!settings.preservePage) {
-        state.views.accountingEntryLines.page = 1;
-        state.views.accountingEntryLines.appliedFilters = cloneFilterState(state.views.accountingEntryLines.filters);
-      }
-      await refreshAccountingEntryLinesTabData();
-    }
-
-    async function refreshAccountingEntryLinesTabData() {
-      renderer.showError("");
-      renderer.showNotice("Loading accounting entry lines...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, "Loading accounting entry lines...");
-      renderAll();
-
-      try {
-        state.loaded.accountingEntryLines = false;
-        state.views.accountingEntryLines.hasMore = false;
-        state.records.accountingEntryLines = [];
-        await ensureAccountingEntryLinesLoaded();
-        await ensureAccountingAccountsLoaded();
-        state.views.accountingEntryLines.hasLoaded = true;
-        renderAll();
-      } catch (error) {
-        renderer.showError(error.message || "Could not load accounting entry lines.");
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
-    }
-
-    async function refreshAccountingRulesTabData() {
-      renderer.showError("");
-      renderer.showNotice("Refreshing accounting rules...", {
-        isLoading: true
-      });
-      renderer.setLoading(true, "Refreshing accounting rules...");
-      renderAll();
-
-      try {
-        state.loaded.accountingRules = false;
-        state.records.accountingRules = [];
-        await ensureAccountingRulesLoaded();
-        renderAll();
-      } catch (error) {
-        renderer.showError(error.message || "Could not refresh accounting rules.");
-      } finally {
-        renderer.setLoading(false);
-        renderer.showNotice("");
-      }
     }
 
     function buildAccountingEntriesView() {
-      return {
-        records: getSortedAccountingEntriesRecords(state.records.accountingEntries, state.views.accountingEntries.sort),
+      return progressiveView("accountingEntries", {
+        records: state.views.accountingEntries.browserRecords || [],
         page: state.views.accountingEntries.page || 1,
         hasMore: Boolean(state.views.accountingEntries.hasMore),
         pageSummary: state.views.accountingEntries.pageSummary || "Page 1",
@@ -161,12 +79,12 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           : state.views.accountingEntries.hasLoaded
           ? "No accounting entries match the current filters."
           : "Use the filters and click Load to fetch accounting entries."
-      };
+      });
     }
 
     function buildAccountingEntryLinesView() {
-      return {
-        records: getSortedAccountingEntryLinesRecords(state.records.accountingEntryLines, state.views.accountingEntryLines.sort),
+      return progressiveView("accountingEntryLines", {
+        records: state.views.accountingEntryLines.browserRecords || [],
         page: state.views.accountingEntryLines.page || 1,
         hasMore: Boolean(state.views.accountingEntryLines.hasMore),
         pageSummary: state.views.accountingEntryLines.pageSummary || "Page 1",
@@ -182,11 +100,11 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
           : state.views.accountingEntryLines.hasLoaded
           ? "No accounting entry lines match the current filters."
           : "Use the filters and click Load to fetch accounting entry lines."
-      };
+      });
     }
 
     function buildAccountingAccountsView() {
-      var records = state.records.accountingAccounts;
+      var records = state.views.accountingAccounts.browserRecords || [];
       var totalPages = Math.max(1, Math.ceil(records.length / state.views.accountingAccounts.perPage));
       var page = Math.min(state.views.accountingAccounts.page, totalPages);
       var selectedId = state.views.accountingAccounts.selectedId;
@@ -194,19 +112,19 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
       var visibleRecords;
       var selectedRecord;
 
-      if (!records.some(function (account) { return account.id === selectedId; })) {
+      if (!state.records.accountingAccounts.some(function (account) { return account.id === selectedId; })) {
         selectedId = "";
         state.views.accountingAccounts.selectedId = "";
       }
 
-      selectedRecord = records.find(function (account) {
+      selectedRecord = state.records.accountingAccounts.find(function (account) {
         return account.id === selectedId;
       }) || null;
       start = (page - 1) * state.views.accountingAccounts.perPage;
-      visibleRecords = records.slice(start, start + state.views.accountingAccounts.perPage);
-      state.views.accountingAccounts.page = page;
+      visibleRecords = records;
 
-      return {
+
+      return progressiveView("accountingAccounts", {
         records: records,
         visibleRecords: visibleRecords,
         selectedRecord: selectedRecord,
@@ -215,14 +133,14 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         totalPages: totalPages,
         emptyMessage: state.currentTab === "accounting" && state.accountingTab === "accounts" && state.isLoading
           ? "Loading accounting accounts..."
-          : state.loaded.accountingAccounts
+          : state.views.accountingAccounts.hasLoaded
           ? "No accounting accounts were found."
           : "Open the tab to load accounting accounts."
-      };
+      });
     }
 
     function buildAccountingRulesView() {
-      var records = state.records.accountingRules;
+      var records = state.views.accountingRules.browserRecords || [];
       var totalPages = Math.max(1, Math.ceil(records.length / state.views.accountingRules.perPage));
       var page = Math.min(state.views.accountingRules.page, totalPages);
       var selectedId = state.views.accountingRules.selectedId;
@@ -239,10 +157,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         return rule.id === selectedId;
       }) || null;
       start = (page - 1) * state.views.accountingRules.perPage;
-      visibleRecords = records.slice(start, start + state.views.accountingRules.perPage);
-      state.views.accountingRules.page = page;
+      visibleRecords = records;
 
-      return {
+
+      return progressiveView("accountingRules", {
         records: records,
         visibleRecords: visibleRecords,
         selectedRecord: selectedRecord,
@@ -251,10 +169,10 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
         totalPages: totalPages,
         emptyMessage: state.currentTab === "accounting" && state.accountingTab === "rules" && state.isLoading
           ? "Loading accounting rules..."
-          : state.loaded.accountingRules
+          : state.views.accountingRules.hasLoaded
           ? "No accounting rules were found."
           : "Open the tab to load accounting rules."
-      };
+      });
     }
 
     function selectAccountingAccount(accountId) {
@@ -269,6 +187,7 @@ var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
 
     return {
       normalizeTab: normalizeAccountingTab,
+      cancel: cancel,
       setTab: setAccountingTab,
       refreshAccountsTabData: refreshAccountingAccountsTabData,
       loadEntriesTabData: loadAccountingEntriesTabData,

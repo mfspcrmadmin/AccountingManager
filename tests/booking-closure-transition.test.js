@@ -2,20 +2,21 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync('_local/crm/crm_functions/bp_orchestrateBookingTransition', 'utf8');
+const source = fs.readFileSync('crm/settlement-reliability/bp_orchestratebookingtransition.dg', 'utf8');
 const block = source.slice(source.indexOf('// Initialize accounting review'), source.indexOf('if(transitionCode.equals("marked_dead") && referenceType'));
 class DMap extends Map { put(k, v) { this.set(k, v); } }
 class DList extends Array { add(v) { this.push(v); } size() { return this.length; } isEmpty() { return !this.length; } get(i) { return this[i]; } }
 const map = obj => new DMap(Object.entries(obj));
 const list = values => DList.from(values);
-function run({ transition = 'have_departed', refType = 'booking_id', count = 1, matches = 1, failBooking = false, failSettlement = false, throwSearch = false } = {}) {
+function run({ transition = 'have_departed', refType = 'booking_id', count = 1, matches = 1, failBooking = false, failSettlement = false, throwSearch = false, closureStatus = '', reviewStatus = '', guardOnly = false } = {}) {
   const updates = [], batches = [], searches = [];
-  const records = Array.from({ length: count }, (_, i) => map({ id: String(i), Settlement_Type: i % 2 ? 'Agent Commission' : 'Supplier Services' }));
+  const records = Array.from({ length: count }, (_, i) => map({ id: String(i), Closure_Review_Status:reviewStatus, Settlement_Type: i % 2 ? 'Agent Commission' : 'Supplier Services' }));
   const result = new DMap();
   const context = {
     res: result, transitionCode: transition, referenceType: refType, bookingReference: refType === 'booking_id' ? '123' : 'ezus123', ezusProjectRef: 'ezus123',
     Map: () => new DMap(), List: () => new DList(), isnull: x => x == null, ifnull: (x, fallback) => x == null ? fallback : x,
     zoho: { crm: {
+      getRecordById() { return map({id:'123',Closure_Status:closureStatus}); },
       updateRecord(module, id, data) { updates.push({ module, id, data }); return failBooking ? map({ code: 'INVALID_DATA' }) : map({ id: '123' }); },
       searchRecords(module, criteria, page, size) {
         searches.push({ module, criteria, page });
@@ -29,7 +30,8 @@ function run({ transition = 'have_departed', refType = 'booking_id', count = 1, 
       }
     } }
   };
-  const js = block.replace(/for each (\w+) in ([^\n]+)\n/g, 'for (const $1 of $2)\n')
+  const selectedBlock=guardOnly?source.slice(source.indexOf('// Preserve completed closures'),source.indexOf('// End completed closure guard.'))+'\nres.put("would_change_stage",true);':block;
+  const js = selectedBlock.replace(/for each\s+(\w+) in ([^\n]+)\n/g, 'for (const $1 of $2)\n')
     .replace(/\.equals\(([^)]*)\)/g, ' === $1').replace(/\.toLong\(\)/g, '').replace(/\.toList\(/g, '.split(');
   vm.runInNewContext('(function () {\n' + js + '\n})()', context);
   return { result, updates, batches, searches };
@@ -75,4 +77,22 @@ test('search limit never reports a successful partial initialization', () => {
   const r = run({ count: 2001 });
   assert.equal(r.result.get('error'), true);
   assert.equal(r.batches.length, 0);
+});
+test('repeated initialization preserves existing closure and settlement review states',()=>{
+ for(const closureStatus of ['Closure Pending','Closure In Review','Closure Blocked','Closure Reopened','Closure Completed']){
+  const r=run({closureStatus,reviewStatus:'Reviewed',count:205});
+  assert.equal(r.updates.length,0);assert.equal(r.batches.length,0);
+ }
+});
+test('retry initializes only missing review statuses without resetting booking status',()=>{
+ const r=run({closureStatus:'Closure In Review',count:1});
+ assert.equal(r.updates.length,0);assert.equal(r.batches.length,1);
+});
+test('a completed closure cannot repeat the remote stage transition through either reference type',()=>{
+ for(const refType of ['booking_id','ezus_project_ref']){
+  const r=run({refType,closureStatus:'Closure Completed',guardOnly:true});
+  assert.equal(r.result.get('would_change_stage'),undefined);
+  assert.match(r.result.get('message'),/already completed/);
+  assert.equal(run({refType,closureStatus:'Closure Pending',guardOnly:true}).result.get('would_change_stage'),true);
+ }
 });

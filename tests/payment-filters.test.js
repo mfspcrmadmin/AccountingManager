@@ -36,7 +36,7 @@ test('status options match each workspace tab independently of loaded records', 
   }
 });
 
-test('payment supplier-code filter matches any allocation supplier and combines with MFSP and name', () => {
+test('payment context retains all allocation suppliers; table preserves server results', () => {
   const state = ns.createInitialState();
   state.views.payments.view = 'all';
   state.views.payments.appliedFilters = { supplierCode: 'second', statusValues: [] };
@@ -60,12 +60,14 @@ test('payment supplier-code filter matches any allocation supplier and combines 
     getMfspFromPayment: () => 'Multiple MFSPs', PAYMENT_STATUS_FILTER_OPTIONS: ['Paid', 'Cancelled', 'Pending Payment'],
     buildCombinedStatusOptions: values => values.map(value => ({ value, label: value }))
   });
+  state.views.payments.recordIds = ['p1'];
+  assert.equal(context.getPaymentSupplierCodeValues(state.records.payments[0]).join(','), 'FIRST-01,SECOND-02');
   assert.equal(module.buildView().filteredRecords.map(record => record.id).join(','), 'p1');
   state.views.payments.appliedFilters.mfsp = 'M2';
   state.views.payments.appliedFilters.paymentName = '123';
   assert.equal(module.buildView().filteredRecords.length, 1);
   state.views.payments.appliedFilters.supplierCode = 'missing';
-  assert.equal(module.buildView().filteredRecords.length, 0);
+  assert.equal(module.buildView().filteredRecords.length, 1);
   state.views.payments.appliedFilters.supplierCode = '';
   assert.equal(module.buildView().filteredRecords.length, 1);
 });

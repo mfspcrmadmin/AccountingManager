@@ -1,0 +1,54 @@
+@layer widget-controls {
+/* Shared close control for static and dynamically rendered widget popups.
+   The shared controls layer owns its geometry and interaction states. */
+.accounting-widget button.widget-popup-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  flex: 0 0 var(--control-icon);
+  width: var(--control-icon);
+  min-width: var(--control-icon);
+  height: var(--control-icon);
+  min-height: var(--control-icon);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: #626c78;
+  font-family: var(--font-ui);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transform: none;
+  transition: background-color 120ms ease, color 120ms ease, transform 80ms ease;
+}
+.accounting-widget button.widget-popup-close:hover:not(:disabled) {
+  background: #f0f2f5;
+  color: #344054;
+}
+.accounting-widget button.widget-popup-close:active:not(:disabled) {
+  background: #e2e6eb;
+  color: #26313d;
+  transform: scale(.92);
+}
+.accounting-widget button.widget-popup-close:focus-visible {
+  outline: 2px solid #b55419;
+  outline-offset: 2px;
+}
+.accounting-widget button.widget-popup-close:disabled {
+  opacity: .45;
+  cursor: default;
+  transform: none;
+}
+.accounting-widget button.widget-popup-close[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .accounting-widget button.widget-popup-close { transition: none; }
+  .accounting-widget button.widget-popup-close:active:not(:disabled) { transform: none; }
+}
+
+}

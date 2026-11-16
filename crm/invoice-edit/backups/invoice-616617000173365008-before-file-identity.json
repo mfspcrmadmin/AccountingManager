@@ -1,0 +1,458 @@
+{
+  "invoice": {
+    "Invoice_Amount_Excl_VAT": 193,
+    "Owner": {
+      "name": "Gabi Dumitru",
+      "id": "616617000004056007",
+      "email": "gabi@madeforspainandportugal.com"
+    },
+    "Invoice_File": [
+      {
+        "Created_Time__s": "2026-10-13T16:04:08+02:00",
+        "File_Name__s": "FRA Nº 165 MADEFORSPAIN   VISITA GUIADA SALAMANCA 11 SEPT 4 PAX   MFSP2605058.pdf",
+        "Modified_Time__s": "2026-10-13T16:04:08+02:00",
+        "Created_By__s": {
+          "name": "Made for Spain and Portugal",
+          "id": "616617000000365001",
+          "email": "crmadmin@madeforspainandportugal.com"
+        },
+        "Size__s": 216855,
+        "id": "616617000174881004",
+        "Owner__s": {
+          "name": "Made for Spain and Portugal",
+          "id": "616617000000365001",
+          "email": "crmadmin@madeforspainandportugal.com"
+        },
+        "Modified_By__s": {
+          "name": "Made for Spain and Portugal",
+          "id": "616617000000365001",
+          "email": "crmadmin@madeforspainandportugal.com"
+        },
+        "File_Id__s": "qakpv95941d225522452d8a85fc2ef367adc2"
+      }
+    ],
+    "$currency_symbol": "€",
+    "Supplier_Settlement": {
+      "name": "MFSP2605058-SLM013",
+      "id": "616617000173369001"
+    },
+    "$field_states": null,
+    "$sharing_permission": "full_access",
+    "Name": "INV-MFSP2605058-165",
+    "Last_Activity_Time": "2026-10-13T16:04:09+02:00",
+    "VAT_Amount": 40.53,
+    "Unsubscribed_Mode": null,
+    "$process_flow": false,
+    "Exchange_Rate": 1,
+    "Currency": "EUR",
+    "IRPF_Amount": 28.95,
+    "$locked_for_me": false,
+    "id": "616617000173365008",
+    "Status": "Paid",
+    "Additional_VAT_percentage": 0,
+    "$approval": {
+      "delegate": false,
+      "add_approver": false,
+      "takeover": false,
+      "approve": false,
+      "reject": false,
+      "recall": false,
+      "resubmit": false
+    },
+    "Created_Time": "2026-09-29T08:40:14+02:00",
+    "$wizard_connection_path": null,
+    "$editable": true,
+    "Booking": {
+      "name": "Mr. Rico & Mrs. Carmen Aponte and Mr/Ms Rivera",
+      "id": "616617000159986519"
+    },
+    "Edit_Request": "{\"storage\":\"parts_v1\",\"parts\":[\"616617000174771024\",\"616617000174764027\",\"616617000174852014\",\"616617000174844116\"],\"hash\":\"9905505ec672cbf12e5694001c73acc05f9027a7638b49dcb5d46a7e0d1506e7\",\"length\":31287,\"key\":\"e85d6fc3-95fc-425c-849e-8efbc208e06c\",\"phase\":\"Applied\",\"busy_until\":0,\"stage\":\"payments\",\"cursor\":0,\"payment_cursor\":0,\"payment_id\":null,\"payment_action\":\"keep\"}",
+    "Total_Payable_Amount": 264.58,
+    "Invoice_Total": 204.58,
+    "Registration_Key": null,
+    "Additional_Amount_Incl_VAT": 0,
+    "Created_By": {
+      "name": "Gabi Dumitru",
+      "id": "616617000004056007",
+      "email": "gabi@madeforspainandportugal.com"
+    },
+    "$zia_owner_assignment": "owner_recommendation_unavailable",
+    "Additional_Amount_Excl_VAT": 0,
+    "Additional_VAT_Amount": 0,
+    "$review_process": {
+      "approve": false,
+      "reject": false,
+      "resubmit": false
+    },
+    "MFSP_Reference": "MFSP2605058",
+    "$layout_id": {
+      "display_label": "Standard",
+      "name": "Standard",
+      "id": "616617000159402092"
+    },
+    "Invoice_Date": "2026-10-11",
+    "Supplier_Name": "Visitas Guiadas Salamanca",
+    "Supplier_Code": "SLM013",
+    "Modified_By": {
+      "name": "Made for Spain and Portugal",
+      "id": "616617000000365001",
+      "email": "crmadmin@madeforspainandportugal.com"
+    },
+    "$review": null,
+    "Additional_IRPF_percentage": 0,
+    "Reimbursable_Expense": 60,
+    "Unpaid_Invoiced_Amount": 0,
+    "Edit_Status": "Pending",
+    "Supplier": {
+      "name": "Visitas Guiadas Salamanca",
+      "id": "616617000099876705"
+    },
+    "Ezus_Supplier_Reference": "madeforspain-0601-supnew-SLM013",
+    "$zia_visions": null,
+    "Invoice_Type": "Final Invoice",
+    "Modified_Time": "2026-10-13T16:04:09+02:00",
+    "Due_Date": null,
+    "Original_Invoice": null,
+    "Registration_Request": null,
+    "Unsubscribed_Time": null,
+    "VAT_percentage": 21,
+    "Record_Status__s": "Available",
+    "$orchestration": false,
+    "Invoice_Amount_Incl_VAT": 233.53,
+    "Registration_Status": null,
+    "$in_merge": false,
+    "IRPF_percentage": 15,
+    "Locked__s": false,
+    "Additional_IRPF_Amount": 0,
+    "Tag": [],
+    "$approval_state": "approved",
+    "$pathfinder": false,
+    "Amount_Paid": 264.58
+  },
+  "parts": [
+    {
+      "Owner": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$currency_symbol": "€",
+      "Completed_At": null,
+      "$field_states": null,
+      "Trigger_Reason": "Immutable correction plan part; not an executable job",
+      "$sharing_permission": "full_access",
+      "Active_Key": "invoice-edit-616617000173365008-e85d6fc3-95fc-425c-849e-8efbc208e06c-9905505ec672cbf12e5694001c73acc05f9027a7638b49dcb5d46a7e0d1506e7-1",
+      "Name": "JOB-6596",
+      "Last_Activity_Time": null,
+      "Last_Result_JSON": null,
+      "Unsubscribed_Mode": null,
+      "$process_flow": false,
+      "Next_Run_At": null,
+      "$locked_for_me": false,
+      "id": "616617000174771024",
+      "Max_Attempts": null,
+      "Status": "Done",
+      "$approval": {
+        "delegate": false,
+        "add_approver": false,
+        "takeover": false,
+        "approve": false,
+        "reject": false,
+        "recall": false,
+        "resubmit": false
+      },
+      "Created_Time": "2026-10-13T16:03:24+02:00",
+      "Priority": null,
+      "$wizard_connection_path": null,
+      "$editable": true,
+      "Booking": null,
+      "Related_Record_ID": "616617000173365008",
+      "Job_Type": "Invoice Edit Plan Part",
+      "Payload_JSON": "{\"chunk\":\"{\\\"phase\\\":\\\"Prepared\\\",\\\"key\\\":\\\"e85d6fc3-95fc-425c-849e-8efbc208e06c\\\",\\\"input\\\":\\\"{\\\\\\\"operation\\\\\\\":\\\\\\\"edit\\\\\\\",\\\\\\\"invoice_id\\\\\\\":\\\\\\\"616617000173365008\\\\\\\",\\\\\\\"action\\\\\\\":\\\\\\\"convert_proforma\\\\\\\",\\\\\\\"modified_time\\\\\\\":\\\\\\\"2026-10-13T15:38:55+02:00\\\\\\\",\\\\\\\"invoice_type\\\\\\\":\\\\\\\"Final Invoice\\\\\\\",\\\\\\\"invoice_number\\\\\\\":\\\\\\\"INV-MFSP2605058-165\\\\\\\",\\\\\\\"invoice_date\\\\\\\":\\\\\\\"2026-10-11\\\\\\\",\\\\\\\"file_id\\\\\\\":\\\\\\\"87fd9e5197c7dc1113efdbf19f26104b9f2758091b5b7c72a047faf8682e57b22dbc8793da61e307509b58c4c9063607\\\\\\\",\\\\\\\"batch\\\\\\\":true,\\\\\\\"remove_file_ids\\\\\\\":[\\\\\\\"616617000173365016\\\\\\\"],\\\\\\\"fields\\\\\\\":{\\\\\\\"Name\\\\\\\":\\\\\\\"INV-MFSP2605058-165\\\\\\\",\\\\\\\"Invoice_Date\\\\\\\":\\\\\\\"2026-10-11\\\\\\\",\\\\\\\"Invoice_Type\\\\\\\":\\\\\\\"Final Invoice\\\\\\\",\\\\\\\"Invoice_Amount_Excl_VAT\\\\\\\":193,\\\\\\\"VAT_percentage\\\\\\\":21,\\\\\\\"IRPF_percentage\\\\\\\":15,\\\\\\\"Additional_Amount_Excl_VAT\\\\\\\":0,\\\\\\\"Additional_VAT_percentage\\\\\\\":0,\\\\\\\"Additional_IRPF_percentage\\\\\\\":0,\\\\\\\"Reimbursable_Expense\\\\\\\":60},\\\\\\\"allocations\\\\\\\":{\\\\\\\"616617000173369001\\\\\\\":264.58},\\\\\\\"reason\\\\\\\":\\\\\\\"Converted proforma to final invoice\\\\\\\",\\\\\\\"vat_reviewed\\\\\\\":true,\\\\\\\"irpf_reviewed\\\\\\\":true,\\\\\\\"additional_vat_reviewed\\\\\\\":true,\\\\\\\"additional_irpf_reviewed\\\\\\\":true,\\\\\\\"confirm_excess\\\\\\\":true,\\\\\\\"payment_action\\\\\\\":\\\\\\\"keep\\\\\\\"}\\\",\\\"before\\\":{\\\"Name\\\":\\\"PROF-MFSP2605058-SLM013-1\\\",\\\"Invoice_Date\\\":\\\"2026-10-11\\\",\\\"Invoice_Type\\\":\\\"Proforma\\\",\\\"Invoice_Amount_Excl_VAT\\\":193,\\\"VAT_percentage\\\":21,\\\"IRPF_percentage\\\":15,\\\"Additional_Amount_Excl_VAT\\\":0,\\\"Additional_VAT_percentage\\\":0,\\\"Additional_IRPF_percentage\\\":0,\\\"Reimbursable_Expense\\\":60,\\\"Invoice_Amount_Incl_VAT\\\":233.53,\\\"VAT_Amount\\\":40.53,\\\"IRPF_Amount\\\":28.95,\\\"Additional_Amount_Incl_VAT\\\":0,\\\"Additional_VAT_Amount\\\":0,\\\"Additional_IRPF_Amount\\\":0,\\\"Invoice_Total\\\":204.58,\\\"Total_Payable_Amount\\\":264.58,\\\"Amount_Paid\\\":264.58,\\\"Status\\\":\\\"Paid\\\"},\\\"header\\\":{\\\"Name\\\":\\\"INV-MFSP2605058-165\\\",\\\"Invoice_Date\\\":\\\"2026-10-11\\\",\\\"Invoice_Type\\\":\\\"Final Invoice\\\",\\\"Invoice_Amount_Excl_VAT\\\":193.00,\\\"VAT_percentage\\\":21.00,\\\"IRPF_percentage\\\":15.00,\\\"Additional_Amount_Excl_VAT\\\":0.00,\\\"Additional_VAT_percentage\\\":0.00,\\\"Additional_IRPF_percentage\\\":0.00,\\\"Reimbursable_Expense\\\":60.00,\\\"Invoice_Amount_Incl_VAT\\\":233.53,\\\"VAT_Amount\\\":40.53,\\\"IRPF_Amount\\\":28.95,\\\"Additional_Amount_Incl_VAT\\\":0.00,\\\"Additional_VAT_Amount\\\":0.00,\\\"Additional_IRPF_Amount\\\":0.00,\\\"Invoice_Total\\\":204.58,\\\"Total_Payable_Amount\\\":264.58,\\\"Amount_Paid\\\":264.58,\\\"Status\\\":\\\"Paid\\\"},\\\"file_id\\\":\\\"87fd9e5197c7dc1113efdbf19f26104b9f2758091b5b7c72a047faf8682e57b22dbc8793da61e307509b58c4c9063607\\\",\\\"splits\\\":[{\\\"id\\\":\\\"616617000173365010\\\",\\\"settlement_id\\\":\\\"616617000173369001\\\",\\\"before\\\":264.58,\\\"after\\\":264.58}],\\\"settlement_ids\\\":[\\\"616617000173369001\\\"],\\\"accounting\\\":{},\\\"paid\\\":264.58,\\\"supplier_id\\\":\\\"616617000099876705\\\",\\\"primary_id\\\":\\\"616617000173369001\\\",\\\"cards\\\":[],\\\"reason\\\":\\\"Converted proforma to final invoice\\\",\\\"payments\\\":{\\\"success\\\":true,\\\"options\\\":[{\\\"id\\\":\\\"616617000174312096\\\",\\\"name\\\":\\\"PAY-20261009-105740\\\",\\\"allocated\\\":264.58,\\\"amount\\\":41729.78,\\\"can_correct\\\":true,\\\"reason\\\":\\\"\\\"}],\\\"invoice_status\\\":\\\"Paid\\\",\\\"invoice_date\\\":\\\"2026-10-11\\\",\\\"plans\\\":[{\\\"id\\\":\\\"616617000174312096\\\",\\\"name\\\":\\\"PAY-20261009-105740\\\",\\\"status\\\":\\\"Paid\\\",\\\"accounting_status\\\":\\\"Pending\\\",\\\"books_id\\\":null,\\\"date\\\":\\\"2026-10-09\\\",\\\"account\\\":\\\"616617000160780101\\\",\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"before\\\":41729.78,\\\"after\\\":41729.78,\\\"allocation_id\\\":\\\"616617000174312350\\\",\\\"allocation_after\\\":264.58,\\\"allocations\\\":[{\\\"id\\\":\\\"616617000174312098\\\",\\\"invoice_id\\\":\\\"616617000173251023\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:14+02:00\\\",\\\"before\\\":300.4,\\\"after\\\":300.4,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312101\\\",\\\"invoice_id\\\":\\\"616617000174333002\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:14+02:00\\\",\\\"before\\\":313.36,\\\"after\\\":313.36,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312104\\\",\\\"invoice_id\\\":\\\"616617000173701258\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:14+02:00\\\",\\\"before\\\":448.4,\\\"after\\\":448.4,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312107\\\",\\\"invoice_id\\\":\\\"616617000173701316\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:14+02:00\\\",\\\"before\\\":295.62,\\\"after\\\":295.62,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312110\\\",\\\"invoice_id\\\":\\\"616617000174241001\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:53:29+02:00\\\",\\\"before\\\":916.26,\\\"after\\\":916.26,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Paid\\\",\\\"invoice_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312113\\\",\\\"invoice_id\\\":\\\"616617000174241125\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:13+02:00\\\",\\\"before\\\":224.72,\\\"after\\\":224.72,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312116\\\",\\\"invoice_id\\\":\\\"616617000173523903\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:13+02:00\\\",\\\"before\\\":257.72,\\\"after\\\":257.72,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312119\\\",\\\"invoice_id\\\":\\\"616617000174357002\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:13+02:00\\\",\\\"before\\\":214.68,\\\"after\\\":214.68,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312122\\\",\\\"invoice_id\\\":\\\"616617000173895031\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:12+02:00\\\",\\\"before\\\":336.22,\\\"after\\\":336.22,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312125\\\",\\\"invoice_id\\\":\\\"616617000173365042\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:12+02:00\\\",\\\"before\\\":206.8,\\\"after\\\":206.8,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312128\\\",\\\"invoice_id\\\":\\\"616617000173895061\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:12+02:00\\\",\\\"before\\\":466.4,\\\"after\\\":466.4,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312131\\\",\\\"invoice_id\\\":\\\"616617000173701542\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:12+02:00\\\",\\\"before\\\":1035.96,\\\"after\\\":1035.96,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312134\\\",\\\"invoice_id\\\":\\\"616617000173641076\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:11+02:00\\\",\\\"before\\\":777.87,\\\"after\\\":777.87,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312137\\\",\\\"invoice_id\\\":\\\"616617000173365205\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:11+02:00\\\",\\\"before\\\":267.12,\\\"after\\\":267.12,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312140\\\",\\\"invoice_id\\\":\\\"616617000173523924\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:11+02:00\\\",\\\"before\\\":684.02,\\\"after\\\":684.02,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312143\\\",\\\"invoice_id\\\":\\\"616617000173641046\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:11+02:00\\\",\\\"before\\\":634.57,\\\"after\\\":634.57,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312146\\\",\\\"invoice_id\\\":\\\"616617000173445115\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:10+02:00\\\",\\\"before\\\":602.52,\\\"after\\\":602.52,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-29\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312149\\\",\\\"invoice_id\\\":\\\"616617000173365245\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:10+02:00\\\",\\\"before\\\":325.21,\\\"after\\\":325.21,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-27\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312152\\\",\\\"invoice_id\\\":\\\"616617000173365185\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:10+02:00\\\",\\\"before\\\":502.23,\\\"after\\\":502.23,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-21\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312155\\\",\\\"invoice_id\\\":\\\"616617000173701506\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:10+02:00\\\",\\\"before\\\":404.02,\\\"after\\\":404.02,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312158\\\",\\\"invoice_id\\\":\\\"616617000173641110\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:09+02:00\\\",\\\"before\\\":665.68,\\\"after\\\":665.68,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312161\\\",\\\"invoice_id\\\":\\\"616617000173735090\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:09+02:00\\\",\\\"before\\\":671.3,\\\"after\\\":671.3,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-06\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312164\\\",\\\"invoice_id\\\":\\\"616617000173701247\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:09+02:00\\\",\\\"before\\\":496.6,\\\"after\\\":496.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-02\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312167\\\",\\\"invoice_id\\\":\\\"616617000173641032\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:09+02:00\\\",\\\"before\\\":328.67,\\\"after\\\":328.67,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312170\\\",\\\"invoice_id\\\":\\\"616617000173365195\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:08+02:00\\\",\\\"before\\\":295.7,\\\"after\\\":295.7,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-26\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312173\\\",\\\"invoice_id\\\":\\\"616617000174083021\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:08+02:00\\\",\\\"before\\\":324.78,\\\"after\\\":324.78,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoic\"}",
+      "Source_Function": "supplierInvoiceEdit_journal",
+      "Created_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$zia_owner_assignment": "owner_recommendation_unavailable",
+      "$review_process": {
+        "approve": false,
+        "reject": false,
+        "resubmit": false
+      },
+      "$layout_id": {
+        "display_label": "Standard",
+        "name": "Standard",
+        "id": "616617000160235371"
+      },
+      "Last_Error": null,
+      "Dedup_Key": null,
+      "Last_Run_At": null,
+      "Modified_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$review": null,
+      "Attempts": null,
+      "Locked_At": null,
+      "$zia_visions": null,
+      "Related_Technical_Key": null,
+      "Modified_Time": "2026-10-13T16:03:24+02:00",
+      "Lock_Expires_At": null,
+      "Unsubscribed_Time": null,
+      "Record_Status__s": "Available",
+      "$orchestration": false,
+      "Related_Module": "Supplier_Invoices",
+      "$in_merge": false,
+      "Locked__s": false,
+      "Tag": [],
+      "$approval_state": "approved",
+      "$pathfinder": false
+    },
+    {
+      "Owner": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$currency_symbol": "€",
+      "Completed_At": null,
+      "$field_states": null,
+      "Trigger_Reason": "Immutable correction plan part; not an executable job",
+      "$sharing_permission": "full_access",
+      "Active_Key": "invoice-edit-616617000173365008-e85d6fc3-95fc-425c-849e-8efbc208e06c-9905505ec672cbf12e5694001c73acc05f9027a7638b49dcb5d46a7e0d1506e7-2",
+      "Name": "JOB-6597",
+      "Last_Activity_Time": null,
+      "Last_Result_JSON": null,
+      "Unsubscribed_Mode": null,
+      "$process_flow": false,
+      "Next_Run_At": null,
+      "$locked_for_me": false,
+      "id": "616617000174764027",
+      "Max_Attempts": null,
+      "Status": "Done",
+      "$approval": {
+        "delegate": false,
+        "add_approver": false,
+        "takeover": false,
+        "approve": false,
+        "reject": false,
+        "recall": false,
+        "resubmit": false
+      },
+      "Created_Time": "2026-10-13T16:03:25+02:00",
+      "Priority": null,
+      "$wizard_connection_path": null,
+      "$editable": true,
+      "Booking": null,
+      "Related_Record_ID": "616617000173365008",
+      "Job_Type": "Invoice Edit Plan Part",
+      "Payload_JSON": "{\"chunk\":\"e_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312176\\\",\\\"invoice_id\\\":\\\"616617000173701418\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:08+02:00\\\",\\\"before\\\":259.7,\\\"after\\\":259.7,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312179\\\",\\\"invoice_id\\\":\\\"616617000173701031\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:08+02:00\\\",\\\"before\\\":347.7,\\\"after\\\":347.7,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312182\\\",\\\"invoice_id\\\":\\\"616617000173365052\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:08+02:00\\\",\\\"before\\\":845.6,\\\"after\\\":845.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312185\\\",\\\"invoice_id\\\":\\\"616617000173581144\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:07+02:00\\\",\\\"before\\\":784.4,\\\"after\\\":784.4,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312188\\\",\\\"invoice_id\\\":\\\"616617000173251064\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:07+02:00\\\",\\\"before\\\":427.18,\\\"after\\\":427.18,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-27\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312191\\\",\\\"invoice_id\\\":\\\"616617000174367001\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:07+02:00\\\",\\\"before\\\":445.65,\\\"after\\\":445.65,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312194\\\",\\\"invoice_id\\\":\\\"616617000173895194\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:07+02:00\\\",\\\"before\\\":538.5,\\\"after\\\":538.5,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312197\\\",\\\"invoice_id\\\":\\\"616617000173895204\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:06+02:00\\\",\\\"before\\\":428.7,\\\"after\\\":428.7,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312200\\\",\\\"invoice_id\\\":\\\"616617000173895214\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:06+02:00\\\",\\\"before\\\":493,\\\"after\\\":493,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312203\\\",\\\"invoice_id\\\":\\\"616617000173895224\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:06+02:00\\\",\\\"before\\\":450.89,\\\"after\\\":450.89,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312206\\\",\\\"invoice_id\\\":\\\"616617000173701125\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:06+02:00\\\",\\\"before\\\":290.9,\\\"after\\\":290.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312209\\\",\\\"invoice_id\\\":\\\"616617000173701211\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:05+02:00\\\",\\\"before\\\":322.2,\\\"after\\\":322.2,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312212\\\",\\\"invoice_id\\\":\\\"616617000173445127\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:05+02:00\\\",\\\"before\\\":322.2,\\\"after\\\":322.2,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-29\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312215\\\",\\\"invoice_id\\\":\\\"616617000173523071\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:05+02:00\\\",\\\"before\\\":304.2,\\\"after\\\":304.2,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-29\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312218\\\",\\\"invoice_id\\\":\\\"616617000173523061\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:05+02:00\\\",\\\"before\\\":587.2,\\\"after\\\":587.2,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-27\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312221\\\",\\\"invoice_id\\\":\\\"616617000173365168\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:04+02:00\\\",\\\"before\\\":212,\\\"after\\\":212,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312224\\\",\\\"invoice_id\\\":\\\"616617000174241295\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:04+02:00\\\",\\\"before\\\":225.41,\\\"after\\\":225.41,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312227\\\",\\\"invoice_id\\\":\\\"616617000173581349\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:04+02:00\\\",\\\"before\\\":218.36,\\\"after\\\":218.36,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-02\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312230\\\",\\\"invoice_id\\\":\\\"616617000173581112\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:04+02:00\\\",\\\"before\\\":223.86,\\\"after\\\":223.86,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312233\\\",\\\"invoice_id\\\":\\\"616617000173701105\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:03+02:00\\\",\\\"before\\\":325.95,\\\"after\\\":325.95,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312236\\\",\\\"invoice_id\\\":\\\"616617000173701303\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:03+02:00\\\",\\\"before\\\":230.7,\\\"after\\\":230.7,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312239\\\",\\\"invoice_id\\\":\\\"616617000174241053\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:03+02:00\\\",\\\"before\\\":263.69,\\\"after\\\":263.69,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312242\\\",\\\"invoice_id\\\":\\\"616617000174241085\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:03+02:00\\\",\\\"before\\\":1000.78,\\\"after\\\":1000.78,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312245\\\",\\\"invoice_id\\\":\\\"616617000174241115\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:02+02:00\\\",\\\"before\\\":455.54,\\\"after\\\":455.54,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312248\\\",\\\"invoice_id\\\":\\\"616617000173523986\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:02+02:00\\\",\\\"before\\\":379.2,\\\"after\\\":379.2,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312251\\\",\\\"invoice_id\\\":\\\"616617000173641022\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:02+02:00\\\",\\\"before\\\":318,\\\"after\\\":318,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312254\\\",\\\"invoice_id\\\":\\\"616617000173895041\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:02+02:00\\\",\\\"before\\\":243.8,\\\"after\\\":243.8,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-06\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312257\\\",\\\"invoice_id\\\":\\\"616617000174241285\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:01+02:00\\\",\\\"before\\\":243.01,\\\"after\\\":243.01,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-06\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312260\\\",\\\"invoice_id\\\":\\\"616617000174241275\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:01+02:00\\\",\\\"before\\\":514.34,\\\"after\\\":514.34,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312263\\\",\\\"invoice_id\\\":\\\"616617000173641100\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:01+02:00\\\",\\\"before\\\":284.26,\\\"after\\\":284.26,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312266\\\",\\\"invoice_id\\\":\\\"616617000173251033\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:01+02:00\\\",\\\"before\\\":244.86,\\\"after\\\":244.86,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-22\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312269\\\",\\\"invoice_id\\\":\\\"616617000174083061\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:01+02:00\\\",\\\"before\\\":234.26,\\\"after\\\":234.26,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312272\\\",\\\"invoice_id\\\":\\\"616617000173251284\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:00+02:00\\\",\\\"before\\\":252.35,\\\"after\\\":252.35,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-27\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312278\\\",\\\"invoice_id\\\":\\\"616617000174083051\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:00+02:00\\\",\\\"before\\\":337.52,\\\"after\\\":337.52,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-06\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312281\\\",\\\"invoice_id\\\":\\\"616617000173701494\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:00+02:00\\\",\\\"before\\\":916.34,\\\"after\\\":916.34,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312284\\\",\\\"invoice_id\\\":\\\"616617000173251074\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:39:00+02:00\\\",\\\"before\\\":392.08,\\\"after\\\":392.08,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-27\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312287\\\",\\\"invoice_id\\\":\\\"616617000173251084\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:59+02:00\\\",\\\"before\\\":339.52,\\\"after\\\":339.52,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-27\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312290\\\",\\\"invoice_id\\\":\\\"616617000173701073\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:59+02:00\\\",\\\"before\\\":336.13,\\\"after\\\":336.13,\\\"currency\\\":\\\"EUR\\\",\\\"\"}",
+      "Source_Function": "supplierInvoiceEdit_journal",
+      "Created_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$zia_owner_assignment": "owner_recommendation_unavailable",
+      "$review_process": {
+        "approve": false,
+        "reject": false,
+        "resubmit": false
+      },
+      "$layout_id": {
+        "display_label": "Standard",
+        "name": "Standard",
+        "id": "616617000160235371"
+      },
+      "Last_Error": null,
+      "Dedup_Key": null,
+      "Last_Run_At": null,
+      "Modified_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$review": null,
+      "Attempts": null,
+      "Locked_At": null,
+      "$zia_visions": null,
+      "Related_Technical_Key": null,
+      "Modified_Time": "2026-10-13T16:03:25+02:00",
+      "Lock_Expires_At": null,
+      "Unsubscribed_Time": null,
+      "Record_Status__s": "Available",
+      "$orchestration": false,
+      "Related_Module": "Supplier_Invoices",
+      "$in_merge": false,
+      "Locked__s": false,
+      "Tag": [],
+      "$approval_state": "approved",
+      "$pathfinder": false
+    },
+    {
+      "Owner": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$currency_symbol": "€",
+      "Completed_At": null,
+      "$field_states": null,
+      "Trigger_Reason": "Immutable correction plan part; not an executable job",
+      "$sharing_permission": "full_access",
+      "Active_Key": "invoice-edit-616617000173365008-e85d6fc3-95fc-425c-849e-8efbc208e06c-9905505ec672cbf12e5694001c73acc05f9027a7638b49dcb5d46a7e0d1506e7-3",
+      "Name": "JOB-6598",
+      "Last_Activity_Time": null,
+      "Last_Result_JSON": null,
+      "Unsubscribed_Mode": null,
+      "$process_flow": false,
+      "Next_Run_At": null,
+      "$locked_for_me": false,
+      "id": "616617000174852014",
+      "Max_Attempts": null,
+      "Status": "Done",
+      "$approval": {
+        "delegate": false,
+        "add_approver": false,
+        "takeover": false,
+        "approve": false,
+        "reject": false,
+        "recall": false,
+        "resubmit": false
+      },
+      "Created_Time": "2026-10-13T16:03:25+02:00",
+      "Priority": null,
+      "$wizard_connection_path": null,
+      "$editable": true,
+      "Booking": null,
+      "Related_Record_ID": "616617000173365008",
+      "Job_Type": "Invoice Edit Plan Part",
+      "Payload_JSON": "{\"chunk\":\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312293\\\",\\\"invoice_id\\\":\\\"616617000173365235\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:59+02:00\\\",\\\"before\\\":927.34,\\\"after\\\":927.34,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312296\\\",\\\"invoice_id\\\":\\\"616617000174083001\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:59+02:00\\\",\\\"before\\\":647.4,\\\"after\\\":647.4,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312299\\\",\\\"invoice_id\\\":\\\"616617000174083011\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:59+02:00\\\",\\\"before\\\":637.3,\\\"after\\\":637.3,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312302\\\",\\\"invoice_id\\\":\\\"616617000173523081\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:58+02:00\\\",\\\"before\\\":334.85,\\\"after\\\":334.85,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312305\\\",\\\"invoice_id\\\":\\\"616617000174083041\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:58+02:00\\\",\\\"before\\\":611.76,\\\"after\\\":611.76,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-06\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312308\\\",\\\"invoice_id\\\":\\\"616617000174083031\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:58+02:00\\\",\\\"before\\\":375.06,\\\"after\\\":375.06,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312311\\\",\\\"invoice_id\\\":\\\"616617000173365064\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:58+02:00\\\",\\\"before\\\":441.16,\\\"after\\\":441.16,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312314\\\",\\\"invoice_id\\\":\\\"616617000173895184\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:57+02:00\\\",\\\"before\\\":434.6,\\\"after\\\":434.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312317\\\",\\\"invoice_id\\\":\\\"616617000173365115\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:57+02:00\\\",\\\"before\\\":485.9,\\\"after\\\":485.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312320\\\",\\\"invoice_id\\\":\\\"616617000173365138\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:57+02:00\\\",\\\"before\\\":434.6,\\\"after\\\":434.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312323\\\",\\\"invoice_id\\\":\\\"616617000173701237\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:57+02:00\\\",\\\"before\\\":242,\\\"after\\\":242,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312326\\\",\\\"invoice_id\\\":\\\"616617000173701371\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:57+02:00\\\",\\\"before\\\":304.04,\\\"after\\\":304.04,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312329\\\",\\\"invoice_id\\\":\\\"616617000173251043\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:56+02:00\\\",\\\"before\\\":284.4,\\\"after\\\":284.4,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-26\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312332\\\",\\\"invoice_id\\\":\\\"616617000174083092\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:56+02:00\\\",\\\"before\\\":276.22,\\\"after\\\":276.22,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-08\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312335\\\",\\\"invoice_id\\\":\\\"616617000173251265\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:56+02:00\\\",\\\"before\\\":610.78,\\\"after\\\":610.78,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312341\\\",\\\"invoice_id\\\":\\\"616617000173701135\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:56+02:00\\\",\\\"before\\\":218.22,\\\"after\\\":218.22,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312344\\\",\\\"invoice_id\\\":\\\"616617000173093460\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:55+02:00\\\",\\\"before\\\":230.56,\\\"after\\\":230.56,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-11\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312347\\\",\\\"invoice_id\\\":\\\"616617000173701552\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:55+02:00\\\",\\\"before\\\":206.8,\\\"after\\\":206.8,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-16\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312350\\\",\\\"invoice_id\\\":\\\"616617000173365008\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:55+02:00\\\",\\\"before\\\":264.58,\\\"after\\\":264.58,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-11\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312353\\\",\\\"invoice_id\\\":\\\"616617000173365225\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:55+02:00\\\",\\\"before\\\":222.6,\\\"after\\\":222.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-26\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312356\\\",\\\"invoice_id\\\":\\\"616617000173365215\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:54+02:00\\\",\\\"before\\\":222.6,\\\"after\\\":222.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-23\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312359\\\",\\\"invoice_id\\\":\\\"616617000174083072\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:54+02:00\\\",\\\"before\\\":222.6,\\\"after\\\":222.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-07\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312362\\\",\\\"invoice_id\\\":\\\"616617000173581285\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:54+02:00\\\",\\\"before\\\":236.6,\\\"after\\\":236.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-01\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312365\\\",\\\"invoice_id\\\":\\\"616617000173251001\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:54+02:00\\\",\\\"before\\\":222.6,\\\"after\\\":222.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312368\\\",\\\"invoice_id\\\":\\\"616617000173701408\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:54+02:00\\\",\\\"before\\\":222.6,\\\"after\\\":222.6,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-02\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312371\\\",\\\"invoice_id\\\":\\\"616617000173365285\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:53+02:00\\\",\\\"before\\\":491.84,\\\"after\\\":491.84,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-29\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312374\\\",\\\"invoice_id\\\":\\\"616617000173365275\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:53+02:00\\\",\\\"before\\\":491.84,\\\"after\\\":491.84,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-28\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312377\\\",\\\"invoice_id\\\":\\\"616617000173251094\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:53+02:00\\\",\\\"before\\\":516.36,\\\"after\\\":516.36,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312380\\\",\\\"invoice_id\\\":\\\"616617000173251124\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:53+02:00\\\",\\\"before\\\":262,\\\"after\\\":262,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312383\\\",\\\"invoice_id\\\":\\\"616617000173251134\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:52+02:00\\\",\\\"before\\\":508.96,\\\"after\\\":508.96,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312386\\\",\\\"invoice_id\\\":\\\"616617000173895051\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:52+02:00\\\",\\\"before\\\":259.9,\\\"after\\\":259.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-06\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312389\\\",\\\"invoice_id\\\":\\\"616617000173735156\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:52+02:00\\\",\\\"before\\\":347.9,\\\"after\\\":347.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312392\\\",\\\"invoice_id\\\":\\\"616617000173523976\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:52+02:00\\\",\\\"before\\\":267.9,\\\"after\\\":267.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-04\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312395\\\",\\\"invoice_id\\\":\\\"616617000173701166\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:52+02:00\\\",\\\"before\\\":303.9,\\\"after\\\":303.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-02\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312398\\\",\\\"invoice_id\\\":\\\"616617000173093398\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:51+02:00\\\",\\\"before\\\":267.9,\\\"after\\\":267.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-24\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312401\\\",\\\"invoice_id\\\":\\\"616617000173701115\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:51+02:00\\\",\\\"before\\\":267.9,\\\"after\\\":267.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312404\\\",\\\"invoice_id\\\":\\\"616617000173523913\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:51+02:00\\\",\\\"before\\\":267.9,\\\"after\\\":267.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-05\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312407\\\",\\\"invoice_id\\\":\\\"616617000173251013\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:51+\"}",
+      "Source_Function": "supplierInvoiceEdit_journal",
+      "Created_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$zia_owner_assignment": "owner_recommendation_unavailable",
+      "$review_process": {
+        "approve": false,
+        "reject": false,
+        "resubmit": false
+      },
+      "$layout_id": {
+        "display_label": "Standard",
+        "name": "Standard",
+        "id": "616617000160235371"
+      },
+      "Last_Error": null,
+      "Dedup_Key": null,
+      "Last_Run_At": null,
+      "Modified_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$review": null,
+      "Attempts": null,
+      "Locked_At": null,
+      "$zia_visions": null,
+      "Related_Technical_Key": null,
+      "Modified_Time": "2026-10-13T16:03:25+02:00",
+      "Lock_Expires_At": null,
+      "Unsubscribed_Time": null,
+      "Record_Status__s": "Available",
+      "$orchestration": false,
+      "Related_Module": "Supplier_Invoices",
+      "$in_merge": false,
+      "Locked__s": false,
+      "Tag": [],
+      "$approval_state": "approved",
+      "$pathfinder": false
+    },
+    {
+      "Owner": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$currency_symbol": "€",
+      "Completed_At": null,
+      "$field_states": null,
+      "Trigger_Reason": "Immutable correction plan part; not an executable job",
+      "$sharing_permission": "full_access",
+      "Active_Key": "invoice-edit-616617000173365008-e85d6fc3-95fc-425c-849e-8efbc208e06c-9905505ec672cbf12e5694001c73acc05f9027a7638b49dcb5d46a7e0d1506e7-4",
+      "Name": "JOB-6599",
+      "Last_Activity_Time": null,
+      "Last_Result_JSON": null,
+      "Unsubscribed_Mode": null,
+      "$process_flow": false,
+      "Next_Run_At": null,
+      "$locked_for_me": false,
+      "id": "616617000174844116",
+      "Max_Attempts": null,
+      "Status": "Done",
+      "$approval": {
+        "delegate": false,
+        "add_approver": false,
+        "takeover": false,
+        "approve": false,
+        "reject": false,
+        "recall": false,
+        "resubmit": false
+      },
+      "Created_Time": "2026-10-13T16:03:26+02:00",
+      "Priority": null,
+      "$wizard_connection_path": null,
+      "$editable": true,
+      "Booking": null,
+      "Related_Record_ID": "616617000173365008",
+      "Job_Type": "Invoice Edit Plan Part",
+      "Payload_JSON": "{\"chunk\":\"02:00\\\",\\\"before\\\":267.9,\\\"after\\\":267.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-25\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312410\\\",\\\"invoice_id\\\":\\\"616617000173445137\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:50+02:00\\\",\\\"before\\\":284.8,\\\"after\\\":284.8,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-29\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312413\\\",\\\"invoice_id\\\":\\\"616617000173641086\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:50+02:00\\\",\\\"before\\\":267.9,\\\"after\\\":267.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-09-30\\\",\\\"payment_status\\\":\\\"Paid\\\"},{\\\"id\\\":\\\"616617000174312416\\\",\\\"invoice_id\\\":\\\"616617000173701461\\\",\\\"invoice_version\\\":\\\"2026-10-13T15:38:50+02:00\\\",\\\"before\\\":300.9,\\\"after\\\":300.9,\\\"currency\\\":\\\"EUR\\\",\\\"movement\\\":\\\"Outbound Payment\\\",\\\"invoice_status\\\":\\\"Received\\\",\\\"invoice_date\\\":\\\"2026-10-03\\\",\\\"payment_status\\\":\\\"Paid\\\"}],\\\"allocation_total\\\":41729.78,\\\"blocked\\\":\\\"\\\",\\\"accounting\\\":{}}],\\\"paid_before\\\":264.58,\\\"paid_after\\\":264.58,\\\"reserved_after\\\":264.58},\\\"payment_action\\\":\\\"keep\\\",\\\"paid_after\\\":264.58,\\\"file_before_ids\\\":[\\\"616617000173365016\\\"],\\\"file_remove_ids\\\":[\\\"616617000173365016\\\"],\\\"file_kept_ids\\\":[],\\\"batch\\\":true,\\\"stage\\\":\\\"header\\\",\\\"cursor\\\":0,\\\"payment_cursor\\\":0}\"}",
+      "Source_Function": "supplierInvoiceEdit_journal",
+      "Created_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$zia_owner_assignment": "owner_recommendation_unavailable",
+      "$review_process": {
+        "approve": false,
+        "reject": false,
+        "resubmit": false
+      },
+      "$layout_id": {
+        "display_label": "Standard",
+        "name": "Standard",
+        "id": "616617000160235371"
+      },
+      "Last_Error": null,
+      "Dedup_Key": null,
+      "Last_Run_At": null,
+      "Modified_By": {
+        "name": "Made for Spain and Portugal",
+        "id": "616617000000365001",
+        "email": "crmadmin@madeforspainandportugal.com"
+      },
+      "$review": null,
+      "Attempts": null,
+      "Locked_At": null,
+      "$zia_visions": null,
+      "Related_Technical_Key": null,
+      "Modified_Time": "2026-10-13T16:03:26+02:00",
+      "Lock_Expires_At": null,
+      "Unsubscribed_Time": null,
+      "Record_Status__s": "Available",
+      "$orchestration": false,
+      "Related_Module": "Supplier_Invoices",
+      "$in_merge": false,
+      "Locked__s": false,
+      "Tag": [],
+      "$approval_state": "approved",
+      "$pathfinder": false
+    }
+  ]
+}

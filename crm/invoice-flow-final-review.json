@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-16",
+  "historical_financial_records_modified": false,
+  "status": "server_baseline_published_performance_changes_local",
+  "published_functions_verified": [
+    {
+      "name": "supplierinvoice_edit",
+      "read": true,
+      "matches": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "supplierinvoiceedit_payments",
+      "read": true,
+      "matches": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "supplierinvoice_convertfinal",
+      "read": true,
+      "matches": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "supplierinvoiceedit_accountingplan",
+      "read": true,
+      "matches": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "supplierinvoiceedit_paymentaccountingplan",
+      "read": true,
+      "matches": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "accent_resolvesupplierinvoiceaccountingentry",
+      "read": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "accent_resolvesupplierpaymentaccountingentry",
+      "read": true,
+      "createsAccounting": false
+    },
+    {
+      "name": "supplierinvoiceedit_applyaccounting",
+      "read": true,
+      "createsAccounting": false
+    }
+  ],
+  "published_source_paths": {
+    "supplierinvoice_edit": "crm/accounting-paused/supplierinvoice_edit.dg",
+    "supplierinvoiceedit_payments": "crm/accounting-paused/supplierinvoiceedit_payments.dg",
+    "supplierinvoice_convertfinal": "crm/invoice-edit/supplierInvoice_convertFinal.dg",
+    "supplierinvoiceedit_accountingplan": "crm/invoice-edit/supplierInvoiceEdit_accountingPlan.dg",
+    "supplierinvoiceedit_paymentaccountingplan": "crm/invoice-edit/supplierInvoiceEdit_paymentAccountingPlan.dg"
+  },
+  "changes": [
+    "Active entry/line creation bodies and planning/application calls removed; legacy public entry points return explicit error and perform no writes. Archived backups are historical, not deployment sources.",
+    "Invoice editing and proforma conversion accept empty Invoice_File for invoices with live Card_Purchases or Prepayment_Invoice_Allocations links. No documents are copied; existing invoice-file replacement safeguards remain.",
+    "Quick invoice registrations explicitly finish Pending -> Ready -> Complete. Rebuild uses Ready; editor/payment use remains blocked while registration is incomplete.",
+    "Invoice deletion blocks Pending/Ready registrations, locked documents, and existing accounting entry/line links; it does not delete or regenerate accounting records.",
+    "Shared-payment totals use live signed allocations; related invoice paid amounts count Paid/Reconciled payments and use Total_Payable_Amount. Manual payment accounting status is preserved.",
+    "Deletion uses the common CRM settlement rebuild. Invoice is temporarily marked Cancelled after dependent cleanup so the rebuild excludes it, and is physically deleted only after successful recalculation. On failure it stays available for resume.",
+    "Deletion recovery uses persistent browser storage and browser locks; rechecks relationships, locks and pending updates; recalculates financial aggregates from current rows on resume. Previous v2 journals require review rather than execution under changed rules.",
+    "Removed automatic suggestions while typing supplier search remains unchanged from the earlier request."
+  ],
+  "validation": {
+    "focused_tests_passed": 248,
+    "last_changed_subset_passed": 103,
+    "server_compile_and_readback": true,
+    "live_financial_mutation_tests": false,
+    "browser_visual_tests": false,
+    "logs": [
+      "_local/invoice-final-review.txt",
+      "_local/invoice-final-last.txt"
+    ],
+    "legacy_test_scope": "Generation-specific historical tests explicitly execute archived source; ordinary invoice-edit tests now default to the current no-generation implementation."
+  },
+  "remaining": [
+    "Widget not rebuilt or uploaded; local deletion and quick registration fixes are not yet in the hosted widget.",
+    "Prior payment-consistency backend changes are a separate pending deployment; this release did not publish them.",
+    "No full inventory of external workflows/integrations was performed. Verification covers active repository sources and the eight published CRM entry points read back.",
+    "Cross-user coordination remains outside scope by user decision.",
+    "Legacy pending accounting-generation corrections and older deletion journals remain blocked for review; no historical jobs were migrated or auto-completed."
+  ],
+  "pending_performance_changes": {
+    "date": "2026-10-16",
+    "function": "supplierinvoice_edit",
+    "source": "crm/accounting-paused/supplierinvoice_edit.dg",
+    "published": false,
+    "widget_published": false,
+    "note": "Earlier published_functions_verified describe the baseline before this performance change, not the current local source."
+  }
+}

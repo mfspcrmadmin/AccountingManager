@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-14",
+  "functions": ["supplierinvoice_edit", "supplierinvoiceedit_journal"],
+  "published_and_read_back": true,
+  "invoice": "616617000173365008",
+  "invoice_data_modified": false,
+  "recovery_executed": false,
+  "required_next_step": "Upload the updated widget. Open Edit invoice, download and review the saved document, explicitly confirm it is correct, then resume the pending correction.",
+  "tests": "63 invoice-edit tests and browser recovery checks passed",
+  "safeguards": ["Pending Applied legacy edits only", "Exact reviewed attachment and Modified_Time", "Server download and digest", "Proof retained across multipart batches", "No file replacement", "Existing payment and accounting checks retained"]
+}

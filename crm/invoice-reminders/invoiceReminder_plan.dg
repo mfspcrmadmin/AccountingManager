@@ -1,0 +1,123 @@
+string standalone.invoiceReminder_plan(String kind, String recordId)
+{
+result = {"eligible":false,"kind":kind,"record_id":recordId};
+try
+{
+    if(!recordId.matches("[0-9]+") || (kind != "service" && kind != "proforma")) { throw "Invalid reminder target"; }
+    moduleName = if(kind == "service","Booking_Services","Supplier_Invoices");
+    record = zoho.crm.getRecordById(moduleName,recordId.toLong());
+    if(record.get("id") == null) { throw "Reminder target could not be read"; }
+    if(record.get("Supplier") == null || record.get("Booking") == null) { throw "Supplier or booking missing"; }
+    supplierId = record.get("Supplier").get("id").toString();
+    bookingId = record.get("Booking").get("id").toString();
+    booking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+    supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+    if(booking.get("id") == null || supplier.get("id") == null) { throw "Supplier or booking could not be read"; }
+    result.put("module",moduleName);
+    result.put("booking_id",bookingId);
+    result.put("supplier_id",supplierId);
+    invoiceType = ifnull(record.get("Invoice_Type"),"").toString();
+    serviceDate = "";
+    description = "";
+    if(kind == "service")
+    {
+        if(record.get("Delete") == true || record.get("NBTM") == true || record.get("Status_EZUS") == "Cancelled" || ifnull(record.get("Total_Purchase_Price"),0).toDecimal() <= 0) { throw "Service is cancelled, NBTM, deleted or has no purchase cost"; }
+        associated = standalone.jobs_query("select id from Supplier_Invoice_Lines where Booking_Service = '" + recordId + "' limit 1").get("data");
+        if(!associated.isEmpty()) { result.put("reason","Service already has an associated invoice"); return result.toString(); }
+        // Legacy invoices without service lines must not cause an incorrect request.
+        if(record.get("Supplier_Settlement") != null)
+        {
+            settlementId = record.get("Supplier_Settlement").get("id").toString();
+            legacy = standalone.jobs_query("select id from Supplier_Invoices where Supplier_Settlement = '" + settlementId + "' limit 2000");
+            allocated = standalone.jobs_query("select Vendor_Invoice from Inv_Set_Allocations where Vendor_Settlement = '" + settlementId + "' limit 2000");
+            if(legacy.get("more_records") == true || allocated.get("more_records") == true) { throw "Settlement invoice list is incomplete"; }
+            invoiceIds = List();
+            for each candidate in legacy.get("data") { invoiceIds.add(candidate.get("id").toString()); }
+            for each allocation in allocated.get("data")
+            {
+                if(allocation.get("Vendor_Invoice") == null) { throw "Settlement allocation has no invoice"; }
+                linkedId = allocation.get("Vendor_Invoice").get("id").toString();
+                if(!invoiceIds.contains(linkedId)) { invoiceIds.add(linkedId); }
+            }
+            for each linkedId in invoiceIds
+            {
+                coverage = standalone.jobs_query("select id from Supplier_Invoice_Lines where Supplier_Invoice = '" + linkedId + "' limit 1").get("data");
+                if(coverage.isEmpty()) { result.put("reason","Settlement invoice has no service lines; coverage needs review"); return result.toString(); }
+            }
+        }
+        serviceDate = ifnull(record.get("Service_Date"),"").toString();
+        description = ifnull(record.get("Product_Description"),ifnull(record.get("Name"),"")).toString();
+    }
+    else
+    {
+        if(invoiceType != "Proforma" || record.get("Status") == "Cancelled" || record.get("Status") == "Rejected") { result.put("reason","Not an active Proforma"); return result.toString(); }
+        if(ifnull(record.get("Edit_Status"),"") != "" && record.get("Edit_Status") != "Complete") { throw "Invoice edit is incomplete"; }
+        if(ifnull(record.get("Registration_Status"),"") != "" && record.get("Registration_Status") != "Complete") { throw "Invoice registration is incomplete"; }
+        finals = standalone.jobs_query("select id from Supplier_Invoices where (Original_Invoice = '" + recordId + "' and Invoice_Type = 'Final Invoice') limit 1").get("data");
+        if(!finals.isEmpty()) { result.put("reason","A final invoice replaces this proforma"); return result.toString(); }
+        lines = standalone.jobs_query("select id, Booking_Service from Supplier_Invoice_Lines where Supplier_Invoice = '" + recordId + "' order by id asc limit 2000");
+        if(lines.get("more_records") == true) { throw "Too many invoice lines; manual review required"; }
+        if(lines.get("data").isEmpty()) { throw "Proforma has no service lines; service date cannot be established"; }
+        serviceIds = List();
+        for each line in lines.get("data")
+        {
+            if(line.get("Booking_Service") == null) { throw "Invoice line has no service"; }
+            serviceId = line.get("Booking_Service").get("id").toString();
+            if(!serviceIds.contains(serviceId))
+            {
+                serviceIds.add(serviceId);
+                service = zoho.crm.getRecordById("Booking_Services",serviceId.toLong());
+                if(service.get("id") == null || service.get("Service_Date") == null) { throw "Service or service date missing"; }
+                if(service.get("Supplier") == null || service.get("Booking") == null || service.get("Supplier").get("id").toString() != supplierId || service.get("Booking").get("id").toString() != bookingId) { throw "Invoice service does not match its supplier and booking"; }
+                currentDate = service.get("Service_Date").toString();
+                if(serviceDate == "" || currentDate.toDate("yyyy-MM-dd") > serviceDate.toDate("yyyy-MM-dd")) { serviceDate = currentDate; }
+            }
+        }
+        description = "Servicios asociados a la proforma: " + serviceIds.size();
+    }
+    historyKey = "invoice-reminder:" + kind + ":" + recordId;
+    history = standalone.jobs_query("select id, Status, Payload_JSON, Completed_At from Admin_Process_Jobs where Related_Technical_Key = '" + historyKey + "' order by Created_Time desc, id desc limit 1").get("data");
+    lastSent = "";
+    sequence = 1;
+    if(!history.isEmpty())
+    {
+        previous = history.get(0);
+        if(previous.get("Status") != "Done") { result.put("reason","Previous send is unconfirmed; review required before retrying"); return result.toString(); }
+        previousData = previous.get("Payload_JSON").toString().toMap();
+        lastSent = previousData.get("sent_date").toString();
+        sequence = previousData.get("sequence").toLong() + 1;
+    }
+    todayText = zoho.currenttime.toString("yyyy-MM-dd","Europe/Madrid");
+    policy = standalone.invoiceReminder_policy(kind,ifnull(booking.get("Stage"),"").toString(),invoiceType,serviceDate,lastSent,todayText).toMap();
+    result.put("reason",policy.get("reason"));
+    result.put("due_date",policy.get("due_date"));
+    if(policy.get("eligible") != true) { return result.toString(); }
+    recipient = "";
+    contactId = "";
+    contactTypeValues = "AC - Accounts,RE - Reservas".toList(",");
+    for each contactType in contactTypeValues
+    {
+        contacts = standalone.jobs_query("select id, Email from Contacts where (Vendor_Name = '" + supplierId + "' and Contact_Type = '" + contactType + "') order by id asc limit 2000");
+        if(contacts.get("more_records") == true) { throw "Supplier contact list is incomplete"; }
+        for each contact in contacts.get("data")
+        {
+            email = ifnull(contact.get("Email"),"").toString().trim();
+            if(email.matches("[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+")) { recipient = email; contactId = contact.get("id").toString(); break; }
+        }
+        if(recipient != "") { break; }
+    }
+    if(recipient == "") { throw "No Accounts or Reservations contact has a valid email"; }
+    model = {"kind":kind,"supplier_name":supplier.get("Vendor_Name"),"booking_reference":booking.get("MFSP_Reference"),"booking_name":booking.get("Deal_Name"),"service_date":serviceDate.toDate("yyyy-MM-dd").toString("dd/MM/yyyy"),"description":description,"invoice_reference":if(kind == "proforma",record.get("Name"),"")};
+    result.put("model",model);
+    result.put("html",standalone.invoiceReminder_body(model.toString()));
+    result.put("subject",if(kind == "proforma","Solicitud de factura final","Solicitud de factura") + " - " + ifnull(booking.get("MFSP_Reference"),"").toString().replaceAll("\r", "",true).replaceAll("\n","",true) + " - Made for Spain and Portugal");
+    result.put("recipient",recipient);
+    result.put("contact_id",contactId);
+    result.put("history_key",historyKey);
+    result.put("sequence",sequence);
+    result.put("dedup_key",historyKey + ":" + sequence);
+    result.put("eligible",true);
+}
+catch (error) { result.put("eligible",false); result.put("error",true); result.put("reason",error.toString()); }
+return result.toString();
+}

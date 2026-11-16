@@ -1,0 +1,164 @@
+string standalone.supplierInvoice_discardRegistration(String operationKey, String requestJson)
+{
+result = {"success":false,"retryable":true,"invoice_id":"","phase":"validate"};
+
+invoiceId = "";
+
+try
+{
+    if(requestJson.toMap().get("operation") == "discard_registration")
+{
+        if(!operationKey.matches("[a-f0-9-]{36}"))
+{
+throw "Invalid registration key.";
+ }
+        originalRequest = ifnull(requestJson.toMap().get("original_request"),"").toString();
+
+        if(originalRequest == "" || originalRequest.length() > 12000)
+{
+throw "The original registration request is required.";
+ }
+        discardLookup = standalone.supplierInvoiceRegistration_read("Supplier_Invoices","Registration_Key",operationKey).toMap();
+
+        if(discardLookup.get("success") != true)
+{
+throw discardLookup.get("message");
+ }
+        if(discardLookup.get("records").size() != 1)
+{
+throw "The invoice could not be uniquely confirmed. Keep recovery information and check the previous save before discarding.";
+ }
+        discardInvoice = discardLookup.get("records").get(0);
+
+        invoiceId = discardInvoice.get("id").toString();
+
+        result.put("invoice_id",invoiceId);
+
+        if(discardInvoice.get("Registration_Request").toString().toMap().get("input") != originalRequest)
+{
+throw "This operation belongs to different invoice data.";
+ }
+        discardStatus = ifnull(discardInvoice.get("Registration_Status"),"").toString();
+
+        if(discardStatus == "Discarding")
+{
+result.put("phase","discarding");
+ }
+        if(discardStatus == "Discarded" && discardInvoice.get("Status") == "Cancelled")
+{
+            result.put("success",true);
+ result.put("retryable",false);
+ result.put("phase","discarded");
+ result.put("message","Invoice registration already discarded.");
+ return result.toString();
+
+        }
+        if(!"Pending,Ready,Discarding".toList(",").contains(discardStatus))
+{
+throw "Only an unfinished registration can be discarded. Review the registered invoice instead.";
+ }
+        if(discardInvoice.get("Locked__s") == true || discardInvoice.get("Edit_Status") == "Pending" || ifnull(discardInvoice.get("Amount_Paid"),0).toDecimal() != 0)
+{
+throw "The invoice is locked, being corrected or has payments. It cannot be discarded.";
+ }
+        if(discardStatus == "Discarding" && discardInvoice.get("Status") != "Cancelled" || discardStatus != "Discarding" && discardInvoice.get("Status") != "Received")
+{
+throw "The invoice status changed. Review it before discarding.";
+ }
+        discardModules = "Supplier_Pay_Allocations,Prepayment_Invoice_Allocations,Card_Purchases,Accounting_Entries".toList(",");
+for each discardModule in discardModules
+{
+            discardField = "Vendor_Invoice";
+
+            if(discardModule == "Supplier_Pay_Allocations" || discardModule == "Accounting_Entries")
+{
+discardField = "Supplier_Invoice";
+ }
+            discardLinks = standalone.supplierInvoiceEdit_read(discardModule,discardField,invoiceId).toMap();
+
+            if(discardLinks.get("success") != true || !discardLinks.get("records").isEmpty())
+{
+throw "Payment or source operations are linked to this invoice, or could not be checked. Review them before discarding.";
+ }
+        }
+        discardSettlementIds = List();
+
+        if(discardInvoice.get("Supplier_Settlement") != null)
+{
+discardSettlementIds.add(discardInvoice.get("Supplier_Settlement").get("id").toString());
+ }
+        discardSplits = standalone.supplierInvoiceRegistration_read("Inv_Set_Allocations","Vendor_Invoice",invoiceId).toMap();
+
+        if(discardSplits.get("success") != true)
+{
+throw discardSplits.get("message");
+ }
+        for each discardSplit in discardSplits.get("records")
+{
+            if(discardSplit.get("Vendor_Settlement") != null && !discardSettlementIds.contains(discardSplit.get("Vendor_Settlement").get("id").toString()))
+{
+discardSettlementIds.add(discardSplit.get("Vendor_Settlement").get("id").toString());
+ }
+        }
+        // Keep the invoice, document, lines and unique key as an audit trail.
+        // Cancelled invoices are excluded from payable balances by the rebuild.
+        if(discardStatus != "Discarding")
+{
+            discardClaim = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,discardInvoice.get("Modified_Time"),{"Status":"Cancelled","Registration_Status":"Discarding"}).toMap();
+
+            if(discardClaim.get("error") != false)
+{
+throw "The invoice changed while discarding. Review and retry.";
+ }
+        }
+        result.put("phase","discarding");
+
+        discardIds = "";
+
+        for each discardId in discardSettlementIds
+        {
+            if(discardIds != "")
+{
+discardIds = discardIds + "|||";
+ }
+            discardIds = discardIds + discardId;
+
+        }
+        if(discardIds != "")
+{
+            discardRebuild = standalone.rebuildSupplierSettlementTotals(discardIds).toMap();
+
+            if(discardRebuild.get("error") != false || ifnull(discardRebuild.get("warning_count"),0) > 0)
+{
+throw "Invoice cancelled; balance updates remain pending. Retry discard. " + ifnull(discardRebuild.get("message"),"");
+ }
+        }
+        discardCurrent = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+
+        if(discardCurrent.get("Registration_Key") != operationKey || discardCurrent.get("Registration_Status") != "Discarding" || discardCurrent.get("Status") != "Cancelled")
+{
+throw "The discarded invoice changed. Review before finishing.";
+ }
+        discardFinished = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,discardCurrent.get("Modified_Time"),{"Registration_Status":"Discarded"}).toMap();
+
+        if(discardFinished.get("error") != false)
+{
+throw "Discard completion was not confirmed. Retry discard.";
+ }
+        result.put("success",true);
+ result.put("retryable",false);
+ result.put("phase","discarded");
+ result.put("message","Registration discarded. The cancelled invoice and document are retained for reference.");
+ return result.toString();
+
+    }
+
+}
+catch (e)
+{
+result.put("message",e.toString());
+
+}
+return result.toString();
+
+}

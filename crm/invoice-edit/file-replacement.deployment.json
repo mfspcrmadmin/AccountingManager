@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-13",
+  "function": "supplierinvoice_edit",
+  "function_id": "616617000174359025",
+  "published": true,
+  "invoice_file_limit_verified_in_production": 1,
+  "request_change": "remove_file_ids: explicit list of existing Invoice_File link IDs",
+  "behavior": [
+    "Require exactly one retained or replacement invoice document before claiming a new edit.",
+    "Validate ownership and duplicates for removal IDs.",
+    "Persist original, removed and retained link IDs in the immutable correction journal.",
+    "Submit explicit _delete:null commands and the new File_Id__s together with the conditional invoice header update.",
+    "Do not resend deletion/addition commands after the header phase is Applied.",
+    "Check document identity on resume and verify the resulting document before completing.",
+    "Legacy Prepared corrections that tried to append a second file require explicit discard and a new replacement request.",
+    "Widget supports Remove, Undo, Replace file and removing a new selection; Cancel does not apply document changes."
+  ],
+  "validation": {
+    "backend_tests_passed": 20,
+    "browser": "Required document, removal/undo, replacement IDs in payload, drag/drop, existing editor validations and recovery passed",
+    "production_compilation": "Accepted and published source read back",
+    "live_invoice_replacement": "Not executed; connector cannot directly execute the function. Verify after uploading the widget."
+  },
+  "widget": "Local changes ready for user upload; no ZIP generated",
+  "reference": "https://www.zoho.com/crm/developer/docs/api/v8/update-records.html"
+}

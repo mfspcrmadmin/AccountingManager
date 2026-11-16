@@ -1,0 +1,180 @@
+string standalone.tripInvoice_collections(String bookingId, String invoiceId)
+{
+result = {"success":false};
+try
+{
+    if(!bookingId.matches("^[0-9]+$") || (invoiceId != "" && !invoiceId.matches("^[0-9]+$"))) { throw "Invalid collections query."; }
+    paid = 0.0;
+    refunded = 0.0;
+    evidence = List();
+    links = List();
+    seen = List();
+    pages = "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24".toList(",");
+    reports = "All_Travellers_Payments,All_Refunds".toList(",");
+    creatorCount = 0;
+    for each report in reports
+    {
+        criteria = "(Travellers_Payment_Request.Booking_Id == \"" + bookingId + "\")";
+        if(report == "All_Refunds") { criteria = "(Booking_Id == \"" + bookingId + "\")"; }
+        for each page in pages
+        {
+            start = page.toLong() * 200 + 1;
+            response = zoho.creator.getRecords("madeforspainandportugal","administration-manager",report,criteria,start,200,"administrationmanager");
+            if(response.get("code") == 3100 || response.get("code") == 9280) { break; }
+            if(response.get("code") != 3000 || response.get("data") == null) { throw "Could not verify Creator collections. No payment total has been assumed."; }
+            rows = response.get("data");
+            for each item in rows
+            {
+                row = item;
+                key = report + "-" + ifnull(row.get("ID"),"");
+                if(row.get("ID") == null || seen.contains(key)) { throw "Repeated or unidentified collection records. Review before invoicing."; }
+                seen.add(key);
+                status = ifnull(row.get("Status"),"");
+                if(status == "PAID" || status == "SUCCESS")
+                {
+                    creatorCount = creatorCount + 1;
+                    fullResponse = invokeurl
+                    [
+                        url :"https://www.zohoapis.eu/creator/v2.1/data/madeforspainandportugal/administration-manager/report/" + report + "/" + row.get("ID")
+                        type :GET
+                        parameters:{"field_config":"all"}
+                        detailed:true
+                        connection:"administrationmanager"
+                    ];
+                    fullPayload = fullResponse.get("responseText").toString().toMap();
+                    if(fullResponse.get("responseCode") != 200 || fullPayload.get("code") != 3000 || fullPayload.get("data") == null) { throw "Could not verify a confirmed collection record."; }
+                    row = fullPayload.get("data");
+                    if(row.get("ID") != item.get("ID")) { throw "A collection record identifier could not be verified."; }
+                    ownerBooking = ifnull(row.get("Booking_Id"),"").toString();
+                    if(report == "All_Travellers_Payments") { ownerBooking = ifnull(row.get("Travellers_Payment_Request.Booking_Id"),"").toString(); }
+                    if(ownerBooking != bookingId || row.get("Status") != status) { throw "A collection changed or belongs to another Booking. Review again."; }
+                    reference = ifnull(row.get("Successful_Payment_Intent_Id"),"").trim();
+                    if(report == "All_Refunds") { reference = ifnull(row.get("Sucessful_Request_Id"),"").trim(); }
+                    if(reference != "")
+                    {
+                        referenceKey = report + "-reference-" + reference;
+                        if(seen.contains(referenceKey)) { throw "A confirmed collection reference is duplicated. Review its records."; }
+                        seen.add(referenceKey);
+                    }
+                }
+                value = 0.0;
+                if(report == "All_Travellers_Payments")
+                {
+                    if(status == "PAID")
+                    {
+                        if(row.get("Amount") == null || row.get("Amount").toString() == "" || row.get("Amount").toDecimal() <= 0) { throw "A confirmed Creator payment has no valid EUR amount."; }
+                        value = row.get("Amount").toDecimal().round(2);
+                        paid = paid + value;
+                    }
+                    else if(!"UNPAID,CANCELLED,EXPIRED".toList(",").contains(status)) { throw "Unknown Creator payment status."; }
+                }
+                else
+                {
+                    if(status == "PENDING") { throw "A refund is still pending. Resolve it before verifying invoice collections."; }
+                    if(status == "SUCCESS")
+                    {
+                        if(row.get("Final_Amount_Refunded") == null || row.get("Final_Amount_Refunded").toString() == "" || row.get("Final_Amount_Refunded").toDecimal() < 0) { throw "A completed refund has no confirmed final EUR amount."; }
+                        value = row.get("Final_Amount_Refunded").toDecimal().round(2);
+                        refunded = refunded + value;
+                    }
+                    else if(status != "FAILED") { throw "Unknown Creator refund status."; }
+                }
+                evidence.add({"source":report,"id":row.get("ID"),"status":status,"amount_eur":value,"date":row.get("Payment_Date"),"reference":ifnull(row.get("Successful_Payment_Intent_Id"),row.get("Sucessful_Request_Id"))});
+            }
+            if(rows.size() < 200) { break; }
+            if(page == "24") { throw "Too many Creator collection records. No partial total was accepted."; }
+        }
+    }
+    legacy = standalone.tripInvoice_readRelated("Payment_Requests",bookingId).toMap();
+    if(legacy.get("success") != true) { throw legacy.get("message"); }
+    crmPaid = 0.0;
+    crmRefunded = 0.0;
+    crmEvidence = List();
+    legacyRows = legacy.get("records");
+    paymentIds = List();
+    for each row in legacyRows
+    {
+        if(row.get("Paid") == true)
+        {
+            if("Failed,Cancelled".toList(",").contains(ifnull(row.get("Status"),"")) || row.get("Amount") == null) { throw "A CRM payment has inconsistent paid status or amount."; }
+            reference = ifnull(row.get("Payment_ID"),"").trim();
+            if(reference != "" && paymentIds.contains(reference)) { throw "A CRM payment reference is repeated. Review it before invoicing."; }
+            if(reference != "") { paymentIds.add(reference); }
+            if(ifnull(row.get("Currency"),"") != "EUR") { throw "CRM collections need a currency review. No exchange rate was assumed."; }
+            value = row.get("Amount").toDecimal().round(2);
+            if(value > 0) { crmPaid = crmPaid + value; } else { crmRefunded = crmRefunded - value; }
+            if(creatorCount == 0)
+            {
+                assigned = standalone.tripInvoice_readRelated("Invoices_X_Payment_R",row.get("id").toString()).toMap();
+                if(assigned.get("success") != true) { throw assigned.get("message"); }
+                alreadyLinked = false;
+                assignedRows = assigned.get("records");
+                for each assignment in assignedRows
+                {
+                    otherId = ifnull(ifnull(assignment.get("Invoices"),Map()).get("id"),"").toString();
+                    if(otherId == "" || otherId != invoiceId) { throw "A CRM receipt is already linked to another invoice. Review its allocation."; }
+                    alreadyLinked = true;
+                }
+                if(!alreadyLinked) { links.add({"Payment_Requests":{"id":row.get("id")}}); }
+            }
+            crmEvidence.add({"source":"Payment_Requests","id":row.get("id"),"status":row.get("Status"),"amount_eur":value,"modified":row.get("Modified_Time")});
+        }
+    }
+    source = "Creator";
+    if(creatorCount > 0 && (crmPaid != 0 || crmRefunded != 0)) { throw "Both Creator and CRM contain confirmed receipts. Review overlapping sources before invoicing; they were not added together."; }
+    if(creatorCount == 0)
+    {
+        source = "CRM Payment Requests";
+        paid = crmPaid;
+        refunded = crmRefunded;
+        evidence = crmEvidence;
+    }
+    net = (paid - refunded).round(2);
+    if(paid <= 0 && seen.size() == 0 && legacyRows.size() == 0)
+    {
+        historicalBooking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+        historicalPaid = historicalBooking.get("Paid_Amount");
+        if(historicalBooking.get("Currency") == "EUR" && historicalBooking.get("Balance_Amount") != null && historicalBooking.get("Balance_Amount").toDecimal() == 0 && historicalPaid != null && historicalPaid.toDecimal() > 0 && historicalBooking.get("Sales_Price_inc_Taxes") != null && historicalPaid.toDecimal().round(2) == historicalBooking.get("Sales_Price_inc_Taxes").toDecimal().round(2))
+        {
+            result.put("historical_eligible",true);
+            result.put("historical_amount",historicalPaid.toDecimal().round(2));
+            result.put("message","No detailed customer receipts were found. Review and explicitly confirm the historical Booking payment before invoicing.");
+            return result.toString();
+        }
+    }
+    if(paid <= 0 || net < 0) { throw "Confirmed receipts are missing or refunds exceed receipts. Review the Booking payment records."; }
+    if(links.size() > 100) { throw "Too many CRM receipt links for a single invoice operation."; }
+    proof = {"source":source,"currency":"EUR","paid":paid.round(2),"refunded":refunded.round(2),"net":net,"records":evidence};
+    if(proof.toString().length() > 30000) { throw "The collection evidence exceeds the invoice field capacity. No evidence was truncated."; }
+    result.put("success",true);
+    result.put("source",source);
+    result.put("paid",paid.round(2));
+    result.put("refunded",refunded.round(2));
+    result.put("net",net);
+    result.put("evidence",proof);
+    result.put("links",links);
+    // A positive, verified partial receipt can coexist with a historical remainder.
+    // Cancelled/expired requests have no financial movement; unpaid requests still require review.
+    historicalBooking = zoho.crm.getRecordById("Deals",bookingId.toLong());
+    historicalPaid = historicalBooking.get("Paid_Amount");
+    allConfirmed = true;
+    for each entry in evidence
+    {
+        if(!"PAID,SUCCESS,CANCELLED,EXPIRED".toList(",").contains(ifnull(entry.get("status"),"")) && source == "Creator") { allConfirmed = false; }
+    }
+    for each legacyRow in legacyRows
+    {
+        if(legacyRow.get("Paid") != true) { allConfirmed = false; }
+    }
+    if(invoiceId == "" && allConfirmed && net > 0 && historicalBooking.get("Currency") == "EUR" && historicalBooking.get("Balance_Amount") != null && historicalBooking.get("Balance_Amount").toDecimal() == 0 && historicalPaid != null && historicalBooking.get("Sales_Price_inc_Taxes") != null && historicalPaid.toDecimal().round(2) == historicalBooking.get("Sales_Price_inc_Taxes").toDecimal().round(2) && historicalPaid.toDecimal().round(2) > net)
+    {
+        result.put("success",false);
+        result.put("historical_eligible",true);
+        result.put("historical_amount",(historicalPaid.toDecimal().round(2) - net).round(2));
+        result.put("message","Detailed collections cover only part of the Booking payment. Confirm only the historical remainder using original records.");
+    }
+
+}
+catch (e) { result.put("message",e.toString()); }
+return result.toString();
+}

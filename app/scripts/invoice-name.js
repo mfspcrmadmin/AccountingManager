@@ -1,6 +1,12 @@
 (function (global) {
   "use strict";
   var ns = global.AccountingManagerApp = global.AccountingManagerApp || {};
+  ns.defaultInvoiceDate = function (type, now) {
+    if (!type || type === "Tickets" || type === "Final Invoice") { return ""; }
+    var parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now || new Date());
+    function part(name) { return parts.find(function (item) { return item.type === name; }).value; }
+    return part("year") + "-" + part("month") + "-" + part("day");
+  };
   var prefixes = { Tickets: "TICK", Proforma: "PROF", "Final Invoice": "INV", "Credit Note": "CRED", Commission: "COMM" };
   function text(value) { return String(value == null ? "" : value).trim(); }
   function first(record, fields) {

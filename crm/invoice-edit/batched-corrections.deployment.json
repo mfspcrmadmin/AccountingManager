@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-13",
+  "status": "production_functions_published_widget_upload_pending",
+  "functions": [
+    {
+      "api_name": "supplierinvoiceedit_journal",
+      "id": "616617000174866001",
+      "purpose": "Chunked immutable recovery storage and compact invoice manifest"
+    },
+    {
+      "api_name": "supplierinvoiceedit_applyaccounting",
+      "id": "616617000174330023",
+      "purpose": "At most ten line creates/deletes per batch; read-only final verification"
+    },
+    {
+      "api_name": "supplierinvoiceedit_payments",
+      "id": "616617000174613062",
+      "purpose": "One payment per batch, nested accounting continuation"
+    },
+    {
+      "api_name": "supplierinvoice_edit",
+      "id": "616617000174359025",
+      "purpose": "Stage checkpoints and completion verification"
+    }
+  ],
+  "storage": {
+    "module": "Admin_Process_Jobs",
+    "job_type": "Invoice Edit Plan Part",
+    "status": "Done",
+    "payload_field": "Payload_JSON",
+    "unique_key": "Active_Key",
+    "part_size_characters": 10000,
+    "threshold_characters": 24000,
+    "maximum_plan_characters": 2000000,
+    "integrity": "SHA-256 and invoice/operation/part membership verified on read",
+    "retention": "Parts retained as recovery/audit data. Not scheduled work; existing Pending/Retry scheduler does not process them."
+  },
+  "stages": [
+    "header",
+    "payments",
+    "splits",
+    "accounting",
+    "cards",
+    "settlements",
+    "verify"
+  ],
+  "limits": {
+    "accounting_line_mutations_per_call": 10,
+    "payments_per_call": 1,
+    "settlement_allocations_per_call": 10,
+    "linked_cards_per_call": 10,
+    "settlement_recalculations_per_call": 1
+  },
+  "widget": "Sets batch=true, continues pending responses sequentially with the same operation key, reports stage/detail, blocks duplicate saves, retains local request and offers Resume correction after interruption.",
+  "compatibility": "Legacy inline journals and small requests without batch continue to work. Large plans automatically use batching; older widgets require manual Resume until upgraded. No new public authentication required.",
+  "validation": [
+    "Functions compiled in Zoho; published source read back. Zoho formatter removed redundant boolean parentheses in two helpers; read-back versions tested locally.",
+    "Browser tested sequential continuation, disabled save/close during batches, lost connection and reopening/resuming.",
+    "Large-plan, lost-response, missing/tampered-part, concurrent edit, bounded create/delete and final-verification tests passed with mocked CRM. No real invoices/payments altered for tests."
+  ],
+  "remaining_limits": "Planning and full graph validation still read the complete related graph; existing query/API limits apply. Mutation batching addresses execution work and the 30000-character journal failure, not unlimited CRM graph size. Plans above 2 million characters are rejected before invoice changes.",
+  "remaining": "Upload widget and retry the affected correction. No ZIP generated."
+}

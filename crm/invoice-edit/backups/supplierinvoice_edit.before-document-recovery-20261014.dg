@@ -1,0 +1,1018 @@
+string standalone.supplierInvoice_edit(String operationKey, String requestJson)
+{
+result = {"success":false,"retryable":false,"saved":false};
+claimed = false;
+invoiceId = "";
+try 
+{
+	request = requestJson.toMap();
+	invoiceId = ifnull(request.get("invoice_id"),"").toString();
+	if(requestJson.length() > 16000 || !invoiceId.matches("[0-9]+") || !operationKey.matches("[a-f0-9-]{36}"))
+	{
+		throw "Invalid invoice edit request.";
+	}
+	invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	if(invoice.get("id") == null)
+	{
+		throw "Could not read the invoice.";
+	}
+	result.put("invoice_id",invoiceId);
+	action = ifnull(request.get("action"),"preview");
+	journal = Map();
+	if(ifnull(invoice.get("Edit_Request"),"") != "")
+	{
+		journal = invoice.get("Edit_Request").toMap();
+		if(invoice.get("Edit_Status") == "Pending")
+		{
+			journal = standalone.supplierInvoiceEdit_journal(invoiceId,"load",journal.toString()).toMap();
+			result.put("saved",journal.get("phase") == "Applied");
+		}
+	}
+	if(action == "preview" && invoice.get("Edit_Status") == "Pending")
+	{
+		result.put("can_discard",journal.get("phase") == "Prepared" && ifnull(journal.get("busy_until"),0).toLong() <= zoho.currenttime.toLong());
+		result.put("pending",true);
+		result.put("operation_key",journal.get("key"));
+		invoice.put("Edit_Request",journal.toString());
+		result.put("invoice",invoice);
+		result.put("success",true);
+		return result.toString();
+	}
+	if(action != "preview" && journal.get("key") == operationKey && invoice.get("Edit_Status") == "Complete")
+	{
+		result.put("payment_id",journal.get("payment_id"));
+		result.put("payment_action",ifnull(journal.get("payment_action"),"keep"));
+		result.put("success",true);
+		result.put("saved",true);
+		return result.toString();
+	}
+	if(action == "discard")
+	{
+		if(invoice.get("Edit_Status") != "Pending" || journal.get("key") != operationKey || journal.get("phase") != "Prepared" || ifnull(journal.get("busy_until"),0).toLong() > zoho.currenttime.toLong())
+		{
+			throw "This correction cannot be discarded because it may have saved changes. Resume it instead.";
+		}
+		discarded = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),{"Edit_Status":"Discarded"}).toMap();
+		if(discarded.get("error") == true)
+		{
+			throw "The correction changed while cancelling. Reload it.";
+		}
+		result.put("success",true);
+		result.put("discarded",true);
+		return result.toString();
+	}
+	if(invoice.get("Locked__s") == true || "Cancelled,Rejected,Reconciled".toList(",").contains(ifnull(invoice.get("Status"),"")))
+	{
+		throw "This invoice is locked, cancelled, rejected or reconciled and cannot be edited.";
+	}
+	if(invoice.get("Invoice_Type") == "Credit Note" || invoice.get("Original_Invoice") != null)
+	{
+		throw "Credit notes require a separate correction workflow.";
+	}
+	if(ifnull(invoice.get("Registration_Key"),"") != "" && invoice.get("Registration_Status") != "Complete")
+	{
+		throw "Finish the original registration before editing this invoice.";
+	}
+	if(invoice.get("Supplier") == null || invoice.get("Supplier_Settlement") == null)
+	{
+		throw "The invoice must have a supplier and an existing settlement.";
+	}
+	supplierId = invoice.get("Supplier").get("id").toString();
+	primaryId = invoice.get("Supplier_Settlement").get("id").toString();
+	context = Map();
+	editList_moduleName = "Inv_Set_Allocations,Supplier_Pay_Allocations,Accounting_Entries,Card_Purchases,Prepayment_Invoice_Allocations".toList(",");
+	for each  moduleName in editList_moduleName
+	{
+		relation = "Vendor_Invoice";
+		if(moduleName == "Supplier_Pay_Allocations" || moduleName == "Accounting_Entries")
+		{
+			relation = "Supplier_Invoice";
+		}
+		read = standalone.supplierInvoiceEdit_read(moduleName,relation,invoiceId).toMap();
+		if(read.get("success") != true)
+		{
+			throw read.get("message");
+		}
+		context.put(moduleName,read.get("records"));
+	}
+	entries = context.get("Accounting_Entries");
+	if(entries.size() > 1)
+	{
+		throw "Multiple accounting entries require review before editing.";
+	}
+	for each  entry in entries
+	{
+		if(entry.get("Locked__s") == true || entry.get("Posted_At") != null || "Posted to Books,Cancelled".toList(",").contains(ifnull(entry.get("Accounting_Status"),"")) || ifnull(entry.get("Zoho_Books_Document_Id"),"") != "" || "Posted,Reconciled,Sent to Books,Exported,Cancelled".toList(",").contains(ifnull(entry.get("Books_Post_Status"),"")))
+		{
+			throw "Reverse the posted or exported accounting entry before editing this invoice.";
+		}
+	}
+	paid = 0.0;
+	reserved = 0.0;
+	for each  allocation in context.get("Supplier_Pay_Allocations")
+	{
+		if("Cancelled,Void".toList(",").contains(ifnull(allocation.get("Status"),"")))
+		{
+			continue;
+		}
+		if(allocation.get("Supplier_Payment") == null)
+		{
+			throw "A payment allocation has no payment. Review it before editing.";
+		}
+		payment = zoho.crm.getRecordById("Supplier_Payments",allocation.get("Supplier_Payment").get("id").toLong());
+		if(payment.get("id") == null)
+		{
+			throw "Could not verify an allocated payment.";
+		}
+		if(payment.get("Status") == "Cancelled")
+		{
+			continue;
+		}
+		amount = ifnull(allocation.get("Allocated_Amount"),0).toDecimal();
+		if(amount < 0)
+		{
+			throw "Negative payment allocations require review.";
+		}
+		reserved = reserved + amount;
+		if(payment.get("Status") == "Paid" || payment.get("Status") == "Reconciled")
+		{
+			paid = paid + amount;
+		}
+	}
+	paid = paid.round(2);
+	reserved = reserved.round(2);
+	preallocated = 0.0;
+	for each  link in context.get("Prepayment_Invoice_Allocations")
+	{
+		preallocated = preallocated + ifnull(link.get("Allocated_Amount"),0).toDecimal();
+	}
+	splits = List();
+	settlementIds = List();
+	settlements = Map();
+	for each  split in context.get("Inv_Set_Allocations")
+	{
+		if("Void,Cancelled".toList(",").contains(ifnull(split.get("Status"),"")))
+		{
+			continue;
+		}
+		if(split.get("Vendor_Settlement") == null)
+		{
+			throw "An invoice allocation has no settlement.";
+		}
+		sid = split.get("Vendor_Settlement").get("id").toString();
+		if(settlementIds.contains(sid))
+		{
+			throw "Duplicate settlement allocations require review.";
+		}
+		settlementIds.add(sid);
+		splits.add(split);
+	}
+	if(settlementIds.isEmpty())
+	{
+		settlementIds.add(primaryId);
+	}
+	if(!settlementIds.contains(primaryId))
+	{
+		throw "The primary settlement is missing from the invoice allocations.";
+	}
+	for each  sid in settlementIds
+	{
+		settlement = zoho.crm.getRecordById("Supplier_Settlements",sid.toLong());
+		if(settlement.get("id") == null || settlement.get("Supplier") == null || settlement.get("Supplier").get("id").toString() != supplierId || settlement.get("Admin_Status") == "Cancelled")
+		{
+			throw "A linked settlement is unavailable, cancelled or belongs to another supplier.";
+		}
+		settlements.put(sid,settlement);
+	}
+	if(action == "preview")
+	{
+		paymentPreview = standalone.supplierInvoiceEdit_payments(invoiceId,"preview","{}",operationKey).toMap();
+		if(paymentPreview.get("success") != true)
+		{
+			throw paymentPreview.get("message");
+		}
+		result.put("payments",paymentPreview.get("options"));
+		result.put("success",true);
+		result.put("invoice",invoice);
+		result.put("splits",splits);
+		result.put("settlements",settlements);
+		result.put("paid",paid);
+		result.put("reserved",reserved);
+		result.put("has_accounting",!entries.isEmpty());
+		return result.toString();
+	}
+	conversionRequested = action == "convert_proforma";
+	if(action == "add_payment" || conversionRequested)
+	{
+		if(invoice.get("Edit_Status") == "Pending")
+		{
+			action = "resume";
+		}
+		else
+		{
+			if(conversionRequested)
+			{
+				if(invoice.get("Invoice_Type") != "Proforma" || request.get("invoice_type") != "Final Invoice")
+				{
+					throw "Only a proforma can be converted to Final Invoice.";
+				}
+				replacementId = ifnull(request.get("file_id"),"").toString();
+				if(replacementId == "")
+				{
+					throw "Attach a new final invoice document.";
+				}
+				conversionRemoveIds = List();
+				for each  oldFile in ifnull(invoice.get("Invoice_File"),List())
+				{
+					if(ifnull(oldFile.get("File_Id__s"),oldFile.get("file_Id")) == replacementId)
+					{
+						throw "Attach the new final invoice document instead of reusing the proforma.";
+					}
+					conversionRemoveIds.add(ifnull(oldFile.get("id"),ifnull(oldFile.get("attachment_Id"),"")).toString());
+				}
+			}
+			if(conversionRequested)
+			{
+				request.put("remove_file_ids",conversionRemoveIds);
+			}
+			paymentFields = Map();
+			paymentFieldNames = "Name,Invoice_Date,Invoice_Type,Invoice_Amount_Excl_VAT,VAT_percentage,IRPF_percentage,Additional_Amount_Excl_VAT,Additional_VAT_percentage,Additional_IRPF_percentage,Reimbursable_Expense".toList(",");
+			for each  field in paymentFieldNames
+			{
+				paymentFields.put(field,invoice.get(field));
+			}
+			if(conversionRequested)
+			{
+				paymentFields.put("Invoice_Type","Final Invoice");
+				paymentFields.put("Name",ifnull(request.get("invoice_number"),""));
+				if(request.containKey("invoice_date"))
+				{
+					paymentFields.put("Invoice_Date",request.get("invoice_date"));
+				}
+			}
+			paymentSplits = Map();
+			if(splits.isEmpty())
+			{
+				paymentSplits.put(primaryId,invoice.get("Total_Payable_Amount"));
+			}
+			for each  split in splits
+			{
+				paymentSplits.put(split.get("Vendor_Settlement").get("id").toString(),split.get("Allocated_Amount"));
+			}
+			// Legacy single-settlement invoices allocated Invoice_Total without reimbursables.
+			// Conversion may restore that exact missing amount; never infer a multi-trip distribution.
+			if(conversionRequested && splits.size() == 1)
+			{
+				storedTotal = ifnull(invoice.get("Invoice_Total"),0).toDecimal();
+				storedExpense = ifnull(invoice.get("Reimbursable_Expense"),0).toDecimal();
+				storedPayable = ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal();
+				if(storedExpense > 0 && ifnull(splits.get(0).get("Allocated_Amount"),0).toDecimal() == storedTotal && (storedTotal + storedExpense).round(2) == storedPayable)
+				{
+					paymentSplits.put(primaryId,storedPayable);
+				}
+			}
+			request.put("fields",paymentFields);
+			request.put("allocations",paymentSplits);
+			request.put("reason","Additional payment after invoice correction");
+			request.put("vat_reviewed",true);
+			request.put("irpf_reviewed",true);
+			request.put("additional_vat_reviewed",true);
+			request.put("additional_irpf_reviewed",true);
+			request.put("confirm_excess",true);
+			request.put("payment_action","record_additional");
+			requestJson = request.toString();
+			action = "save";
+			if(conversionRequested)
+			{
+				request.put("reason","Converted proforma to final invoice");
+				request.put("payment_action","keep");
+				requestJson = request.toString();
+			}
+		}
+	}
+	if(action != "save" && action != "resume")
+	{
+		throw "Invalid invoice edit action.";
+	}
+	if(invoice.get("Edit_Status") == "Pending")
+	{
+		if(journal.get("key") != operationKey)
+		{
+			throw "Another edit is pending. Resume it before starting a new correction.";
+		}
+		if(ifnull(journal.get("busy_until"),0).toLong() > zoho.currenttime.toLong())
+		{
+			throw "The previous save is still running. Please wait before retrying.";
+		}
+		if(action == "save" && journal.get("input") != requestJson)
+		{
+			throw "The pending operation contains different changes. Resume the saved correction.";
+		}
+	}
+	else
+	{
+		if(action != "save" || invoice.get("Modified_Time") != request.get("modified_time"))
+		{
+			throw "The invoice changed since it was opened. Reload it before saving.";
+		}
+		if(ifnull(request.get("reason"),"").toString().trim() == "")
+		{
+			throw "Enter the reason for this correction.";
+		}
+		fields = request.get("fields");
+		if(fields == null)
+		{
+			throw "Missing invoice values.";
+		}
+		header = Map();
+		name = ifnull(fields.get("Name"),"").toString().trim();
+		date = ifnull(fields.get("Invoice_Date"),"").toString();
+		type = ifnull(fields.get("Invoice_Type"),"").toString();
+		if(name == "" || name.length() > 120 || !date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") || date.toDate("yyyy-MM-dd").toString("yyyy-MM-dd") != date || !"Proforma,Final Invoice,Tickets,Commission".toList(",").contains(type))
+		{
+			throw "Enter a valid invoice number, date and type.";
+		}
+		header.put("Name",name);
+		header.put("Invoice_Date",date);
+		header.put("Invoice_Type",type);
+		editList_field = "Invoice_Amount_Excl_VAT,VAT_percentage,IRPF_percentage,Additional_Amount_Excl_VAT,Additional_VAT_percentage,Additional_IRPF_percentage,Reimbursable_Expense".toList(",");
+		for each  field in editList_field
+		{
+			value = ifnull(fields.get(field),0).toDecimal();
+			if(value < 0 || value.round(2) != value || field.contains("percentage") && value > 100)
+			{
+				throw "Invalid value for " + field + ".";
+			}
+			header.put(field,value);
+		}
+		if(request.get("vat_reviewed") != true || request.get("irpf_reviewed") != true || header.get("Additional_Amount_Excl_VAT") > 0 && (request.get("additional_vat_reviewed") != true || request.get("additional_irpf_reviewed") != true))
+		{
+			throw "Confirm the Reviewed checkboxes before saving.";
+		}
+		net = header.get("Invoice_Amount_Excl_VAT");
+		extra = header.get("Additional_Amount_Excl_VAT");
+		gross = (net * (1 + header.get("VAT_percentage") / 100)).round(2);
+		extraGross = (extra * (1 + header.get("Additional_VAT_percentage") / 100)).round(2);
+		tax = (net * header.get("IRPF_percentage") / 100).round(2);
+		extraTax = (extra * header.get("Additional_IRPF_percentage") / 100).round(2);
+		total = (gross + extraGross - tax - extraTax).round(2);
+		payable = (total + header.get("Reimbursable_Expense")).round(2);
+		if(conversionRequested && (payable != ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal() || total != ifnull(invoice.get("Invoice_Total"),0).toDecimal()))
+		{
+			throw "The stored amounts need review. Use Edit to reconcile them before converting this proforma.";
+		}
+		if(total <= 0 || payable < preallocated || paid != ifnull(invoice.get("Amount_Paid"),0).toDecimal().round(2))
+		{
+			throw "The new total is invalid, below existing allocations, or the stored paid amount needs reconciliation.";
+		}
+		supplier = zoho.crm.getRecordById("Vendors",supplierId.toLong());
+		if(supplier.get("id") == null || (tax > 0 || extraTax > 0) && supplier.get("Is_Self_Employed") != true)
+		{
+			throw "Verify the supplier and self-employment setting before applying withholding.";
+		}
+		header.put("Invoice_Amount_Incl_VAT",gross);
+		header.put("VAT_Amount",(gross - net).round(2));
+		header.put("IRPF_Amount",tax);
+		header.put("Additional_Amount_Incl_VAT",extraGross);
+		header.put("Additional_VAT_Amount",(extraGross - extra).round(2));
+		header.put("Additional_IRPF_Amount",extraTax);
+		header.put("Invoice_Total",total);
+		header.put("Total_Payable_Amount",payable);
+		paymentMode = ifnull(request.get("payment_action"),"keep");
+		if(reserved > 0 && payable != ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal() && request.get("payment_action") == null)
+		{
+			throw "Choose whether to keep, correct or add a payment before saving the changed payable.";
+		}
+		paymentInput = {"header":header,"mode":paymentMode,"payment_id":ifnull(request.get("payment_id"),""),"confirm_actual_payment":request.get("confirm_actual_payment"),"payment_details":request.get("payment_details")};
+		paymentPlan = standalone.supplierInvoiceEdit_payments(invoiceId,"prepare",paymentInput.toString(),operationKey).toMap();
+		if(paymentPlan.get("success") != true)
+		{
+			throw paymentPlan.get("message");
+		}
+		if(paymentPlan.get("paid_before") != paid)
+		{
+			throw "The payments changed while preparing this correction. Reload the invoice.";
+		}
+		newPaid = paymentPlan.get("paid_after");
+		header.put("Amount_Paid",newPaid);
+		fileId = ifnull(request.get("file_id"),"").toString();
+		if(fileId != "" && !fileId.matches("[A-Za-z0-9_-]+"))
+		{
+			throw "Invalid invoice file.";
+		}
+		if(fileId == "" && (invoice.get("Invoice_File") == null || invoice.get("Invoice_File").isEmpty()))
+		{
+			throw "Attach the invoice document before saving.";
+		}
+		// Invoice_File currently allows one file. Removal is explicit and applied together
+		// with the replacement in the same conditional record update, never beforehand.
+		fileBeforeIds = List();
+		fileRemoveIds = List();
+		fileKeptIds = List();
+		for each  oldFile in ifnull(invoice.get("Invoice_File"),List())
+		{
+			oldDocumentId = ifnull(oldFile.get("id"),ifnull(oldFile.get("attachment_Id"),"")).toString();
+			if(oldDocumentId == "")
+			{
+				throw "CRM did not return the saved document identifier. No document was removed.";
+			}
+			fileBeforeIds.add(oldDocumentId);
+		}
+		for each  requestedRemoveId in ifnull(request.get("remove_file_ids"),List())
+		{
+			removeId = requestedRemoveId.toString();
+			if(!fileBeforeIds.contains(removeId) || fileRemoveIds.contains(removeId))
+			{
+				throw "A document selected for removal does not belong to this invoice or is repeated.";
+			}
+			fileRemoveIds.add(removeId);
+		}
+		for each  oldId in fileBeforeIds
+		{
+			if(!fileRemoveIds.contains(oldId))
+			{
+				fileKeptIds.add(oldId);
+			}
+		}
+		fileCount = fileKeptIds.size();
+		if(fileId != "")
+		{
+			fileCount = fileCount + 1;
+		}
+		if(fileCount != 1)
+		{
+			throw "Keep one invoice document. Remove the current file when uploading its replacement.";
+		}
+		allocated = 0.0;
+		splitPlan = List();
+		requestedSplits = request.get("allocations");
+		if(requestedSplits == null || requestedSplits.keys().size() != settlementIds.size())
+		{
+			throw "Allocate the new payable amount across the existing settlements.";
+		}
+		for each  sid in settlementIds
+		{
+			amount = ifnull(requestedSplits.get(sid),0).toDecimal();
+			if(amount <= 0 || amount != amount.round(2))
+			{
+				throw "Enter a positive allocation with at most two decimals for every settlement.";
+			}
+			allocated = allocated + amount;
+			oldAmount = ifnull(invoice.get("Total_Payable_Amount"),0).toDecimal();
+			for each  split in splits
+			{
+				if(split.get("Vendor_Settlement").get("id").toString() == sid)
+				{
+					oldAmount = ifnull(split.get("Allocated_Amount"),0).toDecimal();
+					splitPlan.add({"id":split.get("id"),"settlement_id":sid,"before":oldAmount,"after":amount});
+				}
+			}
+			settlement = settlements.get(sid);
+			if(ifnull(settlement.get("Total_Invoice"),0).toDecimal() - oldAmount + amount > ifnull(settlement.get("Total_Service_Cost"),0).toDecimal() && request.get("confirm_excess") != true)
+			{
+				throw "The corrected invoice exceeds a settlement service cost. Review and confirm the excess.";
+			}
+		}
+		if(allocated.round(2) != payable)
+		{
+			if(conversionRequested)
+			{
+				throw "The saved settlement allocations do not match the invoice payable amount. Use Edit invoice to review the allocation amounts before converting.";
+			}
+			throw "Settlement allocations must equal the new total payable amount.";
+		}
+		status = ifnull(invoice.get("Status"),"Received");
+		if(newPaid > 0)
+		{
+			status = if(newPaid >= payable,"Paid","Partially Paid");
+		}
+		else if(status == "Paid" || status == "Partially Paid")
+		{
+			status = "Received";
+		}
+		header.put("Status",status);
+		accounting = Map();
+		if(!entries.isEmpty())
+		{
+			accounting = standalone.supplierInvoiceEdit_accountingPlan(invoiceId,header.toString()).toMap();
+			if(accounting.get("error") == true || accounting.get("entry") == null)
+			{
+				throw "Accounting validation: " + ifnull(accounting.get("message"),"Could not build an accounting plan.");
+			}
+		}
+		if(!entries.isEmpty())
+		{
+			accounting.put("entry_id",entries.get(0).get("id").toString());
+			oldEntry = Map();
+			accountingHeader = accounting.get("entry");
+			for each  field in accountingHeader.keys()
+			{
+				oldEntry.put(field,entries.get(0).get(field));
+			}
+			accounting.put("before_entry",oldEntry);
+			originalLines = standalone.supplierInvoiceEdit_read("Accounting_Entry_Lines","Accounting_Entry",entries.get(0).get("id").toString()).toMap();
+			if(originalLines.get("success") != true)
+			{
+				throw originalLines.get("message");
+			}
+			lineSnapshot = Map();
+			for each  line in originalLines.get("records")
+			{
+				if(line.get("Locked__s") == true)
+				{
+					throw "An accounting line is locked.";
+				}
+				lineSnapshot.put(line.get("id").toString(),{"Debit":line.get("Debit"),"Credit":line.get("Credit"),"Account":line.get("Account"),"Modified_Time":line.get("Modified_Time")});
+			}
+			accounting.put("before_lines",lineSnapshot);
+		}
+		before = Map();
+		for each  field in header.keys()
+		{
+			before.put(field,invoice.get(field));
+		}
+		journal = {"phase":"Prepared","key":operationKey,"input":requestJson,"before":before,"header":header,"file_id":fileId,"splits":splitPlan,"settlement_ids":settlementIds,"accounting":accounting,"paid":paid,"supplier_id":supplierId,"primary_id":primaryId,"cards":context.get("Card_Purchases"),"reason":request.get("reason")};
+		journal.put("payments",paymentPlan);
+		journal.put("payment_action",paymentMode);
+		journal.put("paid_after",newPaid);
+		if(fileId != "")
+		{
+			journal.put("file_digest",standalone.supplierInvoiceEdit_fileDigest(fileId,"",""));
+		}
+		journal.put("file_before_ids",fileBeforeIds);
+		journal.put("file_remove_ids",fileRemoveIds);
+		journal.put("file_kept_ids",fileKeptIds);
+		if(request.get("batch") == true || journal.toString().length() > 24000)
+		{
+			journal.put("batch",true);
+			journal.put("stage","header");
+			journal.put("cursor",0);
+			journal.put("payment_cursor",0);
+		}
+		journal = standalone.supplierInvoiceEdit_journal(invoiceId,"store",journal.toString()).toMap();
+	}
+	header = journal.get("header");
+	if(splits.size() != journal.get("splits").size())
+	{
+		throw "The settlement allocations changed outside this correction.";
+	}
+	for each  split in splits
+	{
+		known = false;
+		for each  target in journal.get("splits")
+		{
+			if(target.get("id") == split.get("id") && target.get("settlement_id") == split.get("Vendor_Settlement").get("id").toString())
+			{
+				known = true;
+			}
+		}
+		if(!known)
+		{
+			throw "The settlement allocation relationships changed outside this correction.";
+		}
+	}
+	if(journal.get("payments") != null)
+	{
+		paymentValidation = standalone.supplierInvoiceEdit_payments(invoiceId,"validate",journal.get("payments").toString(),operationKey).toMap();
+		if(paymentValidation.get("success") != true)
+		{
+			throw paymentValidation.get("message");
+		}
+	}
+	if(paid != journal.get("paid") && paid != ifnull(journal.get("paid_after"),journal.get("paid")) || journal.get("payments") == null && reserved > header.get("Total_Payable_Amount") || preallocated > header.get("Total_Payable_Amount") || supplierId != journal.get("supplier_id") || primaryId != journal.get("primary_id"))
+	{
+		throw "Payments or invoice relationships changed. Review the pending edit before continuing.";
+	}
+	for each  field in header.keys()
+	{
+		current = invoice.get(field);
+		if(current != journal.get("before").get(field) && current != header.get(field))
+		{
+			throw "The invoice was modified outside this correction: " + field;
+		}
+	}
+	// Validate the immutable document plan before claiming or resuming the edit.
+	fileId = ifnull(journal.get("file_id"),"").toString();
+	currentFiles = ifnull(invoice.get("Invoice_File"),List());
+	if(journal.get("file_before_ids") != null)
+	{
+		if(journal.get("phase") == "Prepared")
+		{
+			if(currentFiles.size() != journal.get("file_before_ids").size())
+			{
+				throw "Invoice documents changed outside this correction. Reload before replacing a file.";
+			}
+			for each  currentFile in currentFiles
+			{
+				if(!journal.get("file_before_ids").contains(ifnull(currentFile.get("id"),ifnull(currentFile.get("attachment_Id"),"")).toString()))
+				{
+					throw "Invoice documents changed outside this correction.";
+				}
+			}
+		}
+		else
+		{
+			if(currentFiles.size() != 1)
+			{
+				throw "The corrected invoice document changed outside this correction.";
+			}
+			for each  currentFile in currentFiles
+			{
+				if(fileId != "" && ifnull(currentFile.get("File_Id__s"),currentFile.get("file_Id")) != fileId)
+				{
+					expectedFileDigest = ifnull(journal.get("file_digest"),"").toString();
+					if(expectedFileDigest == "")
+					{
+						expectedFileDigest = standalone.supplierInvoiceEdit_fileDigest(fileId,"","");
+					}
+					currentAttachmentId = ifnull(currentFile.get("id"),ifnull(currentFile.get("attachment_Id"),"")).toString();
+					if(journal.get("file_before_ids").contains(currentAttachmentId))
+					{
+						throw "The original invoice document is still attached.";
+					}
+					if(standalone.supplierInvoiceEdit_fileDigest("",invoiceId,currentAttachmentId) != expectedFileDigest)
+					{
+						throw "The saved invoice document differs from the document uploaded for this correction.";
+					}
+				}
+				if(fileId == "" && !journal.get("file_kept_ids").contains(ifnull(currentFile.get("id"),ifnull(currentFile.get("attachment_Id"),"")).toString()))
+				{
+					throw "The retained invoice document changed outside this correction.";
+				}
+			}
+		}
+	}
+	else if(fileId != "" && journal.get("phase") == "Prepared" && !currentFiles.isEmpty())
+	{
+		throw "This unsaved correction tried to append a second document. Discard the unsaved correction, reopen Edit, and replace the existing file.";
+	}
+	journal.put("busy_until",zoho.currenttime.toLong() + 300000);
+	claim = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),{"Edit_Status":"Pending","Edit_Request":standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString())}).toMap();
+	if(claim.get("error") == true)
+	{
+		throw "Another update was detected. Reload the invoice.";
+	}
+	claimed = true;
+	result.put("retryable",true);
+	invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	if(invoice.get("Edit_Request").toMap().get("key") != operationKey)
+	{
+		throw "Another correction owns this invoice. Reload it.";
+	}
+	batched = journal.get("batch") == true;
+	runStage = ifnull(journal.get("stage"),"header");
+	stagePending = false;
+	progressDetail = "";
+	if(!batched || runStage == "header")
+	{
+		fileId = journal.get("file_id");
+		headerWrite = Map();
+		for each  field in header.keys()
+		{
+			headerWrite.put(field,header.get(field));
+		}
+		if(journal.get("phase") == "Prepared" && (fileId != "" || !ifnull(journal.get("file_remove_ids"),List()).isEmpty()))
+		{
+			files = List();
+			for each  removeId in ifnull(journal.get("file_remove_ids"),List())
+			{
+				files.add({"id":removeId,"_delete":null});
+			}
+			if(fileId != "")
+			{
+				files.add({"File_Id__s":fileId});
+			}
+			headerWrite.put("Invoice_File",files);
+		}
+		journal.put("phase","Applied");
+		headerWrite.put("Edit_Request",standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString()));
+		saved = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),headerWrite).toMap();
+		if(saved.get("error") == true)
+		{
+			throw "The invoice changed while saving. Resume after reviewing the latest values.";
+		}
+		result.put("saved",true);
+		journal.put("stage","payments");
+	}
+	if(!batched || runStage == "payments")
+	{
+		if(journal.get("payments") != null)
+		{
+			paymentData = journal.get("payments");
+			if(batched)
+			{
+				paymentData.put("batch_cursor",ifnull(journal.get("payment_cursor"),0));
+				paymentData.put("batch_limit",10);
+			}
+			paymentApplied = standalone.supplierInvoiceEdit_payments(invoiceId,"apply",paymentData.toString(),operationKey).toMap();
+			if(paymentApplied.get("pending") == true)
+			{
+				stagePending = true;
+				journal.put("payment_cursor",paymentApplied.get("cursor"));
+				progressDetail = ifnull(paymentApplied.get("message"),"Updating payment accounting");
+			}
+			if(paymentApplied.get("success") != true && paymentApplied.get("pending") != true)
+			{
+				throw paymentApplied.get("message");
+			}
+		}
+		if(!stagePending)
+		{
+			journal.put("stage","splits");
+			journal.put("cursor",0);
+		}
+	}
+	if(!batched || runStage == "splits")
+	{
+		index = 0;
+		processed = 0;
+		resumeCursor = ifnull(journal.get("cursor"),0);
+		for each  target in journal.get("splits")
+		{
+			index = index + 1;
+			if(batched && index <= resumeCursor)
+			{
+				continue;
+			}
+			if(batched && processed >= 10)
+			{
+				stagePending = true;
+				break;
+			}
+			split = zoho.crm.getRecordById("Inv_Set_Allocations",target.get("id").toLong());
+			if("Void,Cancelled".toList(",").contains(ifnull(split.get("Status"),"")) || split.get("Vendor_Settlement") == null || split.get("Vendor_Settlement").get("id").toString() != target.get("settlement_id") || split.get("Vendor_Invoice") == null || split.get("Vendor_Invoice").get("id").toString() != invoiceId || split.get("Allocated_Amount") != target.get("before") && split.get("Allocated_Amount") != target.get("after"))
+			{
+				throw "A settlement allocation changed outside this correction.";
+			}
+			saved = standalone.supplierInvoiceEdit_write("Inv_Set_Allocations",target.get("id").toString(),split.get("Modified_Time"),{"Allocated_Amount":target.get("after")}).toMap();
+			if(saved.get("error") == true)
+			{
+				throw "A settlement allocation changed while saving.";
+			}
+			processed = processed + 1;
+			journal.put("cursor",index);
+		}
+		if(!stagePending)
+		{
+			journal.put("stage","accounting");
+			journal.put("cursor",0);
+		}
+	}
+	if(!batched || runStage == "accounting")
+	{
+		accounting = journal.get("accounting");
+		if(accounting.get("entry") != null)
+		{
+			if(entries.size() != 1 || entries.get(0).get("id").toString() != accounting.get("entry_id"))
+			{
+				throw "The accounting entry changed. Review it before resuming.";
+			}
+			if(batched)
+			{
+				accounting.put("batch_limit",10);
+			}
+			accountingResult = standalone.supplierInvoiceEdit_applyAccounting(entries.get(0).get("id").toString(),invoiceId,operationKey,accounting.toString()).toMap();
+			if(accountingResult.get("pending") == true)
+			{
+				stagePending = true;
+				progressDetail = ifnull(accountingResult.get("message"),"Updating invoice accounting");
+			}
+			if(accountingResult.get("success") != true && accountingResult.get("pending") != true)
+			{
+				throw accountingResult.get("message");
+			}
+		}
+		if(!stagePending)
+		{
+			journal.put("stage","cards");
+			journal.put("cursor",0);
+		}
+	}
+	if(!batched || runStage == "cards")
+	{
+		index = 0;
+		processed = 0;
+		resumeCursor = ifnull(journal.get("cursor"),0);
+		for each  card in journal.get("cards")
+		{
+			index = index + 1;
+			if(batched && index <= resumeCursor)
+			{
+				continue;
+			}
+			if(batched && processed >= 10)
+			{
+				stagePending = true;
+				break;
+			}
+			liveCard = zoho.crm.getRecordById("Card_Purchases",card.get("id").toLong());
+			if(liveCard.get("Vendor_Invoice") == null || liveCard.get("Vendor_Invoice").get("id").toString() != invoiceId)
+			{
+				throw "A linked card purchase changed.";
+			}
+			if(liveCard.get("Invoice_Number") != card.get("Invoice_Number") && liveCard.get("Invoice_Number") != header.get("Name"))
+			{
+				throw "The linked card invoice number changed outside this correction.";
+			}
+			saved = standalone.supplierInvoiceEdit_write("Card_Purchases",card.get("id").toString(),liveCard.get("Modified_Time"),{"Invoice_Number":header.get("Name")}).toMap();
+			if(saved.get("error") == true)
+			{
+				throw "The linked card purchase changed while saving.";
+			}
+			processed = processed + 1;
+			journal.put("cursor",index);
+		}
+		if(!stagePending)
+		{
+			journal.put("stage","settlements");
+			journal.put("cursor",0);
+		}
+	}
+	if(!batched || runStage == "settlements")
+	{
+		index = 0;
+		processed = 0;
+		resumeCursor = ifnull(journal.get("cursor"),0);
+		for each  sid in journal.get("settlement_ids")
+		{
+			index = index + 1;
+			if(batched && index <= resumeCursor)
+			{
+				continue;
+			}
+			if(batched && processed >= 1)
+			{
+				stagePending = true;
+				break;
+			}
+			rebuilt = standalone.rebuildSupplierSettlementTotals(sid).toMap();
+			if(rebuilt.get("error") == true || ifnull(rebuilt.get("warning_count"),0) > 0)
+			{
+				throw "Invoice saved; settlement recalculation is incomplete. Resume this correction. " + ifnull(rebuilt.get("message"),"");
+			}
+			processed = processed + 1;
+			journal.put("cursor",index);
+		}
+		if(!stagePending)
+		{
+			journal.put("stage","verify");
+			journal.put("cursor",0);
+		}
+	}
+	if(batched && runStage != "verify")
+	{
+		live = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+		if(live.get("Edit_Request").toMap().get("key") != operationKey)
+		{
+			throw "Another correction owns this invoice.";
+		}
+		journal.put("busy_until",0);
+		checkpoint = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,live.get("Modified_Time"),{"Edit_Request":standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString())}).toMap();
+		if(checkpoint.get("error") == true)
+		{
+			throw "Could not confirm batch progress. Resume this correction.";
+		}
+		result.put("pending",true);
+		result.put("saved",true);
+		result.put("retryable",true);
+		result.put("progress",{"stage":journal.get("stage"),"cursor":journal.get("cursor"),"payment_cursor":journal.get("payment_cursor"),"detail":progressDetail});
+		result.put("message","Correction in progress. Continue to finish related updates.");
+		return result.toString();
+	}
+	if(journal.get("payments") != null)
+	{
+		paymentVerified = standalone.supplierInvoiceEdit_payments(invoiceId,"verify",journal.get("payments").toString(),operationKey).toMap();
+		if(paymentVerified.get("success") != true)
+		{
+			throw paymentVerified.get("message");
+		}
+		if(paymentVerified.get("payment_id") != null)
+		{
+			journal.put("payment_id",paymentVerified.get("payment_id"));
+		}
+	}
+	invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	for each  field in header.keys()
+	{
+		if(invoice.get(field) != header.get(field))
+		{
+			throw "The saved invoice did not retain " + field + ".";
+		}
+	}
+	if(invoice.get("Invoice_File") == null || invoice.get("Invoice_File").isEmpty())
+	{
+		throw "The saved invoice document is missing.";
+	}
+	if(journal.get("file_before_ids") != null)
+	{
+		if(invoice.get("Invoice_File").size() != 1)
+		{
+			throw "The invoice document replacement was not confirmed.";
+		}
+		for each  savedFile in invoice.get("Invoice_File")
+		{
+			if(journal.get("file_remove_ids").contains(ifnull(savedFile.get("id"),ifnull(savedFile.get("attachment_Id"),"")).toString()))
+			{
+				throw "A removed invoice document is still attached.";
+			}
+			if(fileId == "" && !journal.get("file_kept_ids").contains(ifnull(savedFile.get("id"),ifnull(savedFile.get("attachment_Id"),"")).toString()))
+			{
+				throw "The retained invoice document changed.";
+			}
+		}
+	}
+	if(ifnull(invoice.get("Amount_Paid"),0).toDecimal().round(2) != ifnull(journal.get("paid_after"),journal.get("paid")))
+	{
+		throw "A payment changed while saving. Review the invoice balance before completing this correction.";
+	}
+	if(fileId != "")
+	{
+		found = false;
+		for each  file in invoice.get("Invoice_File")
+		{
+			if(ifnull(file.get("File_Id__s"),file.get("file_Id")) == fileId)
+			{
+				found = true;
+			}
+		}
+		if(!found && invoice.get("Invoice_File").size() == 1)
+		{
+			expectedFileDigest = ifnull(journal.get("file_digest"),"").toString();
+			if(expectedFileDigest == "")
+			{
+				expectedFileDigest = standalone.supplierInvoiceEdit_fileDigest(fileId,"","");
+			}
+			savedDocument = invoice.get("Invoice_File").get(0);
+			savedAttachmentId = ifnull(savedDocument.get("id"),ifnull(savedDocument.get("attachment_Id"),"")).toString();
+			found = standalone.supplierInvoiceEdit_fileDigest("",invoiceId,savedAttachmentId) == expectedFileDigest;
+		}
+		if(!found)
+		{
+			throw "The corrected invoice file was not verified. Resume the correction; do not upload it again.";
+		}
+	}
+	accounting = journal.get("accounting");
+	if(accounting.get("entry") != null)
+	{
+		accounting.put("verify_only",true);
+		verifiedAccounting = standalone.supplierInvoiceEdit_applyAccounting(accounting.get("entry_id"),invoiceId,operationKey,accounting.toString()).toMap();
+		if(verifiedAccounting.get("success") != true)
+		{
+			throw verifiedAccounting.get("message");
+		}
+	}
+	for each  target in journal.get("splits")
+	{
+		verifiedSplit = zoho.crm.getRecordById("Inv_Set_Allocations",target.get("id").toLong());
+		if(verifiedSplit.get("Allocated_Amount") != target.get("after"))
+		{
+			throw "The corrected settlement allocation was not confirmed.";
+		}
+	}
+	for each  card in journal.get("cards")
+	{
+		verifiedCard = zoho.crm.getRecordById("Card_Purchases",card.get("id").toLong());
+		if(verifiedCard.get("Vendor_Invoice") == null || verifiedCard.get("Vendor_Invoice").get("id").toString() != invoiceId || verifiedCard.get("Invoice_Number") != header.get("Name"))
+		{
+			throw "The linked card update was not confirmed.";
+		}
+	}
+	journal.put("busy_until",0);
+	saved = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),{"Edit_Status":"Complete","Edit_Request":standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString())}).toMap();
+	if(saved.get("error") == true)
+	{
+		throw "Could not confirm completion. Resume the correction.";
+	}
+	result.put("payment_id",journal.get("payment_id"));
+	result.put("payment_action",ifnull(journal.get("payment_action"),"keep"));
+	result.put("success",true);
+	result.put("retryable",false);
+	result.put("message","Invoice and related totals updated.");
+}
+catch (e)
+{
+	result.put("message",e.toString());
+	if(claimed)
+	{
+		try 
+		{
+			live = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+			pending = live.get("Edit_Request").toMap();
+			if(pending.get("key") == operationKey)
+			{
+				if(pending.get("phase") == "Applied")
+				{
+					result.put("saved",true);
+				}
+				pending.put("busy_until",0);
+				standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,live.get("Modified_Time"),{"Edit_Request":pending.toString()});
+			}
+		}
+		catch (cleanupError)
+		{
+			result.put("recovery_message","The save may still be active. Wait five minutes before resuming.");
+		}
+	}
+}
+return result.toString();
+}

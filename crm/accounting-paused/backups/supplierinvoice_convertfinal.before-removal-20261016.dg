@@ -1,0 +1,337 @@
+string standalone.supplierInvoice_convertFinal(String operationKey, String requestJson)
+{
+result = {"success":false,"saved":false,"retryable":false};
+claimed = false;
+invoiceId = "";
+try 
+{
+	request = requestJson.toMap();
+	invoiceId = ifnull(request.get("invoice_id"),"").toString();
+	if(!invoiceId.matches("[0-9]+") || !operationKey.matches("[a-f0-9-]{36}") || requestJson.length() > 16000)
+	{
+		throw "Invalid conversion request.";
+	}
+	invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	if(invoice.get("id") == null)
+	{
+		throw "Invoice not found.";
+	}
+	result.put("invoice_id",invoiceId);
+	action = ifnull(request.get("action"),"preview_conversion");
+	journal = Map();
+	if(ifnull(invoice.get("Edit_Request"),"") != "")
+	{
+		journal = invoice.get("Edit_Request").toMap();
+	}
+	if(invoice.get("Edit_Status") == "Pending")
+	{
+		journal = standalone.supplierInvoiceEdit_journal(invoiceId,"load",journal.toString()).toMap();
+	}
+	if(action == "preview" || action == "preview_conversion")
+	{
+		if(invoice.get("Edit_Status") == "Pending")
+		{
+			result.put("pending",true);
+			result.put("operation_key",journal.get("key"));
+			result.put("can_discard",journal.get("phase") == "Prepared" && ifnull(journal.get("busy_until"),0).toLong() <= zoho.currenttime.toLong());
+			invoice.put("Edit_Request",journal.toString());
+		}
+		result.put("invoice",invoice);
+		result.put("success",true);
+		return result.toString();
+	}
+	if(journal.get("key") == operationKey && invoice.get("Edit_Status") == "Complete")
+	{
+		result.put("success",true);
+		result.put("saved",true);
+		return result.toString();
+	}
+	if(invoice.get("Locked__s") == true || "Cancelled,Rejected,Reconciled".toList(",").contains(ifnull(invoice.get("Status"),"")) || invoice.get("Original_Invoice") != null)
+	{
+		throw "This invoice cannot be converted.";
+	}
+	if(ifnull(invoice.get("Registration_Key"),"") != "" && invoice.get("Registration_Status") != "Complete")
+	{
+		throw "Finish the original registration before converting.";
+	}
+	if(invoice.get("Edit_Status") == "Pending")
+	{
+		if(journal.get("flow") != "conversion_v1" || journal.get("key") != operationKey)
+		{
+			throw "Resume the existing correction before converting.";
+		}
+		if(ifnull(journal.get("busy_until"),0).toLong() > zoho.currenttime.toLong())
+		{
+			throw "The conversion is still running. Wait before retrying.";
+		}
+		if(action == "discard")
+		{
+			if(journal.get("phase") != "Prepared")
+			{
+				throw "The invoice was already converted. Resume it instead.";
+			}
+			saved = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),{"Edit_Status":"Discarded"}).toMap();
+			if(saved.get("error") == true)
+			{
+				throw "The invoice changed. Reload it.";
+			}
+			result.put("success",true);
+			result.put("discarded",true);
+			return result.toString();
+		}
+		if(action != "resume" && requestJson != journal.get("input"))
+		{
+			throw "Resume the saved conversion instead of submitting different changes.";
+		}
+	}
+	else
+	{
+		if(action != "convert_proforma" || invoice.get("Invoice_Type") != "Proforma" || request.get("invoice_type") != "Final Invoice" || request.get("modified_time") != invoice.get("Modified_Time"))
+		{
+			throw "Reload the proforma before converting it.";
+		}
+		number = ifnull(request.get("invoice_number"),"").toString().trim();
+		date = ifnull(request.get("invoice_date"),invoice.get("Invoice_Date")).toString();
+		fileId = ifnull(request.get("file_id"),"").toString();
+		if(number == "" || number.length() > 120 || !date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") || date.toDate("yyyy-MM-dd").toString("yyyy-MM-dd") != date || fileId == "")
+		{
+			throw "A valid number, date and new final invoice document are required.";
+		}
+		beforeIds = List();
+		for each  file in ifnull(invoice.get("Invoice_File"),List())
+		{
+			attachmentId = ifnull(file.get("id"),ifnull(file.get("attachment_Id"),"")).toString();
+			if(attachmentId == "" || ifnull(file.get("File_Id__s"),file.get("file_Id")) == fileId)
+			{
+				throw "Select a new document and reload the invoice before replacing it.";
+			}
+			beforeIds.add(attachmentId);
+		}
+		header = {"Name":number,"Invoice_Date":date,"Invoice_Type":"Final Invoice"};
+		before = {"Name":invoice.get("Name"),"Invoice_Date":invoice.get("Invoice_Date"),"Invoice_Type":invoice.get("Invoice_Type"),"Total_Payable_Amount":invoice.get("Total_Payable_Amount")};
+		references = List();
+		modules = "Card_Purchases,Accounting_Entries".toList(",");
+		for each  moduleName in modules
+		{
+			relation = "Vendor_Invoice";
+			if(moduleName == "Accounting_Entries")
+			{
+				relation = "Supplier_Invoice";
+			}
+			linked = standalone.supplierInvoiceEdit_read(moduleName,relation,invoiceId).toMap();
+			if(linked.get("success") != true)
+			{
+				throw linked.get("message");
+			}
+			for each  row in linked.get("records")
+			{
+				changes = Map();
+				if(moduleName == "Card_Purchases")
+				{
+					changes.put("Invoice_Number",number);
+				}
+				else
+				{
+					if(row.get("Locked__s") == true || row.get("Posted_At") != null || "Posted to Books,Cancelled".toList(",").contains(ifnull(row.get("Accounting_Status"),"")) || ifnull(row.get("Zoho_Books_Document_Id"),"") != "" || "Posted,Reconciled,Sent to Books,Exported,Cancelled".toList(",").contains(ifnull(row.get("Books_Post_Status"),"")))
+					{
+						throw "Reverse the posted or exported accounting entry before converting this invoice.";
+					}
+					changes.put("Name","INV-" + number + "-" + ifnull(invoice.get("Supplier_Code"),"") + "-REG");
+					dateFields = "Entry_Date,Invoice_Date,Posting_Date,Source_Date".toList(",");
+					for each  dateField in dateFields
+					{
+						changes.put(dateField,date);
+					}
+				}
+				oldValues = Map();
+				target = Map();
+				for each  field in changes.keys()
+				{
+					if(row.get(field) != changes.get(field))
+					{
+						oldValues.put(field,row.get(field));
+						target.put(field,changes.get(field));
+					}
+				}
+				if(!target.isEmpty())
+				{
+					references.add({"module":moduleName,"id":row.get("id"),"relation":relation,"before":oldValues,"after":target});
+				}
+			}
+		}
+		journal = {"flow":"conversion_v1","key":operationKey,"input":requestJson,"phase":"Prepared","busy_until":0,"cursor":0,"header":header,"before":before,"file_id":fileId,"file_before_ids":beforeIds,"file_digest":standalone.supplierInvoiceEdit_fileDigest(fileId,"",""),"references":references,"reason":"Converted proforma to final invoice"};
+		journal = standalone.supplierInvoiceEdit_journal(invoiceId,"store",journal.toString()).toMap();
+	}
+	header = journal.get("header");
+	expected = header;
+	if(journal.get("phase") == "Prepared")
+	{
+		expected = journal.get("before");
+	}
+	for each  field in header.keys()
+	{
+		if(invoice.get(field) != expected.get(field))
+		{
+			throw "Invoice details changed outside this conversion. Reload it.";
+		}
+	}
+	files = ifnull(invoice.get("Invoice_File"),List());
+	if(journal.get("phase") == "Prepared")
+	{
+		if(files.size() != journal.get("file_before_ids").size())
+		{
+			throw "The invoice document changed. Reload it.";
+		}
+		for each  file in files
+		{
+			if(!journal.get("file_before_ids").contains(ifnull(file.get("id"),ifnull(file.get("attachment_Id"),"")).toString()))
+			{
+				throw "The invoice document changed. Reload it.";
+			}
+		}
+	}
+	journal.put("busy_until",zoho.currenttime.toLong() + 300000);
+	saved = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),{"Edit_Status":"Pending","Edit_Request":standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString())}).toMap();
+	if(saved.get("error") == true)
+	{
+		throw "Another update was detected. Reload the invoice.";
+	}
+	claimed = true;
+	result.put("retryable",true);
+	invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	if(journal.get("phase") == "Prepared")
+	{
+		updates = Map();
+		for each  field in header.keys()
+		{
+			updates.put(field,header.get(field));
+		}
+		replacement = List();
+		for each  attachmentId in journal.get("file_before_ids")
+		{
+			replacement.add({"id":attachmentId,"_delete":null});
+		}
+		replacement.add({"File_Id__s":journal.get("file_id")});
+		updates.put("Invoice_File",replacement);
+		journal.put("phase","Applied");
+		updates.put("Edit_Request",standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString()));
+		saved = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),updates).toMap();
+		if(saved.get("error") == true)
+		{
+			throw "The invoice changed while converting. Resume to verify its state.";
+		}
+		invoice = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+	}
+	result.put("saved",true);
+	for each  field in header.keys()
+	{
+		if(invoice.get(field) != header.get(field))
+		{
+			throw "The converted invoice details were not confirmed.";
+		}
+	}
+	files = ifnull(invoice.get("Invoice_File"),List());
+	if(files.size() != 1)
+	{
+		throw "The final invoice document was not confirmed.";
+	}
+	attachmentId = ifnull(files.get(0).get("id"),ifnull(files.get(0).get("attachment_Id"),"")).toString();
+	if(journal.get("file_before_ids").contains(attachmentId) || standalone.supplierInvoiceEdit_fileDigest("",invoiceId,attachmentId) != journal.get("file_digest"))
+	{
+		throw "The saved document does not match the final invoice upload.";
+	}
+	index = 0;
+	processed = 0;
+	cursor = ifnull(journal.get("cursor"),0).toLong();
+	for each  reference in journal.get("references")
+	{
+		if(index < cursor)
+		{
+			index = index + 1;
+			continue;
+		}
+		if(processed >= 10)
+		{
+			break;
+		}
+		row = zoho.crm.getRecordById(reference.get("module"),reference.get("id").toLong());
+		if(row.get(reference.get("relation")) == null || row.get(reference.get("relation")).get("id").toString() != invoiceId || row.get("Locked__s") == true)
+		{
+			throw "A linked document reference changed. Review it before resuming.";
+		}
+		if(reference.get("module") == "Accounting_Entries" && (row.get("Posted_At") != null || "Posted to Books,Cancelled".toList(",").contains(ifnull(row.get("Accounting_Status"),"")) || ifnull(row.get("Zoho_Books_Document_Id"),"") != "" || "Posted,Reconciled,Sent to Books,Exported,Cancelled".toList(",").contains(ifnull(row.get("Books_Post_Status"),""))))
+		{
+			throw "The linked accounting entry is now posted or exported.";
+		}
+		changes = Map();
+		referenceFields = reference.get("after").keys();
+		for each  field in referenceFields
+		{
+			if(row.get(field) != reference.get("after").get(field))
+			{
+				if(row.get(field) != reference.get("before").get(field))
+				{
+					throw "A copied invoice reference changed outside this conversion.";
+				}
+				changes.put(field,reference.get("after").get(field));
+			}
+		}
+		if(!changes.isEmpty())
+		{
+			saved = standalone.supplierInvoiceEdit_write(reference.get("module"),reference.get("id").toString(),row.get("Modified_Time"),changes).toMap();
+			if(saved.get("error") == true)
+			{
+				throw "A linked document reference changed while saving.";
+			}
+			row = zoho.crm.getRecordById(reference.get("module"),reference.get("id").toLong());
+			for each  field in changes.keys()
+			{
+				if(row.get(field) != changes.get(field))
+				{
+					throw "A copied invoice reference was not confirmed.";
+				}
+			}
+		}
+		index = index + 1;
+		processed = processed + 1;
+	}
+	journal.put("cursor",index);
+	journal.put("busy_until",0);
+	status = "Complete";
+	if(index < journal.get("references").size())
+	{
+		status = "Pending";
+	}
+	saved = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,invoice.get("Modified_Time"),{"Edit_Status":status,"Edit_Request":standalone.supplierInvoiceEdit_journal(invoiceId,"encode",journal.toString())}).toMap();
+	if(saved.get("error") == true)
+	{
+		throw "The invoice changed before conversion could be confirmed. Resume it.";
+	}
+	result.put("success",status == "Complete");
+	result.put("pending",status == "Pending");
+	result.put("progress",{"stage":"conversion_references"});
+}
+catch (error)
+{
+	result.put("message",error.toString());
+	if(claimed)
+	{
+		try 
+		{
+			current = zoho.crm.getRecordById("Supplier_Invoices",invoiceId.toLong());
+			stored = current.get("Edit_Request").toMap();
+			if(stored.get("key") == operationKey && current.get("Edit_Status") == "Pending")
+			{
+				result.put("saved",stored.get("phase") == "Applied");
+				stored.put("busy_until",0);
+				released = standalone.supplierInvoiceEdit_write("Supplier_Invoices",invoiceId,current.get("Modified_Time"),{"Edit_Request":stored.toString()});
+			}
+		}
+		catch (recoveryError)
+		{
+			result.put("recovery_message","Reopen the invoice to check conversion progress.");
+		}
+	}
+}
+return result.toString();
+}

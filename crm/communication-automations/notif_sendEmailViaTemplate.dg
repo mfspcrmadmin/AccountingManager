@@ -1,0 +1,5 @@
+string standalone.notif_sendEmailViaTemplate(String moduleApiName, String recordId, String templateId, String toRecipients, String ccRecipients, String bccRecipients)
+{
+// Backward-compatible public entry point. All delivery passes through Communications.
+return standalone.notif_sendLoggedTemplate(moduleApiName,recordId,templateId,toRecipients,ccRecipients,bccRecipients,"{}");
+}
